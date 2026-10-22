@@ -95,15 +95,32 @@ object AppHelper {
             }
         }
 
-        // Privileged execution via Shizuku (UID 2000) or Superuser Root (UID 0)
+        // Privileged execution strictly via Shizuku (UID 2000) or Superuser Root (UID 0)
         val componentStr = "$packageName/$activityName"
         val cmd = "am start -n $componentStr"
 
-        val result = ShizukuHelper.executeCommand(cmd)
-        if (result.exitCode == 0 || result.output.contains("Starting: Intent")) {
+        // If Shizuku is running and permission not yet granted, prompt for permission immediately
+        if (ShizukuHelper.isShizukuRunning() && !ShizukuHelper.hasShizukuPermission()) {
+            withContext(Dispatchers.Main) {
+                ShizukuHelper.requestShizukuPermission()
+            }
+            return@withContext Result.failure(
+                SecurityException("Shizuku permission required. Please grant permission in Shizuku / Shevery to launch private activities.")
+            )
+        }
+
+        val result = ShizukuHelper.executePrivilegedCommand(cmd)
+        val hasDenial = result.output.contains("SecurityException") ||
+                        result.output.contains("Permission Denial") ||
+                        result.output.contains("not exported") ||
+                        result.output.contains("requires permission") ||
+                        result.output.contains("Error:")
+
+        if (result.executionMode != "None" && result.exitCode == 0 && !hasDenial) {
             Result.success("Launched via ${result.executionMode}")
         } else {
-            Result.failure(Exception("Privileged launch failed (${result.executionMode}): ${result.output}"))
+            val errDetails = if (result.output.isNotBlank()) result.output else "Process exited with code ${result.exitCode}"
+            Result.failure(Exception("Privileged launch failed (${result.executionMode}): $errDetails"))
         }
     }
 

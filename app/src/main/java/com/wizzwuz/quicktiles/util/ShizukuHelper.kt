@@ -91,8 +91,8 @@ object ShizukuHelper {
         }
     }
 
-    suspend fun executeCommand(command: String): CommandResult = withContext(Dispatchers.IO) {
-        // 1. If Shizuku is running and authorized, try Shizuku.newProcess (elevated shell daemon)
+    suspend fun executePrivilegedCommand(command: String): CommandResult = withContext(Dispatchers.IO) {
+        // 1. If Shizuku is running and authorized, try Shizuku.newProcess (elevated shell daemon, UID 2000)
         if (isShizukuRunning() && hasShizukuPermission()) {
             try {
                 val method = Shizuku::class.java.getMethod(
@@ -135,7 +135,7 @@ object ShizukuHelper {
                     return@withContext CommandResult(exitCode, output.toString().trim(), "Shizuku (rish)")
                 }
             } catch (e: Throwable) {
-                // fallback to root or sh
+                // fallback to root
             }
         }
 
@@ -155,8 +155,26 @@ object ShizukuHelper {
             val exitCode = suProcess.waitFor()
             return@withContext CommandResult(exitCode, output.toString().trim(), "Root (su)")
         } catch (e: Throwable) {
-            // fallback to standard shell
+            // Root not available
         }
+
+        val reason = if (!isShizukuRunning()) {
+            "Shizuku is not running. Please start Shizuku or Shevery."
+        } else if (!hasShizukuPermission()) {
+            "Shizuku permission not granted. Please allow QuickSetTiles in Shizuku / Shevery."
+        } else {
+            "Privileged execution failed (Shizuku & Root unavailable)."
+        }
+        return@withContext CommandResult(-1, reason, "None")
+    }
+
+    suspend fun executeCommand(command: String): CommandResult = withContext(Dispatchers.IO) {
+        val privResult = executePrivilegedCommand(command)
+        if (privResult.executionMode != "None") {
+            return@withContext privResult
+        }
+
+        // Fallback to standard app shell (sh) for non-privileged shell commands
 
         // 3. Fallback to standard app shell (sh)
         try {

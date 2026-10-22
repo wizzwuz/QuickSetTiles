@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.wizzwuz.quicktiles.ui.theme.QuickTilesTheme
+import com.wizzwuz.quicktiles.util.ShizukuHelper
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -19,6 +20,14 @@ class MainActivity : ComponentActivity() {
                     MainScreen()
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ShizukuHelper.updateStatus()
+        if (ShizukuHelper.isShizukuRunning() && !ShizukuHelper.hasShizukuPermission()) {
+            ShizukuHelper.requestShizukuPermission()
         }
     }
 }
