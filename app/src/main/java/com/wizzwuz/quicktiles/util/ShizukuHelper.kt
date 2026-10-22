@@ -3,10 +3,19 @@ package com.wizzwuz.quicktiles.util
 import android.content.Context
 import android.content.pm.PackageManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 import java.io.BufferedReader
 import java.io.InputStreamReader
+
+enum class ShizukuStatus {
+    NOT_RUNNING,
+    PERMISSION_REQUIRED,
+    AUTHORIZED
+}
 
 data class CommandResult(
     val exitCode: Int,
@@ -15,6 +24,44 @@ data class CommandResult(
 )
 
 object ShizukuHelper {
+
+    private val _statusFlow = MutableStateFlow(ShizukuStatus.NOT_RUNNING)
+    val statusFlow: StateFlow<ShizukuStatus> = _statusFlow.asStateFlow()
+
+    private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
+        updateStatus()
+    }
+
+    private val binderDeadListener = Shizuku.OnBinderDeadListener {
+        _statusFlow.value = ShizukuStatus.NOT_RUNNING
+    }
+
+    private val permissionResultListener = Shizuku.OnRequestPermissionResultListener { _, _ ->
+        updateStatus()
+    }
+
+    fun init() {
+        try {
+            Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
+            Shizuku.addBinderDeadListener(binderDeadListener)
+            Shizuku.addRequestPermissionResultListener(permissionResultListener)
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+        updateStatus()
+    }
+
+    fun updateStatus() {
+        if (!isShizukuRunning()) {
+            _statusFlow.value = ShizukuStatus.NOT_RUNNING
+            return
+        }
+        if (hasShizukuPermission()) {
+            _statusFlow.value = ShizukuStatus.AUTHORIZED
+        } else {
+            _statusFlow.value = ShizukuStatus.PERMISSION_REQUIRED
+        }
+    }
 
     fun isShizukuRunning(): Boolean {
         return try {

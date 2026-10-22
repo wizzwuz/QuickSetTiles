@@ -246,8 +246,7 @@ fun ShellDialog(
 ) {
     var name by remember { mutableStateOf(initialName) }
     var command by remember { mutableStateOf(initialCommand) }
-    var isShizukuRunning by remember { mutableStateOf(ShizukuHelper.isShizukuRunning()) }
-    var hasShizukuPerm by remember { mutableStateOf(ShizukuHelper.hasShizukuPermission()) }
+    val shizukuStatus by ShizukuHelper.statusFlow.collectAsState()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -274,12 +273,15 @@ fun ShellDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                val isPermRequired = shizukuStatus == com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED
+
                 Card(
                     colors = CardDefaults.cardColors(
-                        containerColor = if (isShizukuRunning && hasShizukuPerm)
-                            MaterialTheme.colorScheme.primaryContainer
-                        else
-                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f)
+                        containerColor = when (shizukuStatus) {
+                            com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> MaterialTheme.colorScheme.primaryContainer
+                            com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> MaterialTheme.colorScheme.tertiaryContainer
+                            com.wizzwuz.quicktiles.util.ShizukuStatus.NOT_RUNNING -> MaterialTheme.colorScheme.surfaceVariant
+                        }
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -289,18 +291,19 @@ fun ShellDialog(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = if (!isShizukuRunning) "Shizuku: Not Running (Will use Root / sh)"
-                                else if (!hasShizukuPerm) "Shizuku: Running (Permission required)"
-                                else "Shizuku: Active & Authorized",
+                                text = when (shizukuStatus) {
+                                    com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> "Shizuku: Active & Authorized (UID 2000)"
+                                    com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> "Shizuku: Running (Permission Required)"
+                                    com.wizzwuz.quicktiles.util.ShizukuStatus.NOT_RUNNING -> "Shizuku: Not Running (Will use Root / sh)"
+                                },
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp
                             )
                         }
-                        if (isShizukuRunning && !hasShizukuPerm) {
+                        if (isPermRequired) {
                             Button(
                                 onClick = {
                                     ShizukuHelper.requestShizukuPermission()
-                                    hasShizukuPerm = ShizukuHelper.hasShizukuPermission()
                                 },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 modifier = Modifier.height(32.dp)

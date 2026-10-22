@@ -30,9 +30,10 @@
             </intent-filter>
         </activity>
 
+        <!-- Official Shizuku Provider: authority MUST be ${applicationId}.shizuku -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="${applicationId}.shizuku.provider"
+            android:authorities="${applicationId}.shizuku"
             android:multiprocess="false"
             android:enabled="true"
             android:exported="true"
