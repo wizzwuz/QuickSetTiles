@@ -70,18 +70,50 @@ object AppHelper {
         list
     }
 
-    fun testLaunchActivity(context: Context, packageName: String, activityName: String): Result<Unit> {
-        return try {
-            val intent = Intent().apply {
-                component = ComponentName(packageName, activityName)
-                action = Intent.ACTION_MAIN
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    suspend fun launchActivityPrivileged(
+        context: Context,
+        packageName: String,
+        activityName: String,
+        isExported: Boolean? = null
+    ): Result<String> = withContext(Dispatchers.IO) {
+        // If explicitly exported or unknown, try standard Intent first
+        if (isExported != false) {
+            try {
+                val intent = Intent().apply {
+                    component = ComponentName(packageName, activityName)
+                    action = Intent.ACTION_MAIN
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                return@withContext Result.success("Launched activity directly")
+            } catch (e: SecurityException) {
+                // Not exported / Permission denied - fall through to privileged shell
+            } catch (e: Throwable) {
+                if (isExported == true) {
+                    return@withContext Result.failure(e)
+                }
             }
-            context.startActivity(intent)
-            Result.success(Unit)
-        } catch (e: Throwable) {
-            Result.failure(e)
         }
+
+        // Privileged execution via Shizuku (UID 2000) or Superuser Root (UID 0)
+        val componentStr = "$packageName/$activityName"
+        val cmd = "am start -n $componentStr"
+
+        val result = ShizukuHelper.executeCommand(cmd)
+        if (result.exitCode == 0 || result.output.contains("Starting: Intent")) {
+            Result.success("Launched via ${result.executionMode}")
+        } else {
+            Result.failure(Exception("Privileged launch failed (${result.executionMode}): ${result.output}"))
+        }
+    }
+
+    suspend fun testLaunchActivity(
+        context: Context,
+        packageName: String,
+        activityName: String,
+        isExported: Boolean? = null
+    ): Result<String> {
+        return launchActivityPrivileged(context, packageName, activityName, isExported)
     }
 
     suspend fun getShortcutProviders(context: Context): List<ShortcutProviderItem> = withContext(Dispatchers.IO) {

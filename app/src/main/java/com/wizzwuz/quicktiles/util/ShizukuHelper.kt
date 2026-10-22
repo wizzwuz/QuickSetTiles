@@ -91,9 +91,32 @@ object ShizukuHelper {
         }
     }
 
-    suspend fun executeCommand(command: String): CommandResult = withContext(Dispatchers.IO) {
-        // 1. If Shizuku is running and authorized, try rish (Shizuku privileged shell)
+        // 1. If Shizuku is running and authorized, try Shizuku.newProcess (elevated shell daemon)
         if (isShizukuRunning() && hasShizukuPermission()) {
+            try {
+                val method = Shizuku::class.java.getMethod(
+                    "newProcess",
+                    Array<String>::class.java,
+                    Array<String>::class.java,
+                    String::class.java
+                )
+                val proc = method.invoke(null, arrayOf("sh", "-c", command), null, null) as Process
+                val reader = BufferedReader(InputStreamReader(proc.inputStream))
+                val errReader = BufferedReader(InputStreamReader(proc.errorStream))
+                val output = StringBuilder()
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    output.append(line).append("\n")
+                }
+                while (errReader.readLine().also { line = it } != null) {
+                    output.append(line).append("\n")
+                }
+                val exitCode = proc.waitFor()
+                return@withContext CommandResult(exitCode, output.toString().trim(), "Shizuku")
+            } catch (e: Throwable) {
+                // fallback to rish
+            }
+
             try {
                 val rishProcess = Runtime.getRuntime().exec(arrayOf("rish", "-c", command))
                 val reader = BufferedReader(InputStreamReader(rishProcess.inputStream))

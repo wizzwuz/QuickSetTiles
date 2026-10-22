@@ -219,23 +219,26 @@ fun ActivityPickerScreen(
                                                             },
                                                             onLongClick = {
                                                                 // Execute activity immediately for testing!
-                                                                val result = AppHelper.testLaunchActivity(
-                                                                    context,
-                                                                    app.packageName,
-                                                                    act.fullName
-                                                                )
-                                                                result.onSuccess {
-                                                                    Toast.makeText(
+                                                                coroutineScope.launch {
+                                                                    val result = AppHelper.testLaunchActivity(
                                                                         context,
-                                                                        "Testing: Launched ${act.simpleName}",
-                                                                        Toast.LENGTH_SHORT
-                                                                    ).show()
-                                                                }.onFailure { err ->
-                                                                    Toast.makeText(
-                                                                        context,
-                                                                        "Launch test failed: ${err.message}",
-                                                                        Toast.LENGTH_LONG
-                                                                    ).show()
+                                                                        app.packageName,
+                                                                        act.fullName,
+                                                                        act.isExported
+                                                                    )
+                                                                    result.onSuccess { msg ->
+                                                                        Toast.makeText(
+                                                                            context,
+                                                                            "Testing: $msg",
+                                                                            Toast.LENGTH_SHORT
+                                                                        ).show()
+                                                                    }.onFailure { err ->
+                                                                        Toast.makeText(
+                                                                            context,
+                                                                            "Launch test failed: ${err.message}",
+                                                                            Toast.LENGTH_LONG
+                                                                        ).show()
+                                                                    }
                                                                 }
                                                             }
                                                         ),
@@ -264,7 +267,13 @@ fun ActivityPickerScreen(
                                                         if (!act.isExported) {
                                                             SuggestionChip(
                                                                 onClick = {},
-                                                                label = { Text("Private", fontSize = 9.sp) },
+                                                                label = { Text("Private (Shizuku)", fontSize = 9.sp) },
+                                                                modifier = Modifier.height(20.dp)
+                                                            )
+                                                        } else {
+                                                            SuggestionChip(
+                                                                onClick = {},
+                                                                label = { Text("Exported", fontSize = 9.sp) },
                                                                 modifier = Modifier.height(20.dp)
                                                             )
                                                         }

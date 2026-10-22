@@ -3,9 +3,19 @@ name: Build QuickSetTiles APK
 on:
   push:
     branches: [ "main", "master" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Publish as GitHub Release?'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -15,6 +25,9 @@ jobs:
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Setup Java 17
       uses: actions/setup-java@v4
@@ -23,11 +36,43 @@ jobs:
         java-version: '17'
         cache: 'gradle'
 
+    - name: Ensure Persistent Release Keystore
+      run: |
+        mkdir -p keystore
+        if [ ! -f keystore/release.jks ]; then
+          echo "Generating permanent release keystore..."
+          keytool -genkeypair -v \
+            -keystore keystore/release.jks \
+            -alias quicksettiles \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass "quicksettiles_keystore_pass" \
+            -keypass "quicksettiles_keystore_pass" \
+            -dname "CN=QuickSetTiles, OU=Mobile, O=QuickSetTiles, L=World, ST=Global, C=US"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add keystore/release.jks
+          git commit -m "chore: persist release signing keystore for consistent APK releases [skip ci]" || true
+          git push origin HEAD:${{ github.ref_name }} || true
+        else
+          echo "Permanent release keystore already exists. Reusing existing key."
+        fi
+
     - name: Grant Execute Permission to Gradlew
       run: chmod +x gradlew
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug --stacktrace
+    - name: Build Release & Debug APKs
+      run: ./gradlew assembleRelease assembleDebug --stacktrace
+
+    - name: Upload Release APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: QuickSetTiles-release-apk
+        path: app/build/outputs/apk/release/*.apk
+        if-no-files-found: error
+        retention-days: 14
 
     - name: Upload Debug APK Artifact
       uses: actions/upload-artifact@v4
@@ -37,9 +82,25 @@ jobs:
         if-no-files-found: error
         retention-days: 14
 
+    - name: Publish GitHub Release
+      if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          app/build/outputs/apk/release/*.apk
+          app/build/outputs/apk/debug/*.apk
+        name: QuickSetTiles Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Add Build Summary
       run: |
         echo "### Build Complete! 🚀" >> $GITHUB_STEP_SUMMARY
-        echo "The **QuickSetTiles** debug APK was successfully compiled and is available as a workflow artifact." >> $GITHUB_STEP_SUMMARY
-        echo "- **Artifact Name:** \`QuickSetTiles-debug-apk\`" >> $GITHUB_STEP_SUMMARY
+        echo "The **QuickSetTiles** APKs were compiled and signed with the permanent release keystore." >> $GITHUB_STEP_SUMMARY
+        echo "- **Release APK Artifact:** \`QuickSetTiles-release-apk\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Debug APK Artifact:** \`QuickSetTiles-debug-apk\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Consistent Signing:** Both APKs use the same release keystore (\`keystore/release.jks\`)." >> $GITHUB_STEP_SUMMARY
         echo "- **Built on commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

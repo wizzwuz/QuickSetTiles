@@ -41,6 +41,11 @@
   7. 📄 **Files**: Select any file to open instantly from your Quick Settings panel.
   8. 📁 **Folders**: Select any directory to open in the system file manager.
 
+- **🔒 Inbuilt Private Activities & Shizuku Plugin**:
+  - Launch unexported/private activities that are normally blocked by Android's permissions using Shizuku (UID 2000) or Superuser root (`su`).
+  - Activities explorer clearly marks "Private (Shizuku)" vs "Exported" activities.
+  - Built-in handler for `activitylauncher.intent.action.LAUNCH_ACTIVITY` — QuickSetTiles acts as a drop-in internal Shizuku plugin for Activity Launcher and external tools without needing extra plugin APKs.
+
 - **🎨 Advanced Icon Customization**:
   - Live icon preview reflecting all adjustments in real time.
   - Choose custom images from device storage via file picker.
@@ -52,22 +57,30 @@
   - 15 pre-configured `TileService` slots dynamically mapped to your active tiles.
   - Direct prompt to add tiles to the status bar on modern Android devices.
 
+- **🔑 Uniform & Consistent APK Signing Across All Releases**:
+  - Every release APK and debug APK is signed using the **exact same permanent release keystore** (`keystore/release.jks`).
+  - Seamless in-place updates: users will never encounter `INSTALL_FAILED_UPDATE_INCOMPATIBLE` when updating from one build or release to another.
+  - Automatic GitHub Releases triggered on version tags (`v*`) or manual workflow dispatch.
+
 - **🌙 Material 3 Design**:
   - Dynamic Color theming.
   - Full Dark Mode and Light Mode support.
 
 ---
 
-## 🚀 Building & Installation
+## 🚀 Building & Releases
 
-Automated builds are executed via **GitHub Actions**. Every push to `main` compiles the debug APK and uploads it to GitHub Workflow Artifacts:
+Automated builds and releases are powered by **GitHub Actions**:
 
-1. Navigate to the **Actions** tab on GitHub: [QuickSetTiles Actions](https://github.com/wizzwuz/QuickSetTiles/actions).
-2. Click on the latest workflow run.
-3. Download the `QuickSetTiles-debug-apk` artifact.
-4. Install the `.apk` on your Android device.
+1. **Workflow Artifacts**:
+   - Navigate to the **Actions** tab on GitHub: [QuickSetTiles Actions](https://github.com/wizzwuz/QuickSetTiles/actions).
+   - Click on the latest workflow run.
+   - Download `QuickSetTiles-release-apk` or `QuickSetTiles-debug-apk`. Both are signed with the permanent release keystore.
+2. **GitHub Releases**:
+   - Pushing any tag (e.g. `v1.0.0`) automatically publishes a GitHub Release with the signed APK attached.
+   - Can also be dispatched manually via the Actions UI (`create_release: true`).
 
 To build locally:
 ```bash
-./gradlew assembleDebug
+./gradlew assembleRelease assembleDebug
 ```

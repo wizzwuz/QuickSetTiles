@@ -16,6 +16,7 @@ import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.model.TileItem
 import com.wizzwuz.quicktiles.model.TileType
 import com.wizzwuz.quicktiles.ui.MainActivity
+import com.wizzwuz.quicktiles.util.AppHelper
 import com.wizzwuz.quicktiles.util.IconProcessor
 import com.wizzwuz.quicktiles.util.ShizukuHelper
 import kotlinx.coroutines.CoroutineScope
@@ -116,12 +117,16 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                 try {
                     val comp = ComponentName.unflattenFromString(item.targetData)
                     if (comp != null) {
-                        val intent = Intent().apply {
-                            component = comp
-                            action = Intent.ACTION_MAIN
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        serviceScope.launch {
+                            val res = AppHelper.launchActivityPrivileged(
+                                this@BaseTileService,
+                                comp.packageName,
+                                comp.className
+                            )
+                            res.onFailure {
+                                showToast("Launch failed: ${it.message}")
+                            }
                         }
-                        launchIntent(intent)
                     } else {
                         showToast("Invalid activity: ${item.targetData}")
                     }
