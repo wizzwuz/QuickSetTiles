@@ -1,0 +1,45 @@
+name: Build QuickSetTiles APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Package APK
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup Java 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+        cache: 'gradle'
+
+    - name: Grant Execute Permission to Gradlew
+      run: chmod +x gradlew
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug --stacktrace
+
+    - name: Upload Debug APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: QuickSetTiles-debug-apk
+        path: app/build/outputs/apk/debug/*.apk
+        if-no-files-found: error
+        retention-days: 14
+
+    - name: Add Build Summary
+      run: |
+        echo "### Build Complete! 🚀" >> $GITHUB_STEP_SUMMARY
+        echo "The **QuickSetTiles** debug APK was successfully compiled and is available as a workflow artifact." >> $GITHUB_STEP_SUMMARY
+        echo "- **Artifact Name:** \`QuickSetTiles-debug-apk\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Built on commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

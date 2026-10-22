@@ -1,0 +1,17 @@
+package com.wizzwuz.quicktiles.service
+
+class QuickTileService1 : BaseTileService(1)
+class QuickTileService2 : BaseTileService(2)
+class QuickTileService3 : BaseTileService(3)
+class QuickTileService4 : BaseTileService(4)
+class QuickTileService5 : BaseTileService(5)
+class QuickTileService6 : BaseTileService(6)
+class QuickTileService7 : BaseTileService(7)
+class QuickTileService8 : BaseTileService(8)
+class QuickTileService9 : BaseTileService(9)
+class QuickTileService10 : BaseTileService(10)
+class QuickTileService11 : BaseTileService(11)
+class QuickTileService12 : BaseTileService(12)
+class QuickTileService13 : BaseTileService(13)
+class QuickTileService14 : BaseTileService(14)
+class QuickTileService15 : BaseTileService(15)

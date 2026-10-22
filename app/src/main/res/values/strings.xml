@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">QuickSetTiles</string>
+    <string name="active_tiles">Active Tiles</string>
+    <string name="inactive_tiles">Inactive Tiles</string>
+    <string name="create_tile">Create Tile</string>
+    <string name="edit_tile">Edit Tile</string>
+    <string name="tile_name">Tile Name</string>
+    <string name="tile_name_hint">Enter tile name</string>
+    <string name="tile_type">Tile Type</string>
+    <string name="icon_category">Icon</string>
+    <string name="outline_thickness">Outline Thickness</string>
+    <string name="outline_threshold">Outline Threshold</string>
+    <string name="icon_size">Icon Size</string>
+    <string name="type_apps">Apps</string>
+    <string name="type_website">Website</string>
+    <string name="type_shortcut">Shortcut</string>
+    <string name="type_activity">Activity</string>
+    <string name="type_intent">Intent</string>
+    <string name="type_shell">Shell</string>
+    <string name="type_files">Files</string>
+    <string name="type_folders">Folders</string>
+    
+    <!-- 15 Dynamic Tile Service Default Labels -->
+    <string name="tile_slot_1">Quick Tile 1</string>
+    <string name="tile_slot_2">Quick Tile 2</string>
+    <string name="tile_slot_3">Quick Tile 3</string>
+    <string name="tile_slot_4">Quick Tile 4</string>
+    <string name="tile_slot_5">Quick Tile 5</string>
+    <string name="tile_slot_6">Quick Tile 6</string>
+    <string name="tile_slot_7">Quick Tile 7</string>
+    <string name="tile_slot_8">Quick Tile 8</string>
+    <string name="tile_slot_9">Quick Tile 9</string>
+    <string name="tile_slot_10">Quick Tile 10</string>
+    <string name="tile_slot_11">Quick Tile 11</string>
+    <string name="tile_slot_12">Quick Tile 12</string>
+    <string name="tile_slot_13">Quick Tile 13</string>
+    <string name="tile_slot_14">Quick Tile 14</string>
+    <string name="tile_slot_15">Quick Tile 15</string>
+</resources>
