@@ -91,6 +91,7 @@ object ShizukuHelper {
         }
     }
 
+    suspend fun executeCommand(command: String): CommandResult = withContext(Dispatchers.IO) {
         // 1. If Shizuku is running and authorized, try Shizuku.newProcess (elevated shell daemon)
         if (isShizukuRunning() && hasShizukuPermission()) {
             try {
