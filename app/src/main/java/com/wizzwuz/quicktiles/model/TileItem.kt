@@ -25,7 +25,8 @@ data class IconConfig(
     val sourceData: String = "tile_default",
     val outlineThickness: Float = 0f,
     val outlineThreshold: Float = 0.5f,
-    val iconSize: Float = 32f
+    val iconSize: Float = 32f,
+    val outlineStyle: String = "OUTLINE"
 ) {
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -34,6 +35,7 @@ data class IconConfig(
             put("outlineThickness", outlineThickness.toDouble())
             put("outlineThreshold", outlineThreshold.toDouble())
             put("iconSize", iconSize.toDouble())
+            put("outlineStyle", outlineStyle)
         }
     }
 
@@ -44,7 +46,8 @@ data class IconConfig(
                 sourceData = json.optString("sourceData", "tile_default"),
                 outlineThickness = json.optDouble("outlineThickness", 0.0).toFloat(),
                 outlineThreshold = json.optDouble("outlineThreshold", 0.5).toFloat(),
-                iconSize = json.optDouble("iconSize", 32.0).toFloat()
+                iconSize = json.optDouble("iconSize", 32.0).toFloat(),
+                outlineStyle = json.optString("outlineStyle", "OUTLINE")
             )
         }
     }

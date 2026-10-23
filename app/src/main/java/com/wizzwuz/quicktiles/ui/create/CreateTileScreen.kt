@@ -330,6 +330,29 @@ fun CreateTileScreen(
                         ) {
                             Text("Icon Customization Controls", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
 
+                            // Outline Style Selector
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Outline Style", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    listOf(
+                                        "OUTLINE" to "Outline",
+                                        "GLOW" to "Glow",
+                                        "FROSTED" to "Frosted",
+                                        "SOLID" to "Solid"
+                                    ).forEach { (styleKey, label) ->
+                                        FilterChip(
+                                            selected = iconConfig.outlineStyle.equals(styleKey, ignoreCase = true),
+                                            onClick = { iconConfig = iconConfig.copy(outlineStyle = styleKey) },
+                                            label = { Text(label, fontSize = 11.sp) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+
                             // Outline Thickness Slider
                             Column {
                                 Row(
@@ -619,10 +642,14 @@ fun CreateTileScreen(
                 selectedType = TileType.APPS
                 targetData = app.packageName
                 if (tileName.isBlank()) tileName = app.label
-                // By default use app icon!
-                iconConfig = iconConfig.copy(
+                // Immediately draw outline of its icon element and set it as default tile icon!
+                iconConfig = IconConfig(
                     sourceType = IconSourceType.APP_ICON,
-                    sourceData = app.packageName
+                    sourceData = app.packageName,
+                    outlineThickness = 2.5f,
+                    outlineThreshold = 0.4f,
+                    iconSize = 32f,
+                    outlineStyle = "OUTLINE"
                 )
             }
         )

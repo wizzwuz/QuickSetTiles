@@ -254,7 +254,11 @@ fun MainScreen() {
                                 targetData = "${app.packageName}/${act.fullName}",
                                 iconConfig = IconConfig(
                                     sourceType = IconSourceType.APP_ICON,
-                                    sourceData = app.packageName
+                                    sourceData = app.packageName,
+                                    outlineThickness = 2.5f,
+                                    outlineThreshold = 0.4f,
+                                    iconSize = 32f,
+                                    outlineStyle = "OUTLINE"
                                 )
                             )
                             editingTile = current.copy(
@@ -263,7 +267,11 @@ fun MainScreen() {
                                 targetData = "${app.packageName}/${act.fullName}",
                                 iconConfig = current.iconConfig.copy(
                                     sourceType = IconSourceType.APP_ICON,
-                                    sourceData = app.packageName
+                                    sourceData = app.packageName,
+                                    outlineThickness = if (current.iconConfig.outlineThickness > 0.1f) current.iconConfig.outlineThickness else 2.5f,
+                                    outlineThreshold = 0.4f,
+                                    iconSize = 32f,
+                                    outlineStyle = current.iconConfig.outlineStyle.ifBlank { "OUTLINE" }
                                 )
                             )
                             currentDestination = MainDestination.CREATE_OR_EDIT
