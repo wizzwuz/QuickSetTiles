@@ -56,6 +56,49 @@ jobs:
     - name: Grant Execute Permission to Gradlew
       run: chmod +x gradlew
 
+    - name: Generate App Launcher Icons from icon.png
+      run: |
+        python3 -m pip install pillow
+        python3 -c "
+        import os
+        from PIL import Image
+
+        icon_path = 'icon.png'
+        if not os.path.exists(icon_path):
+            print('icon.png not found, skipping icon generation')
+            exit(0)
+
+        img = Image.open(icon_path).convert('RGBA')
+
+        densities = {
+            'mipmap-mdpi': 48,
+            'mipmap-hdpi': 72,
+            'mipmap-xhdpi': 96,
+            'mipmap-xxhdpi': 144,
+            'mipmap-xxxhdpi': 192,
+        }
+
+        for folder, size in densities.items():
+            out_dir = os.path.join('app/src/main/res', folder)
+            os.makedirs(out_dir, exist_ok=True)
+            resized = img.resize((size, size), Image.Resampling.LANCZOS)
+            resized.save(os.path.join(out_dir, 'ic_launcher.png'))
+            resized.save(os.path.join(out_dir, 'ic_launcher_round.png'))
+            print(f'Generated {folder} ({size}x{size})')
+
+        fg_canvas = Image.new('RGBA', (432, 432), (0, 0, 0, 0))
+        safe_icon = img.resize((312, 312), Image.Resampling.LANCZOS)
+        offset = ((432 - 312) // 2, (432 - 312) // 2)
+        fg_canvas.paste(safe_icon, offset, safe_icon)
+
+        os.makedirs('app/src/main/res/drawable', exist_ok=True)
+        xml_fg = 'app/src/main/res/drawable/ic_launcher_foreground.xml'
+        if os.path.exists(xml_fg):
+            os.remove(xml_fg)
+        fg_canvas.save('app/src/main/res/drawable/ic_launcher_foreground.png')
+        print('Generated ic_launcher_foreground.png (432x432)')
+        "
+
     - name: Build Release & Debug APKs
       run: ./gradlew assembleRelease assembleDebug --stacktrace
 

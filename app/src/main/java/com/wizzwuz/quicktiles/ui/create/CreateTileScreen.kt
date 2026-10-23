@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -143,8 +144,9 @@ fun CreateTileScreen(
     }
 
     // Dynamic Icon Bitmap Preview
-    val previewBitmap = remember(iconConfig) {
-        IconProcessor.processIconBitmap(context, iconConfig, targetPixelSize = 120)
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val previewBitmap = remember(iconConfig, isDark) {
+        IconProcessor.processIconBitmap(context, iconConfig, targetPixelSize = 120, isDarkTheme = isDark)
     }
 
     val saveTileAction = {

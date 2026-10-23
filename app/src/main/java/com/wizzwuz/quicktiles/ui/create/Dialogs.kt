@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -738,10 +739,11 @@ fun ShellDialog(
                 }
 
                 // Tile Icon(s) based on visual state
+                val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
                 Text("Tile Icon(s)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 if (visualState == TileVisualState.TOGGLE) {
                     // Enabled Icon row
-                    val onBmp = remember(onIconConfig) { IconProcessor.processIconBitmap(context, onIconConfig, 40) }
+                    val onBmp = remember(onIconConfig, isDark) { IconProcessor.processIconBitmap(context, onIconConfig, 40, isDarkTheme = isDark) }
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
@@ -778,7 +780,7 @@ fun ShellDialog(
                     }
 
                     // Disabled Icon row
-                    val offBmp = remember(offIconConfig) { IconProcessor.processIconBitmap(context, offIconConfig, 40) }
+                    val offBmp = remember(offIconConfig, isDark) { IconProcessor.processIconBitmap(context, offIconConfig, 40, isDarkTheme = isDark) }
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
@@ -816,7 +818,7 @@ fun ShellDialog(
                 } else {
                     // Single icon
                     val currentCfg = if (visualState == TileVisualState.DISABLED) offIconConfig else onIconConfig
-                    val bmp = remember(currentCfg) { IconProcessor.processIconBitmap(context, currentCfg, 40) }
+                    val bmp = remember(currentCfg, isDark) { IconProcessor.processIconBitmap(context, currentCfg, 40, isDarkTheme = isDark) }
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
@@ -1014,10 +1016,12 @@ fun IconPresetsDialog(
             ) {
                 items(IconProcessor.PRESET_ICONS) { (key, label) ->
                     val isSelected = currentKey == key
-                    val bmp = remember(key) {
+                    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                    val bmp = remember(key, isDark) {
                         IconProcessor.processIconBitmap(
                             context,
-                            IconConfig(sourceType = IconSourceType.PRESET, sourceData = key)
+                            IconConfig(sourceType = IconSourceType.PRESET, sourceData = key),
+                            isDarkTheme = isDark
                         )
                     }
                     Card(

@@ -217,7 +217,8 @@ object IconProcessor {
         thicknessPx: Float,
         threshold: Float = 0.4f,
         style: String = "OUTLINE",
-        targetSize: Int = 128
+        targetSize: Int = 128,
+        isDarkTheme: Boolean = true
     ): Bitmap {
         val w = sourceBitmap.width
         val h = sourceBitmap.height
@@ -346,6 +347,7 @@ object IconProcessor {
 
         // 3. Render according to style
         val resultPixels = IntArray(w * h)
+        val strokeRgb = if (isDarkTheme) 0x00FFFFFF else 0x00111827
         for (y in 0 until h) {
             for (x in 0 until w) {
                 val idx = y * w + x
@@ -354,20 +356,21 @@ object IconProcessor {
                 when (style.uppercase()) {
                     "SOLID" -> {
                         if (isSolid[idx]) {
-                            resultPixels[idx] = 0xFFFFFFFF.toInt()
+                            resultPixels[idx] = (0xFF shl 24) or strokeRgb
                         }
                     }
                     "FROSTED" -> {
                         if (edgeA > 0) {
-                            resultPixels[idx] = (edgeA shl 24) or 0x00FFFFFF
+                            resultPixels[idx] = (edgeA shl 24) or strokeRgb
                         } else if (isSolid[idx]) {
-                            resultPixels[idx] = (55 shl 24) or 0x00FFFFFF
+                            val innerA = if (isDarkTheme) 55 else 90
+                            resultPixels[idx] = (innerA shl 24) or strokeRgb
                         }
                     }
                     else -> {
                         // "OUTLINE" & "GLOW"
                         if (edgeA > 0) {
-                            resultPixels[idx] = (edgeA shl 24) or 0x00FFFFFF
+                            resultPixels[idx] = (edgeA shl 24) or strokeRgb
                         }
                     }
                 }
@@ -379,7 +382,7 @@ object IconProcessor {
         return outBmp
     }
 
-    fun loadRawBitmap(context: Context, config: IconConfig): Bitmap {
+    fun loadRawBitmap(context: Context, config: IconConfig, isDarkTheme: Boolean = true): Bitmap {
         return when (config.sourceType) {
             IconSourceType.APP_ICON -> {
                 extractAppIconElement(context, config.sourceData)
@@ -388,21 +391,57 @@ object IconProcessor {
                 try {
                     val file = File(config.sourceData)
                     if (file.exists()) {
-                        BitmapFactory.decodeFile(file.absolutePath) ?: getDefaultPresetBitmap(context)
+                        BitmapFactory.decodeFile(file.absolutePath) ?: getDefaultPresetBitmap(context, isDarkTheme)
                     } else {
-                        getDefaultPresetBitmap(context)
+                        getDefaultPresetBitmap(context, isDarkTheme)
                     }
                 } catch (e: Throwable) {
-                    getDefaultPresetBitmap(context)
+                    getDefaultPresetBitmap(context, isDarkTheme)
                 }
             }
             IconSourceType.PRESET -> {
-                getPresetBitmap(context, config.sourceData)
+                getPresetBitmap(context, config.sourceData, isDarkTheme)
             }
         }
     }
 
-    fun processIconBitmap(context: Context, config: IconConfig, targetPixelSize: Int = 128): Bitmap {
+    private fun tintWhitePixelsToDark(src: Bitmap, targetColor: Int): Bitmap {
+        val w = src.width
+        val h = src.height
+        if (w <= 0 || h <= 0) return src
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+        var modified = false
+        val tr = (targetColor ushr 16) and 0xFF
+        val tg = (targetColor ushr 8) and 0xFF
+        val tb = targetColor and 0xFF
+
+        for (i in pixels.indices) {
+            val c = pixels[i]
+            val a = (c ushr 24) and 0xFF
+            if (a > 10) {
+                val r = (c ushr 16) and 0xFF
+                val g = (c ushr 8) and 0xFF
+                val b = c and 0xFF
+                val lum = 0.299f * r + 0.587f * g + 0.114f * b
+                if (lum > 180f) {
+                    pixels[i] = (a shl 24) or (tr shl 16) or (tg shl 8) or tb
+                    modified = true
+                }
+            }
+        }
+        if (!modified) return src
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        out.setPixels(pixels, 0, w, 0, 0, w, h)
+        return out
+    }
+
+    fun processIconBitmap(
+        context: Context,
+        config: IconConfig,
+        targetPixelSize: Int = 128,
+        isDarkTheme: Boolean = true
+    ): Bitmap {
         val density = context.resources.displayMetrics.density
 
         val rawElement: Bitmap = when (config.sourceType) {
@@ -413,16 +452,16 @@ object IconProcessor {
                 try {
                     val file = File(config.sourceData)
                     if (file.exists()) {
-                        BitmapFactory.decodeFile(file.absolutePath) ?: getDefaultPresetBitmap(context)
+                        BitmapFactory.decodeFile(file.absolutePath) ?: getDefaultPresetBitmap(context, isDarkTheme)
                     } else {
-                        getDefaultPresetBitmap(context)
+                        getDefaultPresetBitmap(context, isDarkTheme)
                     }
                 } catch (e: Throwable) {
-                    getDefaultPresetBitmap(context)
+                    getDefaultPresetBitmap(context, isDarkTheme)
                 }
             }
             IconSourceType.PRESET -> {
-                getPresetBitmap(context, config.sourceData)
+                getPresetBitmap(context, config.sourceData, isDarkTheme)
             }
         }
 
@@ -441,10 +480,15 @@ object IconProcessor {
                 thicknessPx = effectiveThickness,
                 threshold = config.outlineThreshold,
                 style = config.outlineStyle,
-                targetSize = scaledDim
+                targetSize = scaledDim,
+                isDarkTheme = isDarkTheme
             )
         } else {
-            scaledElement
+            if (!isDarkTheme) {
+                tintWhitePixelsToDark(scaledElement, 0xFF111827.toInt())
+            } else {
+                scaledElement
+            }
         }
 
         val resultBitmap = Bitmap.createBitmap(targetPixelSize, targetPixelSize, Bitmap.Config.ARGB_8888)
@@ -458,7 +502,8 @@ object IconProcessor {
     }
 
     fun createTileIcon(context: Context, config: IconConfig): Icon {
-        val bmp = processIconBitmap(context, config, targetPixelSize = 96)
+        // Quick Settings tiles on Android use monochrome white mask for SystemUI tinting
+        val bmp = processIconBitmap(context, config, targetPixelSize = 96, isDarkTheme = true)
         return Icon.createWithBitmap(bmp)
     }
 
@@ -503,19 +548,21 @@ object IconProcessor {
         return bitmap
     }
 
-    private fun getDefaultPresetBitmap(context: Context): Bitmap {
-        val d = ContextCompat.getDrawable(context, R.drawable.ic_tile_default)
+    private fun getDefaultPresetBitmap(context: Context, isDarkTheme: Boolean = true): Bitmap {
+        val d = ContextCompat.getDrawable(context, R.drawable.ic_tile_default)?.mutate()
             ?: return Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+        d.setTint(if (isDarkTheme) Color.WHITE else 0xFF111827.toInt())
         return drawableToBitmap(d)
     }
 
-    private fun getPresetBitmap(context: Context, key: String): Bitmap {
+    private fun getPresetBitmap(context: Context, key: String, isDarkTheme: Boolean = true): Bitmap {
         // Draw crisp vector icon dynamically
         val size = 96
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
+        val iconColor = if (isDarkTheme) Color.WHITE else 0xFF111827.toInt()
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
+            color = iconColor
             style = Paint.Style.FILL
         }
 
@@ -612,7 +659,7 @@ object IconProcessor {
                 canvas.drawPath(path, paint)
             }
             else -> {
-                return getDefaultPresetBitmap(context)
+                return getDefaultPresetBitmap(context, isDarkTheme)
             }
         }
         return bitmap

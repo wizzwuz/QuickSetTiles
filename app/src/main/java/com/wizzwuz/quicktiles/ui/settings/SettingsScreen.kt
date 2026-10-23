@@ -27,15 +27,22 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
 import com.wizzwuz.quicktiles.BuildConfig
 import com.wizzwuz.quicktiles.ui.theme.AppThemeMode
 import com.wizzwuz.quicktiles.ui.theme.ThemeManager
+import com.wizzwuz.quicktiles.util.BackupRestoreManager
 import com.wizzwuz.quicktiles.util.DiagnosticsInfo
 import com.wizzwuz.quicktiles.util.LogManager
 import com.wizzwuz.quicktiles.util.LogStats
 import com.wizzwuz.quicktiles.util.ShizukuHelper
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -178,7 +185,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "${currentTheme.title} — ${currentTheme.subtitle}",
+                                    text = currentTheme.title,
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -201,17 +208,10 @@ fun SettingsScreen(
                         AppThemeMode.values().forEach { mode ->
                             DropdownMenuItem(
                                 text = {
-                                    Column {
-                                        Text(
-                                            text = mode.title,
-                                            fontWeight = if (mode == currentTheme) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                        Text(
-                                            text = mode.subtitle,
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                                    Text(
+                                        text = mode.title,
+                                        fontWeight = if (mode == currentTheme) FontWeight.Bold else FontWeight.Normal
+                                    )
                                 },
                                 leadingIcon = {
                                     Icon(
@@ -313,6 +313,160 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+
+            // 4. Backup & Restore Card
+            var showRestoreConfirmDialog by remember { mutableStateOf(false) }
+            var pendingRestoreJson by remember { mutableStateOf<String?>(null) }
+            var restoreTileCountPreview by remember { mutableStateOf(0) }
+
+            val exportBackupLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.CreateDocument("application/json")
+            ) { uri ->
+                if (uri != null) {
+                    try {
+                        val jsonString = BackupRestoreManager.createBackup(context)
+                        context.contentResolver.openOutputStream(uri)?.use { output ->
+                            output.write(jsonString.toByteArray(Charsets.UTF_8))
+                        }
+                        Toast.makeText(context, "Backup exported successfully!", Toast.LENGTH_LONG).show()
+                    } catch (e: Throwable) {
+                        Toast.makeText(context, "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+
+            val importBackupLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument()
+            ) { uri ->
+                if (uri != null) {
+                    try {
+                        val jsonString = context.contentResolver.openInputStream(uri)?.use { input ->
+                            input.bufferedReader().use { it.readText() }
+                        }
+                        if (jsonString != null) {
+                            val root = JSONObject(jsonString)
+                            val count = root.optJSONArray("tiles")?.length() ?: 0
+                            restoreTileCountPreview = count
+                            pendingRestoreJson = jsonString
+                            showRestoreConfirmDialog = true
+                        }
+                    } catch (e: Throwable) {
+                        Toast.makeText(context, "Failed to read backup: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Save,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Backup & Restore",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Export or restore your quick settings tiles and application settings.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = {
+                                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                                exportBackupLauncher.launch("QuickSetTiles_backup_$timestamp.json")
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Backup", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                importBackupLauncher.launch(arrayOf("application/json", "*/*"))
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Restore", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            if (showRestoreConfirmDialog && pendingRestoreJson != null) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showRestoreConfirmDialog = false
+                        pendingRestoreJson = null
+                    },
+                    title = { Text("Restore Backup?") },
+                    text = {
+                        Text("This backup contains $restoreTileCountPreview tiles and application settings. Restoring will apply these settings and configure your tiles. Do you want to proceed?")
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val json = pendingRestoreJson
+                                showRestoreConfirmDialog = false
+                                pendingRestoreJson = null
+                                if (json != null) {
+                                    val result = BackupRestoreManager.restoreBackup(context, json)
+                                    if (result.isSuccess) {
+                                        val summary = result.getOrNull()
+                                        Toast.makeText(
+                                            context,
+                                            "Restored ${summary?.tileCount ?: 0} tiles and settings successfully!",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "Restore error: ${result.exceptionOrNull()?.message}",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                            }
+                        ) {
+                            Text("Restore")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                showRestoreConfirmDialog = false
+                                pendingRestoreJson = null
+                            }
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
 
             // 3. Shizuku / Shevery Diagnostics Section

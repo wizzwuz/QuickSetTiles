@@ -5,11 +5,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-enum class AppThemeMode(val title: String, val subtitle: String) {
-    SYSTEM("Follow System", "Matches device system theme"),
-    LIGHT("Light Mode", "Crisp, bright appearance"),
-    DARK("Dark Mode", "Material dark gray theme"),
-    AMOLED("AMOLED Dark", "Pure true black #000000 for OLED screens")
+enum class AppThemeMode(val title: String) {
+    SYSTEM("Follow System"),
+    LIGHT("Light"),
+    DARK("Dark"),
+    AMOLED("AMOLED Dark")
 }
 
 object ThemeManager {

@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -128,8 +129,9 @@ fun TilesListScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(tiles, key = { it.id }) { tile ->
-                    val previewBitmap = remember(tile.iconConfig) {
-                        IconProcessor.processIconBitmap(context, tile.iconConfig, targetPixelSize = 96)
+                    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                    val previewBitmap = remember(tile.iconConfig, isDark) {
+                        IconProcessor.processIconBitmap(context, tile.iconConfig, targetPixelSize = 96, isDarkTheme = isDark)
                     }
 
                     Card(

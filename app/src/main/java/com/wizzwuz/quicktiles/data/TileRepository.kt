@@ -3,6 +3,7 @@ package com.wizzwuz.quicktiles.data
 import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.service.quicksettings.TileService
 import com.wizzwuz.quicktiles.model.TileItem
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +33,7 @@ class TileRepository(private val context: Context) {
 
     init {
         loadTiles()
+        syncComponentStates(context)
     }
 
     @Synchronized
@@ -81,6 +83,7 @@ class TileRepository(private val context: Context) {
     fun saveTile(tile: TileItem) {
         val current = _tilesFlow.value.toMutableList()
         val index = current.indexOfFirst { it.id == tile.id }
+        val oldSlot = if (index >= 0) current[index].slotNumber else -1
 
         val finalTile = if (tile.isActive) {
             val assignedSlot = if (tile.slotNumber in 1..MAX_SLOTS) {
@@ -105,7 +108,15 @@ class TileRepository(private val context: Context) {
 
         persistTiles(current)
 
-        if (finalTile.slotNumber in 1..MAX_SLOTS) {
+        // Disable old slot if slot changed or tile became inactive
+        if (oldSlot in 1..MAX_SLOTS && oldSlot != finalTile.slotNumber) {
+            setComponentEnabled(context, oldSlot, false)
+            requestTileUpdate(context, oldSlot)
+        }
+
+        // Enable new slot if active
+        if (finalTile.isActive && finalTile.slotNumber in 1..MAX_SLOTS) {
+            setComponentEnabled(context, finalTile.slotNumber, true)
             requestTileUpdate(context, finalTile.slotNumber)
         }
     }
@@ -119,6 +130,7 @@ class TileRepository(private val context: Context) {
             current[index] = current[index].copy(isActive = false, slotNumber = -1)
             persistTiles(current)
             if (oldSlot in 1..MAX_SLOTS) {
+                setComponentEnabled(context, oldSlot, false)
                 requestTileUpdate(context, oldSlot)
             }
         }
@@ -133,6 +145,7 @@ class TileRepository(private val context: Context) {
             current[index] = current[index].copy(isActive = true, slotNumber = freeSlot)
             persistTiles(current)
             if (freeSlot in 1..MAX_SLOTS) {
+                setComponentEnabled(context, freeSlot, true)
                 requestTileUpdate(context, freeSlot)
             }
         }
@@ -147,7 +160,19 @@ class TileRepository(private val context: Context) {
             current.removeAt(index)
             persistTiles(current)
             if (oldSlot in 1..MAX_SLOTS) {
+                setComponentEnabled(context, oldSlot, false)
                 requestTileUpdate(context, oldSlot)
+            }
+        }
+    }
+
+    @Synchronized
+    fun restoreAllTiles(tiles: List<TileItem>) {
+        persistTiles(tiles)
+        syncComponentStates(context)
+        for (tile in tiles) {
+            if (tile.isActive && tile.slotNumber in 1..MAX_SLOTS) {
+                requestTileUpdate(context, tile.slotNumber)
             }
         }
     }
@@ -162,6 +187,28 @@ class TileRepository(private val context: Context) {
         return -1 // No free slots
     }
 
+    fun syncComponentStates(context: Context) {
+        val activeSlots = _tilesFlow.value.filter { it.isActive }.map { it.slotNumber }.toSet()
+        val pm = context.packageManager
+        for (slot in 1..MAX_SLOTS) {
+            val component = ComponentName(context, "com.wizzwuz.quicktiles.service.QuickTileService$slot")
+            val shouldBeEnabled = activeSlots.contains(slot)
+            val currentState = pm.getComponentEnabledSetting(component)
+            val targetState = if (shouldBeEnabled) {
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            } else {
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            }
+            if (currentState != targetState) {
+                try {
+                    pm.setComponentEnabledSetting(component, targetState, PackageManager.DONT_KILL_APP)
+                } catch (e: Throwable) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
     companion object {
         const val MAX_SLOTS = 50
         private const val KEY_TILES = "saved_tiles_list"
@@ -173,6 +220,25 @@ class TileRepository(private val context: Context) {
         fun getInstance(context: Context): TileRepository {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: TileRepository(context.applicationContext).also { INSTANCE = it }
+            }
+        }
+
+        fun setComponentEnabled(context: Context, slot: Int, enabled: Boolean) {
+            try {
+                val serviceClass = "com.wizzwuz.quicktiles.service.QuickTileService$slot"
+                val component = ComponentName(context, serviceClass)
+                val targetState = if (enabled) {
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                } else {
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                }
+                context.packageManager.setComponentEnabledSetting(
+                    component,
+                    targetState,
+                    PackageManager.DONT_KILL_APP
+                )
+            } catch (e: Throwable) {
+                e.printStackTrace()
             }
         }
 
