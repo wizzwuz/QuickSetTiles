@@ -269,7 +269,14 @@ object ShizukuHelper {
         }
 
         try {
-            val proc = Shizuku.newProcess(arrayOf("sh", "-c", command), null, null)
+            val method = Shizuku::class.java.getDeclaredMethod(
+                "newProcess",
+                Array<String>::class.java,
+                Array<String>::class.java,
+                String::class.java
+            )
+            method.isAccessible = true
+            val proc = method.invoke(null, arrayOf("sh", "-c", command), null, null) as Process
             readProcessWithTimeout(proc, "Shizuku", timeoutMs)
         } catch (e: Throwable) {
             val errMsg = "Shizuku execution failed: ${e.message ?: e.javaClass.simpleName}"
