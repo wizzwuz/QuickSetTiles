@@ -20,7 +20,7 @@ class TileRepository(private val context: Context) {
     val tilesFlow: StateFlow<List<TileItem>> = _tilesFlow.asStateFlow()
 
     private val _privateActivityLaunchableFlow = MutableStateFlow(
-        prefs.getBoolean(KEY_PRIVATE_ACTIVITY_LAUNCHABLE, true)
+        prefs.getBoolean(KEY_PRIVATE_ACTIVITY_LAUNCHABLE, false)
     )
     val privateActivityLaunchableFlow: StateFlow<Boolean> = _privateActivityLaunchableFlow.asStateFlow()
 

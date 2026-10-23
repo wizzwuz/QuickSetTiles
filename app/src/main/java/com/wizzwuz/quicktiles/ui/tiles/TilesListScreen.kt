@@ -5,14 +5,12 @@ import android.content.ComponentName
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.widget.Toast
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -29,17 +27,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.model.TileItem
-import com.wizzwuz.quicktiles.model.TileType
 import com.wizzwuz.quicktiles.util.IconProcessor
-import java.util.concurrent.Executor
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TilesListScreen(
     tiles: List<TileItem>,
     isActiveTab: Boolean,
     onTileClick: (TileItem) -> Unit,
-    onTileLongClick: (TileItem) -> Unit,
+    onInactivateTile: (TileItem) -> Unit,
+    onActivateTile: (TileItem) -> Unit,
     onDeleteTile: (TileItem) -> Unit,
     onAddTileClick: () -> Unit
 ) {
@@ -67,9 +63,9 @@ fun TilesListScreen(
                 )
                 Text(
                     text = if (isActiveTab)
-                        "Tap a tile to deactivate. Long press to edit."
+                        "Tap a tile to edit. Tap Remove to deactivate."
                     else
-                        "Tap a tile to activate. Long press to edit.",
+                        "Tap a tile to edit. Tap Add to activate.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -138,10 +134,7 @@ fun TilesListScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
-                            .combinedClickable(
-                                onClick = { onTileClick(tile) },
-                                onLongClick = { onTileLongClick(tile) }
-                            ),
+                            .clickable { onTileClick(tile) },
                         colors = CardDefaults.cardColors(
                             containerColor = if (tile.isActive)
                                 MaterialTheme.colorScheme.surfaceVariant
@@ -175,11 +168,11 @@ fun TilesListScreen(
                                 )
                             }
 
-                            // Details
+                            // Details: Tile Name and "Tile X" badge
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(
                                         text = tile.name,
@@ -189,69 +182,84 @@ fun TilesListScreen(
                                     )
                                     if (tile.isActive && tile.slotNumber in 1..TileRepository.MAX_SLOTS) {
                                         Badge(containerColor = MaterialTheme.colorScheme.primary) {
-                                            Text("Slot ${tile.slotNumber}", fontSize = 10.sp)
+                                            Text("Tile ${tile.slotNumber}", fontSize = 10.sp)
                                         }
                                     }
-                                }
-
-                                Spacer(modifier = Modifier.height(2.dp))
-
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    SuggestionChip(
-                                        onClick = {},
-                                        label = { Text(tile.type.name, fontSize = 10.sp) },
-                                        modifier = Modifier.height(22.dp)
-                                    )
-                                    Text(
-                                        text = tile.targetData.take(35),
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
-                                    )
                                 }
                             }
 
-                            // Actions
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                // Add to Quick Settings Prompt (Android 14+)
-                                if (tile.isActive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                                    IconButton(
-                                        onClick = {
-                                            try {
-                                                val sbm = context.getSystemService(StatusBarManager::class.java)
-                                                val comp = ComponentName(
-                                                    context,
-                                                    "com.wizzwuz.quicktiles.service.QuickTileService${tile.slotNumber}"
-                                                )
-                                                sbm.requestAddTileService(
-                                                    comp,
-                                                    tile.name,
-                                                    Icon.createWithBitmap(previewBitmap),
-                                                    context.mainExecutor
-                                                ) { res ->
-                                                    Toast.makeText(context, "Tile Add Response: $res", Toast.LENGTH_SHORT).show()
+                            // Action buttons: Add / Remove & Delete
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                if (isActiveTab) {
+                                    // Android 14+ Quick Add to QS shade shortcut
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                                        IconButton(
+                                            onClick = {
+                                                try {
+                                                    val sbm = context.getSystemService(StatusBarManager::class.java)
+                                                    val comp = ComponentName(
+                                                        context,
+                                                        "com.wizzwuz.quicktiles.service.QuickTileService${tile.slotNumber}"
+                                                    )
+                                                    sbm.requestAddTileService(
+                                                        comp,
+                                                        tile.name,
+                                                        Icon.createWithBitmap(previewBitmap),
+                                                        context.mainExecutor
+                                                    ) { res ->
+                                                        val msg = when (res) {
+                                                            StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "Tile already added"
+                                                            StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "Tile added to Quick Settings"
+                                                            else -> "Tile not added"
+                                                        }
+                                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                                    }
+                                                } catch (e: Throwable) {
+                                                    Toast.makeText(context, "Add to QS: Drag tile from system edit panel", Toast.LENGTH_SHORT).show()
                                                 }
-                                            } catch (e: Throwable) {
-                                                Toast.makeText(context, "Add to QS: Drag tile from system edit panel", Toast.LENGTH_SHORT).show()
-                                            }
+                                            },
+                                            modifier = Modifier.size(34.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.AddCircleOutline,
+                                                contentDescription = "Add to QS Panel",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
                                         }
+                                    }
+
+                                    // Remove button to deactivate and move to inactive tab
+                                    FilledTonalButton(
+                                        onClick = { onInactivateTile(tile) },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(32.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.AddCircleOutline,
-                                            contentDescription = "Add to QS Panel",
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
+                                        Text("Remove", fontSize = 12.sp)
+                                    }
+                                } else {
+                                    // Add button to activate and move to active tab
+                                    Button(
+                                        onClick = { onActivateTile(tile) },
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(32.dp)
+                                    ) {
+                                        Text("Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
 
-                                IconButton(onClick = { tileToDelete = tile }) {
+                                IconButton(
+                                    onClick = { tileToDelete = tile },
+                                    modifier = Modifier.size(34.dp)
+                                ) {
                                     Icon(
                                         imageVector = Icons.Default.DeleteOutline,
                                         contentDescription = "Delete Tile",
-                                        tint = MaterialTheme.colorScheme.error
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }

@@ -539,7 +539,7 @@ fun SettingsScreen(
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Grant Permission", fontSize = 12.sp)
+                                Text("Request Shizuku Permission", fontSize = 12.sp)
                             }
                         }
 
@@ -566,45 +566,44 @@ fun SettingsScreen(
                 }
             }
 
-            // 3. Error Logging Section (log.txt)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Error Log (log.txt)",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                logStats?.let { stats ->
+            // 5. Error Logging Section (log.txt) - Debug Build Only
+            if (BuildConfig.DEBUG) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "${stats.formattedSize} • ${stats.lineCount} lines",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Error Log (log.txt)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
+
+                    logStats?.let { stats ->
+                        Text(
+                            text = "${stats.formattedSize} • ${stats.lineCount} lines",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-            }
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            ) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "Errors and shell command output are automatically logged to log.txt.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "Errors and shell command output are automatically logged to log.txt.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
-                    // Export / Share Actions
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // EXPORT LOG FILE BUTTON: Debug APK Only!
-                        if (BuildConfig.DEBUG) {
+                        // Export / Share Actions
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             FilledTonalButton(
                                 onClick = {
                                     val file = LogManager.getLogFileForExport()
@@ -634,63 +633,48 @@ fun SettingsScreen(
                             ) {
                                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Export log.txt (Debug)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("Export log.txt", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
-                        } else {
-                            // In Release builds: Inform user that file export is debug-only
-                            Card(
-                                modifier = Modifier.weight(1f),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text("Exporting log.txt file is enabled in Debug APK only.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                            // Copy to Clipboard Button
+                            OutlinedButton(
+                                onClick = {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    cm.setPrimaryClip(ClipData.newPlainText("QuickSetTiles Log", logContent))
+                                    Toast.makeText(context, "Copied log.txt to clipboard", Toast.LENGTH_SHORT).show()
                                 }
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                            }
+
+                            // Clear Logs Button
+                            OutlinedButton(
+                                onClick = { showClearDialog = true },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                             }
                         }
 
-                        // Copy to Clipboard Button
-                        OutlinedButton(
-                            onClick = {
-                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                cm.setPrimaryClip(ClipData.newPlainText("QuickSetTiles Log", logContent))
-                                Toast.makeText(context, "Copied log.txt to clipboard", Toast.LENGTH_SHORT).show()
-                            }
+                        // Monospace Log Content Box
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 120.dp, max = 320.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .padding(8.dp)
+                                .verticalScroll(rememberScrollState())
+                                .horizontalScroll(rememberScrollState())
                         ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Text(
+                                text = logContent,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                lineHeight = 16.sp
+                            )
                         }
-
-                        // Clear Logs Button
-                        OutlinedButton(
-                            onClick = { showClearDialog = true },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
-                    }
-
-                    // Monospace Log Content Box
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 120.dp, max = 320.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surface)
-                            .padding(8.dp)
-                            .verticalScroll(rememberScrollState())
-                            .horizontalScroll(rememberScrollState())
-                    ) {
-                        Text(
-                            text = logContent,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            lineHeight = 16.sp
-                        )
                     }
                 }
             }

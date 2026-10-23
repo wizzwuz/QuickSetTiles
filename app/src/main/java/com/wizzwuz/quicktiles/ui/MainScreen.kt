@@ -23,6 +23,7 @@ import com.wizzwuz.quicktiles.ui.create.ActivityPickerScreen
 import com.wizzwuz.quicktiles.ui.create.CreateTileScreen
 import com.wizzwuz.quicktiles.ui.settings.SettingsScreen
 import com.wizzwuz.quicktiles.ui.tiles.TilesListScreen
+import com.wizzwuz.quicktiles.util.TileEditChannel
 
 enum class MainDestination {
     LIST,
@@ -48,6 +49,17 @@ fun MainScreen() {
     BackHandler(enabled = currentDestination != MainDestination.LIST || selectedTab != 0) {
         selectedTab = 0
         currentDestination = MainDestination.LIST
+    }
+
+    LaunchedEffect(Unit) {
+        TileEditChannel.editSlotFlow.collect { slot ->
+            val tile = repository.getTileBySlot(slot)
+            if (tile != null) {
+                editingTile = tile
+                currentDestination = MainDestination.CREATE_OR_EDIT
+                TileEditChannel.clear()
+            }
+        }
     }
 
     Scaffold(
@@ -189,13 +201,15 @@ fun MainScreen() {
                                 tiles = activeTiles,
                                 isActiveTab = true,
                                 onTileClick = { tile ->
-                                    // Tapping on tile in active tab inactivates it and sends to inactive tab
-                                    repository.inactivateTile(tile.id)
-                                },
-                                onTileLongClick = { tile ->
-                                    // Long pressing opens plus tab page to edit current tile
+                                    // Single tap opens edit screen
                                     editingTile = tile
                                     currentDestination = MainDestination.CREATE_OR_EDIT
+                                },
+                                onInactivateTile = { tile ->
+                                    repository.inactivateTile(tile.id)
+                                },
+                                onActivateTile = { tile ->
+                                    repository.activateTile(tile.id)
                                 },
                                 onDeleteTile = { tile ->
                                     repository.deleteTile(tile.id)
@@ -210,12 +224,15 @@ fun MainScreen() {
                                 tiles = inactiveTiles,
                                 isActiveTab = false,
                                 onTileClick = { tile ->
-                                    // Tapping on inactive tile activates it and sends to active tab
-                                    repository.activateTile(tile.id)
-                                },
-                                onTileLongClick = { tile ->
+                                    // Single tap opens edit screen
                                     editingTile = tile
                                     currentDestination = MainDestination.CREATE_OR_EDIT
+                                },
+                                onInactivateTile = { tile ->
+                                    repository.inactivateTile(tile.id)
+                                },
+                                onActivateTile = { tile ->
+                                    repository.activateTile(tile.id)
                                 },
                                 onDeleteTile = { tile ->
                                     repository.deleteTile(tile.id)
