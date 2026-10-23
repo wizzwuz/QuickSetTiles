@@ -9,6 +9,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +33,12 @@ import com.wizzwuz.quicktiles.util.AppHelper
 import com.wizzwuz.quicktiles.util.AppItem
 import com.wizzwuz.quicktiles.util.IconProcessor
 import kotlinx.coroutines.launch
+
+data class AppPickerItem(
+    val app: AppItem,
+    val matchingActivities: List<ActivityItem>,
+    val appMatches: Boolean
+)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -51,19 +59,48 @@ fun ActivityPickerScreen(
     val activitiesMap = remember { mutableStateMapOf<String, List<ActivityItem>>() }
     // Set of currently expanded packageNames
     var expandedApps by remember { mutableStateOf(setOf<String>()) }
+    var manuallyCollapsedApps by remember { mutableStateOf(setOf<String>()) }
+    var manuallyExpandedApps by remember { mutableStateOf(setOf<String>()) }
 
     LaunchedEffect(Unit) {
-        apps = AppHelper.getInstalledApps(context)
+        val loadedApps = AppHelper.getInstalledApps(context)
+        apps = loadedApps
         isLoading = false
+
+        // Background preload all activities for instant search across both short and full activity names
+        AppHelper.preloadAllActivities(context, loadedApps) { pkg, acts ->
+            activitiesMap[pkg] = acts
+        }
     }
 
-    val filteredApps = remember(apps, searchQuery) {
-        if (searchQuery.isBlank()) {
-            apps
+    val q = searchQuery.trim().lowercase()
+
+    val filteredItems = remember(apps, q, activitiesMap.toMap()) {
+        if (q.isBlank()) {
+            apps.map { app ->
+                AppPickerItem(
+                    app = app,
+                    matchingActivities = emptyList(),
+                    appMatches = true
+                )
+            }
         } else {
-            val q = searchQuery.trim().lowercase()
-            apps.filter {
-                it.label.lowercase().contains(q) || it.packageName.lowercase().contains(q)
+            apps.mapNotNull { app ->
+                val appMatches = app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q)
+                val activities = activitiesMap[app.packageName]
+                val matchingActivities = activities?.filter { act ->
+                    act.simpleName.lowercase().contains(q) || act.fullName.lowercase().contains(q)
+                } ?: emptyList()
+
+                if (appMatches || matchingActivities.isNotEmpty()) {
+                    AppPickerItem(
+                        app = app,
+                        matchingActivities = matchingActivities,
+                        appMatches = appMatches
+                    )
+                } else {
+                    null
+                }
             }
         }
     }
@@ -88,12 +125,20 @@ fun ActivityPickerScreen(
         ) {
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = { searchQuery = it },
+                onValueChange = {
+                    searchQuery = it
+                    manuallyCollapsedApps = emptySet()
+                    manuallyExpandedApps = emptySet()
+                },
                 label = { Text("Search apps & activities") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
+                        IconButton(onClick = {
+                            searchQuery = ""
+                            manuallyCollapsedApps = emptySet()
+                            manuallyExpandedApps = emptySet()
+                        }) {
                             Icon(Icons.Default.Clear, contentDescription = "Clear")
                         }
                     }
@@ -105,7 +150,7 @@ fun ActivityPickerScreen(
             )
 
             Text(
-                text = "Tip: Tap app to expand activities. Tap an activity to select it, or long-press to test run it.",
+                text = "Tip: Search matches app names, package names, and both short & full activity names. Tap to select, long-press to test run.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -115,14 +160,59 @@ fun ActivityPickerScreen(
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
+            } else if (filteredItems.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 60.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SearchOff,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Text(
+                            text = "No apps or activities match \"$searchQuery\"",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        TextButton(onClick = {
+                            searchQuery = ""
+                            manuallyCollapsedApps = emptySet()
+                            manuallyExpandedApps = emptySet()
+                        }) {
+                            Text("Clear search")
+                        }
+                    }
+                }
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(filteredApps, key = { it.packageName }) { app ->
-                        val isExpanded = expandedApps.contains(app.packageName)
-                        val activities = activitiesMap[app.packageName]
+                    items(filteredItems, key = { it.app.packageName }) { item ->
+                        val app = item.app
+                        val isExpanded = if (q.isNotBlank()) {
+                            if (app.packageName in manuallyCollapsedApps) {
+                                false
+                            } else {
+                                item.matchingActivities.isNotEmpty() || app.packageName in manuallyExpandedApps
+                            }
+                        } else {
+                            expandedApps.contains(app.packageName)
+                        }
+                        val allActivities = activitiesMap[app.packageName]
+                        val displayedActivities = if (q.isNotBlank() && item.matchingActivities.isNotEmpty()) {
+                            item.matchingActivities
+                        } else {
+                            allActivities ?: emptyList()
+                        }
 
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -142,10 +232,20 @@ fun ActivityPickerScreen(
                                         .combinedClickable(
                                             onClick = {
                                                 if (isExpanded) {
-                                                    expandedApps = expandedApps - app.packageName
+                                                    if (q.isNotBlank()) {
+                                                        manuallyCollapsedApps = manuallyCollapsedApps + app.packageName
+                                                        manuallyExpandedApps = manuallyExpandedApps - app.packageName
+                                                    } else {
+                                                        expandedApps = expandedApps - app.packageName
+                                                    }
                                                 } else {
-                                                    expandedApps = expandedApps + app.packageName
-                                                    if (activities == null) {
+                                                    if (q.isNotBlank()) {
+                                                        manuallyExpandedApps = manuallyExpandedApps + app.packageName
+                                                        manuallyCollapsedApps = manuallyCollapsedApps - app.packageName
+                                                    } else {
+                                                        expandedApps = expandedApps + app.packageName
+                                                    }
+                                                    if (allActivities == null) {
                                                         coroutineScope.launch {
                                                             val acts = AppHelper.getAppActivities(context, app.packageName)
                                                             activitiesMap[app.packageName] = acts
@@ -180,6 +280,21 @@ fun ActivityPickerScreen(
                                         )
                                     }
 
+                                    if (q.isNotBlank() && item.matchingActivities.isNotEmpty()) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.primaryContainer,
+                                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                        ) {
+                                            Text(
+                                                text = "${item.matchingActivities.size} match",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+
                                     Icon(
                                         imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                         contentDescription = if (isExpanded) "Collapse" else "Expand"
@@ -195,22 +310,31 @@ fun ActivityPickerScreen(
                                             .padding(8.dp),
                                         verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        if (activities == null) {
+                                        if (allActivities == null && displayedActivities.isEmpty()) {
                                             Box(
                                                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                             }
-                                        } else if (activities.isEmpty()) {
+                                        } else if (displayedActivities.isEmpty()) {
                                             Text(
-                                                text = "No declared activities found",
+                                                text = if (q.isNotBlank()) "No matching activities in this app" else "No declared activities found",
                                                 fontSize = 12.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.padding(8.dp)
                                             )
                                         } else {
-                                            activities.forEach { act ->
+                                            if (q.isNotBlank() && item.matchingActivities.isNotEmpty() && allActivities != null && allActivities.size > item.matchingActivities.size) {
+                                                Text(
+                                                    text = "Showing ${item.matchingActivities.size} matching of ${allActivities.size} activities",
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                            displayedActivities.forEach { act ->
                                                 Surface(
                                                     modifier = Modifier
                                                         .fillMaxWidth()

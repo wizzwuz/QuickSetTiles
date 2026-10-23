@@ -10,8 +10,12 @@ import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.provider.Settings
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 data class AppItem(
     val label: String,
@@ -35,6 +39,8 @@ data class ShortcutProviderItem(
 
 object AppHelper {
 
+    private val activitiesCache = ConcurrentHashMap<String, List<ActivityItem>>()
+
     suspend fun getInstalledApps(context: Context): List<AppItem> = withContext(Dispatchers.IO) {
         val pm = context.packageManager
         val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
@@ -52,6 +58,9 @@ object AppHelper {
     }
 
     suspend fun getAppActivities(context: Context, packageName: String): List<ActivityItem> = withContext(Dispatchers.IO) {
+        val cached = activitiesCache[packageName]
+        if (cached != null) return@withContext cached
+
         val pm = context.packageManager
         val list = mutableListOf<ActivityItem>()
         try {
@@ -71,7 +80,25 @@ object AppHelper {
             e.printStackTrace()
         }
         list.sortBy { it.simpleName.lowercase() }
+        activitiesCache[packageName] = list
         list
+    }
+
+    suspend fun preloadAllActivities(
+        context: Context,
+        apps: List<AppItem>,
+        onAppLoaded: (packageName: String, activities: List<ActivityItem>) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        coroutineScope {
+            apps.map { app ->
+                async {
+                    val acts = getAppActivities(context, app.packageName)
+                    withContext(Dispatchers.Main) {
+                        onAppLoaded(app.packageName, acts)
+                    }
+                }
+            }.awaitAll()
+        }
     }
 
     suspend fun launchActivityPrivileged(
