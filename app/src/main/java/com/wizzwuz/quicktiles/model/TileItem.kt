@@ -66,6 +66,7 @@ data class TileItem(
     val targetData: String,
     val iconConfig: IconConfig = IconConfig(),
     val isActive: Boolean = true,
+    val isAddedToQs: Boolean = false,
     val slotNumber: Int = -1,
     val createdAt: Long = System.currentTimeMillis(),
     val visualState: TileVisualState = TileVisualState.ENABLED,
@@ -86,6 +87,7 @@ data class TileItem(
             put("targetData", targetData)
             put("iconConfig", iconConfig.toJson())
             put("isActive", isActive)
+            put("isAddedToQs", isAddedToQs)
             put("slotNumber", slotNumber)
             put("createdAt", createdAt)
             put("visualState", visualState.name)
@@ -109,6 +111,7 @@ data class TileItem(
                 targetData = json.optString("targetData", ""),
                 iconConfig = if (json.has("iconConfig")) IconConfig.fromJson(json.getJSONObject("iconConfig")) else IconConfig(),
                 isActive = json.optBoolean("isActive", true),
+                isAddedToQs = json.optBoolean("isAddedToQs", false),
                 slotNumber = json.optInt("slotNumber", -1),
                 createdAt = json.optLong("createdAt", System.currentTimeMillis()),
                 visualState = try { TileVisualState.valueOf(json.optString("visualState", "ENABLED")) } catch (e: Exception) { TileVisualState.ENABLED },

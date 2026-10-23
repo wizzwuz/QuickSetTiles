@@ -274,6 +274,9 @@ fun MainScreen() {
                                         selectedTileIds + tile.id
                                     }
                                 },
+                                onAddToQs = { tile ->
+                                    repository.setTileAddedToQs(tile.id, true)
+                                },
                                 onInactivateTile = { tile ->
                                     repository.inactivateTile(tile.id)
                                 },
@@ -308,6 +311,9 @@ fun MainScreen() {
                                     } else {
                                         selectedTileIds + tile.id
                                     }
+                                },
+                                onAddToQs = { tile ->
+                                    repository.setTileAddedToQs(tile.id, true)
                                 },
                                 onInactivateTile = { tile ->
                                     repository.inactivateTile(tile.id)

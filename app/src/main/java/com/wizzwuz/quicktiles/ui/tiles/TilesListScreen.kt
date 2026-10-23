@@ -13,6 +13,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -41,6 +42,7 @@ fun TilesListScreen(
     onTileClick: (TileItem) -> Unit,
     onTileLongClick: (TileItem) -> Unit = {},
     onTileSelectToggle: (TileItem) -> Unit = {},
+    onAddToQs: (TileItem) -> Unit = {},
     onInactivateTile: (TileItem) -> Unit,
     onActivateTile: (TileItem) -> Unit,
     onDeleteTile: (TileItem) -> Unit,
@@ -194,7 +196,7 @@ fun TilesListScreen(
                                 )
                             }
 
-                            // Details: Tile Name and "Tile X" below
+                            // Details: Tile Name and "Tile X" pill below
                             Column(
                                 modifier = Modifier.weight(1f),
                                 verticalArrangement = Arrangement.Center
@@ -207,13 +209,19 @@ fun TilesListScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 if (tile.isActive && tile.slotNumber in 1..TileRepository.MAX_SLOTS) {
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "Tile ${tile.slotNumber}",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    ) {
+                                        Text(
+                                            text = "Tile ${tile.slotNumber}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
                                 }
                             }
 
@@ -229,10 +237,11 @@ fun TilesListScreen(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     if (isActiveTab) {
-                                        // Android 14+ Quick Add to QS shade shortcut
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                                            IconButton(
-                                                onClick = {
+                                        // Button to manually add tile to system Quick Settings shade
+                                        IconButton(
+                                            onClick = {
+                                                onAddToQs(tile)
+                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                                     try {
                                                         val sbm = context.getSystemService(StatusBarManager::class.java)
                                                         val comp = ComponentName(
@@ -253,18 +262,20 @@ fun TilesListScreen(
                                                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                                         }
                                                     } catch (e: Throwable) {
-                                                        Toast.makeText(context, "Add to QS: Drag tile from system edit panel", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(context, "Tile enabled! Drag it into QS from the edit panel.", Toast.LENGTH_SHORT).show()
                                                     }
-                                                },
-                                                modifier = Modifier.size(34.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.AddCircleOutline,
-                                                    contentDescription = "Add to QS Panel",
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
+                                                } else {
+                                                    Toast.makeText(context, "Tile enabled! Drag it into QS from the edit panel.", Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
+                                            modifier = Modifier.size(34.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (tile.isAddedToQs) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
+                                                contentDescription = if (tile.isAddedToQs) "Tile already in Quick Settings" else "Add to Quick Settings",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
                                         }
 
                                         // Disable button to deactivate and move to inactive tab

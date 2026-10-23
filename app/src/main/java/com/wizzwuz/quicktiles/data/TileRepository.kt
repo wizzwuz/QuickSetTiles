@@ -94,10 +94,10 @@ class TileRepository(private val context: Context) {
             if (assignedSlot in 1..MAX_SLOTS) {
                 tile.copy(isActive = true, slotNumber = assignedSlot)
             } else {
-                tile.copy(isActive = false, slotNumber = -1)
+                tile.copy(isActive = false, slotNumber = -1, isAddedToQs = false)
             }
         } else {
-            tile.copy(slotNumber = -1)
+            tile.copy(slotNumber = -1, isAddedToQs = false)
         }
 
         if (index >= 0) {
@@ -114,10 +114,31 @@ class TileRepository(private val context: Context) {
             requestTileUpdate(context, oldSlot)
         }
 
-        // Enable new slot if active
-        if (finalTile.isActive && finalTile.slotNumber in 1..MAX_SLOTS) {
+        // Enable new slot ONLY if active AND explicitly added to QS
+        if (finalTile.isActive && finalTile.isAddedToQs && finalTile.slotNumber in 1..MAX_SLOTS) {
             setComponentEnabled(context, finalTile.slotNumber, true)
             requestTileUpdate(context, finalTile.slotNumber)
+        } else if (finalTile.slotNumber in 1..MAX_SLOTS && !finalTile.isAddedToQs) {
+            // Keep disabled until user manually adds to QS
+            setComponentEnabled(context, finalTile.slotNumber, false)
+        }
+    }
+
+    @Synchronized
+    fun setTileAddedToQs(tileId: String, added: Boolean) {
+        val current = _tilesFlow.value.toMutableList()
+        val index = current.indexOfFirst { it.id == tileId }
+        if (index >= 0) {
+            val slot = current[index].slotNumber
+            current[index] = current[index].copy(isAddedToQs = added)
+            persistTiles(current)
+            if (added && current[index].isActive && slot in 1..MAX_SLOTS) {
+                setComponentEnabled(context, slot, true)
+                requestTileUpdate(context, slot)
+            } else if (!added && slot in 1..MAX_SLOTS) {
+                setComponentEnabled(context, slot, false)
+                requestTileUpdate(context, slot)
+            }
         }
     }
 
@@ -127,7 +148,7 @@ class TileRepository(private val context: Context) {
         val index = current.indexOfFirst { it.id == tileId }
         if (index >= 0) {
             val oldSlot = current[index].slotNumber
-            current[index] = current[index].copy(isActive = false, slotNumber = -1)
+            current[index] = current[index].copy(isActive = false, slotNumber = -1, isAddedToQs = false)
             persistTiles(current)
             if (oldSlot in 1..MAX_SLOTS) {
                 setComponentEnabled(context, oldSlot, false)
@@ -142,11 +163,10 @@ class TileRepository(private val context: Context) {
         val index = current.indexOfFirst { it.id == tileId }
         if (index >= 0) {
             val freeSlot = findNextAvailableSlot(current)
-            current[index] = current[index].copy(isActive = true, slotNumber = freeSlot)
+            current[index] = current[index].copy(isActive = true, slotNumber = freeSlot, isAddedToQs = false)
             persistTiles(current)
             if (freeSlot in 1..MAX_SLOTS) {
-                setComponentEnabled(context, freeSlot, true)
-                requestTileUpdate(context, freeSlot)
+                setComponentEnabled(context, freeSlot, false)
             }
         }
     }
@@ -210,7 +230,7 @@ class TileRepository(private val context: Context) {
     }
 
     fun syncComponentStates(context: Context) {
-        val activeSlots = _tilesFlow.value.filter { it.isActive }.map { it.slotNumber }.toSet()
+        val activeSlots = _tilesFlow.value.filter { it.isActive && it.isAddedToQs }.map { it.slotNumber }.toSet()
         val pm = context.packageManager
         for (slot in 1..MAX_SLOTS) {
             val component = ComponentName(context, "com.wizzwuz.quicktiles.service.QuickTileService$slot")

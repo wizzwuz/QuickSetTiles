@@ -174,6 +174,7 @@ fun CreateTileScreen(
                     targetData = effectiveTargetData.trim(),
                     iconConfig = iconConfig,
                     isActive = true,
+                    isAddedToQs = false,
                     visualState = visualState,
                     onCommand = onCommand.trim(),
                     offCommand = offCommand.trim(),
