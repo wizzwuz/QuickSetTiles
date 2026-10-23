@@ -509,6 +509,56 @@ fun CreateTileScreen(
                 }
             }
 
+            // --- TILE BEHAVIOR AND APPEARANCE (ENABLED, DISABLED, OR BOTH) ---
+            if (selectedType != null && selectedType != TileType.SHELL) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Tile Behavior & Appearance",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Choose whether this tile appears enabled, disabled, or toggles between both states on tap",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = visualState == TileVisualState.ENABLED,
+                                onClick = { visualState = TileVisualState.ENABLED },
+                                label = { Text("Enabled", fontSize = 12.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = visualState == TileVisualState.DISABLED,
+                                onClick = { visualState = TileVisualState.DISABLED },
+                                label = { Text("Disabled", fontSize = 12.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = visualState == TileVisualState.TOGGLE,
+                                onClick = { visualState = TileVisualState.TOGGLE },
+                                label = { Text("Both (Toggle)", fontSize = 12.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+
             // --- COLLAPSE PANEL ON CLICK (BELOW TILE CATEGORIES) ---
             Card(
                 colors = CardDefaults.cardColors(
@@ -668,6 +718,13 @@ fun CreateTileScreen(
                 iconConfig = iconConfig.copy(
                     sourceType = IconSourceType.PRESET,
                     sourceData = key
+                )
+            },
+            onSelectCustomFile = { path ->
+                showPresetsDialog = false
+                iconConfig = iconConfig.copy(
+                    sourceType = IconSourceType.CUSTOM_FILE,
+                    sourceData = path
                 )
             }
         )

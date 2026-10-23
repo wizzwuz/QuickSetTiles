@@ -1,7 +1,10 @@
 package com.wizzwuz.quicktiles.ui.create
 
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -647,6 +651,13 @@ fun ShellDialog(
                     sourceType = IconSourceType.PRESET,
                     sourceData = key
                 )
+            },
+            onSelectCustomFile = { path ->
+                showPresetPickerForOn = false
+                onIconConfig = onIconConfig.copy(
+                    sourceType = IconSourceType.CUSTOM_FILE,
+                    sourceData = path
+                )
             }
         )
     }
@@ -660,6 +671,13 @@ fun ShellDialog(
                 offIconConfig = offIconConfig.copy(
                     sourceType = IconSourceType.PRESET,
                     sourceData = key
+                )
+            },
+            onSelectCustomFile = { path ->
+                showPresetPickerForOff = false
+                offIconConfig = offIconConfig.copy(
+                    sourceType = IconSourceType.CUSTOM_FILE,
+                    sourceData = path
                 )
             }
         )
@@ -755,7 +773,11 @@ fun ShellDialog(
                                 Image(bitmap = onBmp.asImageBitmap(), contentDescription = "Enabled Icon", modifier = Modifier.size(32.dp))
                                 Column {
                                     Text("Enabled Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                    Text("Preset: ${onIconConfig.sourceData}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        if (onIconConfig.sourceType == IconSourceType.CUSTOM_FILE) "File: ${onIconConfig.sourceData.substringAfterLast('/')}" else "Preset: ${onIconConfig.sourceData}",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                             OutlinedButton(
@@ -788,7 +810,11 @@ fun ShellDialog(
                                 Image(bitmap = offBmp.asImageBitmap(), contentDescription = "Disabled Icon", modifier = Modifier.size(32.dp))
                                 Column {
                                     Text("Disabled Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                    Text("Preset: ${offIconConfig.sourceData}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        if (offIconConfig.sourceType == IconSourceType.CUSTOM_FILE) "File: ${offIconConfig.sourceData.substringAfterLast('/')}" else "Preset: ${offIconConfig.sourceData}",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                             OutlinedButton(
@@ -822,7 +848,11 @@ fun ShellDialog(
                                 Image(bitmap = bmp.asImageBitmap(), contentDescription = "Tile Icon", modifier = Modifier.size(32.dp))
                                 Column {
                                     Text(if (visualState == TileVisualState.DISABLED) "Disabled Icon" else "Enabled Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                    Text("Preset: ${currentCfg.sourceData}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        if (currentCfg.sourceType == IconSourceType.CUSTOM_FILE) "File: ${currentCfg.sourceData.substringAfterLast('/')}" else "Preset: ${currentCfg.sourceData}",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                             OutlinedButton(
@@ -970,9 +1000,21 @@ fun ShellDialog(
 fun IconPresetsDialog(
     currentKey: String,
     onDismiss: () -> Unit,
-    onSelectPreset: (key: String) -> Unit
+    onSelectPreset: (key: String) -> Unit,
+    onSelectCustomFile: ((filePath: String) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val imagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val savedPath = IconProcessor.saveCustomImage(context, it)
+            if (savedPath != null) {
+                onSelectCustomFile?.invoke(savedPath)
+            }
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Choose Preset Icon") },
@@ -1015,9 +1057,23 @@ fun IconPresetsDialog(
                 }
             }
         },
-        confirmButton = {},
-        dismissButton = {
+        confirmButton = {
             TextButton(onClick = onDismiss) { Text("Close") }
+        },
+        dismissButton = {
+            if (onSelectCustomFile != null) {
+                OutlinedButton(
+                    onClick = { imagePicker.launch("image/*") }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FolderOpen,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("File Picker", fontSize = 12.sp)
+                }
+            }
         }
     )
 }

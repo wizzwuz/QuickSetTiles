@@ -97,6 +97,13 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
     }
 
     private fun executeTileAction(item: TileItem) {
+        if (item.visualState == com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE && item.type != TileType.SHELL) {
+            val repo = TileRepository.getInstance(this)
+            val updated = item.copy(currentToggleOn = !item.currentToggleOn)
+            repo.saveTile(updated)
+            mainHandler.post { updateTileState() }
+        }
+
         when (item.type) {
             TileType.APPS -> {
                 val launchIntent = packageManager.getLaunchIntentForPackage(item.targetData)
