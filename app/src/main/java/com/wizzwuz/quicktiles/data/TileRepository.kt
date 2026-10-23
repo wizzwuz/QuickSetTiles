@@ -167,6 +167,28 @@ class TileRepository(private val context: Context) {
     }
 
     @Synchronized
+    fun deleteTiles(tileIds: Set<String>) {
+        if (tileIds.isEmpty()) return
+        val current = _tilesFlow.value.toMutableList()
+        val oldSlots = mutableListOf<Int>()
+        val it = current.iterator()
+        while (it.hasNext()) {
+            val tile = it.next()
+            if (tile.id in tileIds) {
+                if (tile.slotNumber in 1..MAX_SLOTS) {
+                    oldSlots.add(tile.slotNumber)
+                }
+                it.remove()
+            }
+        }
+        persistTiles(current)
+        for (slot in oldSlots) {
+            setComponentEnabled(context, slot, false)
+            requestTileUpdate(context, slot)
+        }
+    }
+
+    @Synchronized
     fun restoreAllTiles(tiles: List<TileItem>) {
         persistTiles(tiles)
         syncComponentStates(context)

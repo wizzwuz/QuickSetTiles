@@ -173,7 +173,7 @@ fun CreateTileScreen(
                     type = selectedType!!,
                     targetData = effectiveTargetData.trim(),
                     iconConfig = iconConfig,
-                    isActive = false,
+                    isActive = true,
                     visualState = visualState,
                     onCommand = onCommand.trim(),
                     offCommand = offCommand.trim(),

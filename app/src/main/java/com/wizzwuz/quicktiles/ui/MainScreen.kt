@@ -42,13 +42,20 @@ fun MainScreen() {
     var currentDestination by remember { mutableStateOf(MainDestination.LIST) }
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Active Tiles, 1 = Inactive Tiles
     var editingTile by remember { mutableStateOf<TileItem?>(null) }
+    var selectedTileIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showBatchDeleteDialog by remember { mutableStateOf(false) }
 
     val activeTiles = remember(allTiles) { allTiles.filter { it.isActive } }
     val inactiveTiles = remember(allTiles) { allTiles.filter { !it.isActive } }
 
-    BackHandler(enabled = currentDestination != MainDestination.LIST || selectedTab != 0) {
-        selectedTab = 0
-        currentDestination = MainDestination.LIST
+    BackHandler(enabled = selectedTileIds.isNotEmpty() || currentDestination != MainDestination.LIST || selectedTab != 0) {
+        if (selectedTileIds.isNotEmpty()) {
+            selectedTileIds = emptySet()
+        } else if (currentDestination != MainDestination.LIST) {
+            currentDestination = MainDestination.LIST
+        } else if (selectedTab != 0) {
+            selectedTab = 0
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -65,32 +72,72 @@ fun MainScreen() {
     Scaffold(
         topBar = {
             if (currentDestination == MainDestination.LIST) {
-                TopAppBar(
-                    title = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.DashboardCustomize,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                if (selectedTileIds.isNotEmpty()) {
+                    TopAppBar(
+                        title = {
                             Text(
-                                text = "QuickSetTiles",
-                                fontWeight = FontWeight.ExtraBold
+                                text = "${selectedTileIds.size} selected",
+                                fontWeight = FontWeight.Bold
                             )
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { currentDestination = MainDestination.SETTINGS }) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings & Diagnostics")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = { selectedTileIds = emptySet() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Close selection")
+                            }
+                        },
+                        actions = {
+                            // Select All icon
+                            IconButton(onClick = {
+                                val currentList = if (selectedTab == 0) activeTiles else inactiveTiles
+                                if (selectedTileIds.size == currentList.size) {
+                                    selectedTileIds = emptySet()
+                                } else {
+                                    selectedTileIds = currentList.map { it.id }.toSet()
+                                }
+                            }) {
+                                Icon(Icons.Default.SelectAll, contentDescription = "Select All")
+                            }
+                            // Delete icon
+                            IconButton(onClick = { showBatchDeleteDialog = true }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete Selected",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
                     )
-                )
+                } else {
+                    TopAppBar(
+                        title = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.DashboardCustomize,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "QuickSetTiles",
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = { currentDestination = MainDestination.SETTINGS }) {
+                                Icon(Icons.Default.Settings, contentDescription = "Settings")
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+                }
             }
         },
         bottomBar = {
@@ -104,7 +151,12 @@ fun MainScreen() {
                     // Left Tab: Active Tiles
                     NavigationBarItem(
                         selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
+                        onClick = {
+                            if (selectedTab != 0) {
+                                selectedTab = 0
+                                selectedTileIds = emptySet()
+                            }
+                        },
                         icon = {
                             BadgedBox(
                                 badge = {
@@ -140,6 +192,7 @@ fun MainScreen() {
                         FloatingActionButton(
                             onClick = {
                                 editingTile = null
+                                selectedTileIds = emptySet()
                                 currentDestination = MainDestination.CREATE_OR_EDIT
                             },
                             containerColor = MaterialTheme.colorScheme.primary,
@@ -159,7 +212,12 @@ fun MainScreen() {
                     // Right Tab: Inactive Tiles
                     NavigationBarItem(
                         selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
+                        onClick = {
+                            if (selectedTab != 1) {
+                                selectedTab = 1
+                                selectedTileIds = emptySet()
+                            }
+                        },
                         icon = {
                             BadgedBox(
                                 badge = {
@@ -200,10 +258,21 @@ fun MainScreen() {
                             TilesListScreen(
                                 tiles = activeTiles,
                                 isActiveTab = true,
+                                selectedTileIds = selectedTileIds,
                                 onTileClick = { tile ->
-                                    // Single tap opens edit screen
                                     editingTile = tile
+                                    selectedTileIds = emptySet()
                                     currentDestination = MainDestination.CREATE_OR_EDIT
+                                },
+                                onTileLongClick = { tile ->
+                                    selectedTileIds = selectedTileIds + tile.id
+                                },
+                                onTileSelectToggle = { tile ->
+                                    selectedTileIds = if (tile.id in selectedTileIds) {
+                                        selectedTileIds - tile.id
+                                    } else {
+                                        selectedTileIds + tile.id
+                                    }
                                 },
                                 onInactivateTile = { tile ->
                                     repository.inactivateTile(tile.id)
@@ -216,6 +285,7 @@ fun MainScreen() {
                                 },
                                 onAddTileClick = {
                                     editingTile = null
+                                    selectedTileIds = emptySet()
                                     currentDestination = MainDestination.CREATE_OR_EDIT
                                 }
                             )
@@ -223,10 +293,21 @@ fun MainScreen() {
                             TilesListScreen(
                                 tiles = inactiveTiles,
                                 isActiveTab = false,
+                                selectedTileIds = selectedTileIds,
                                 onTileClick = { tile ->
-                                    // Single tap opens edit screen
                                     editingTile = tile
+                                    selectedTileIds = emptySet()
                                     currentDestination = MainDestination.CREATE_OR_EDIT
+                                },
+                                onTileLongClick = { tile ->
+                                    selectedTileIds = selectedTileIds + tile.id
+                                },
+                                onTileSelectToggle = { tile ->
+                                    selectedTileIds = if (tile.id in selectedTileIds) {
+                                        selectedTileIds - tile.id
+                                    } else {
+                                        selectedTileIds + tile.id
+                                    }
                                 },
                                 onInactivateTile = { tile ->
                                     repository.inactivateTile(tile.id)
@@ -239,6 +320,7 @@ fun MainScreen() {
                                 },
                                 onAddTileClick = {
                                     editingTile = null
+                                    selectedTileIds = emptySet()
                                     currentDestination = MainDestination.CREATE_OR_EDIT
                                 }
                             )
@@ -254,7 +336,11 @@ fun MainScreen() {
                             currentDestination = MainDestination.ACTIVITY_PICKER
                         },
                         onSaveTile = { tileToSave ->
+                            val isNew = (editingTile == null)
                             repository.saveTile(tileToSave)
+                            if (isNew) {
+                                selectedTab = 0
+                            }
                             currentDestination = MainDestination.LIST
                         }
                     )
@@ -303,5 +389,30 @@ fun MainScreen() {
                 }
             }
         }
+    }
+
+    if (showBatchDeleteDialog && selectedTileIds.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { showBatchDeleteDialog = false },
+            title = { Text("Delete Tiles") },
+            text = { Text("Are you sure you want to permanently delete ${selectedTileIds.size} selected tile(s)?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        repository.deleteTiles(selectedTileIds)
+                        selectedTileIds = emptySet()
+                        showBatchDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
