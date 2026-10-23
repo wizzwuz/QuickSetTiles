@@ -3,15 +3,21 @@ package com.wizzwuz.quicktiles.model
 import org.json.JSONObject
 import java.util.UUID
 
-enum class TileType {
-    APPS,
-    WEBSITE,
-    SHORTCUT,
-    ACTIVITY,
-    INTENT,
-    SHELL,
-    FILES,
-    FOLDERS
+enum class TileType(val displayName: String) {
+    APPS("Apps"),
+    WEBSITE("Website"),
+    SHORTCUT("Shortcut"),
+    ACTIVITY("Activity"),
+    INTENT("Intent"),
+    SHELL("Shell"),
+    FILES("Files"),
+    FOLDERS("Folders")
+}
+
+enum class TileSortOrder(val title: String) {
+    NAME_ASC("Name (A-Z)"),
+    NAME_DESC("Name (Z-A)"),
+    LAST_UPDATED("Last updated")
 }
 
 enum class IconSourceType {

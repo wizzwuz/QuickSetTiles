@@ -18,6 +18,7 @@ import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.model.IconConfig
 import com.wizzwuz.quicktiles.model.IconSourceType
 import com.wizzwuz.quicktiles.model.TileItem
+import com.wizzwuz.quicktiles.model.TileSortOrder
 import com.wizzwuz.quicktiles.model.TileType
 import com.wizzwuz.quicktiles.ui.create.ActivityPickerScreen
 import com.wizzwuz.quicktiles.ui.create.CreateTileScreen
@@ -38,6 +39,8 @@ fun MainScreen() {
     val context = LocalContext.current
     val repository = remember { TileRepository.getInstance(context) }
     val allTiles by repository.tilesFlow.collectAsState()
+    val sortOrder by repository.sortOrderFlow.collectAsState()
+    val showCategories by repository.showCategoriesFlow.collectAsState()
 
     var currentDestination by remember { mutableStateOf(MainDestination.LIST) }
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Active Tiles, 1 = Inactive Tiles
@@ -45,8 +48,16 @@ fun MainScreen() {
     var selectedTileIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
 
-    val activeTiles = remember(allTiles) { allTiles.filter { it.isActive } }
-    val inactiveTiles = remember(allTiles) { allTiles.filter { !it.isActive } }
+    val sortedTiles = remember(allTiles, sortOrder) {
+        when (sortOrder) {
+            TileSortOrder.NAME_ASC -> allTiles.sortedBy { it.name.lowercase() }
+            TileSortOrder.NAME_DESC -> allTiles.sortedByDescending { it.name.lowercase() }
+            TileSortOrder.LAST_UPDATED -> allTiles.sortedByDescending { it.createdAt }
+        }
+    }
+
+    val activeTiles = remember(sortedTiles) { sortedTiles.filter { it.isActive } }
+    val inactiveTiles = remember(sortedTiles) { sortedTiles.filter { !it.isActive } }
 
     BackHandler(enabled = selectedTileIds.isNotEmpty() || currentDestination != MainDestination.LIST || selectedTab != 0) {
         if (selectedTileIds.isNotEmpty()) {
@@ -129,6 +140,51 @@ fun MainScreen() {
                             }
                         },
                         actions = {
+                            var showSortMenu by remember { mutableStateOf(false) }
+
+                            Box {
+                                IconButton(onClick = { showSortMenu = true }) {
+                                    Icon(Icons.Default.Sort, contentDescription = "Sort Tiles")
+                                }
+                                DropdownMenu(
+                                    expanded = showSortMenu,
+                                    onDismissRequest = { showSortMenu = false }
+                                ) {
+                                    TileSortOrder.values().forEach { order ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = order.title,
+                                                    fontWeight = if (order == sortOrder) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            },
+                                            leadingIcon = {
+                                                val icon = when (order) {
+                                                    TileSortOrder.NAME_ASC -> Icons.Default.ArrowUpward
+                                                    TileSortOrder.NAME_DESC -> Icons.Default.ArrowDownward
+                                                    TileSortOrder.LAST_UPDATED -> Icons.Default.Update
+                                                }
+                                                Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+                                            },
+                                            trailingIcon = {
+                                                if (order == sortOrder) {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = "Selected",
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                repository.setSortOrder(order)
+                                                showSortMenu = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
                             IconButton(onClick = { currentDestination = MainDestination.SETTINGS }) {
                                 Icon(Icons.Default.Settings, contentDescription = "Settings")
                             }
@@ -258,6 +314,7 @@ fun MainScreen() {
                             TilesListScreen(
                                 tiles = activeTiles,
                                 isActiveTab = true,
+                                showCategories = showCategories,
                                 selectedTileIds = selectedTileIds,
                                 onTileClick = { tile ->
                                     editingTile = tile
@@ -296,6 +353,7 @@ fun MainScreen() {
                             TilesListScreen(
                                 tiles = inactiveTiles,
                                 isActiveTab = false,
+                                showCategories = showCategories,
                                 selectedTileIds = selectedTileIds,
                                 onTileClick = { tile ->
                                     editingTile = tile

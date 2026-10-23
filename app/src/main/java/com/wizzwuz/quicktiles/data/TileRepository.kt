@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.service.quicksettings.TileService
 import com.wizzwuz.quicktiles.model.TileItem
+import com.wizzwuz.quicktiles.model.TileSortOrder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,11 +25,39 @@ class TileRepository(private val context: Context) {
     )
     val privateActivityLaunchableFlow: StateFlow<Boolean> = _privateActivityLaunchableFlow.asStateFlow()
 
+    private val _showCategoriesFlow = MutableStateFlow(
+        prefs.getBoolean(KEY_SHOW_CATEGORIES, true)
+    )
+    val showCategoriesFlow: StateFlow<Boolean> = _showCategoriesFlow.asStateFlow()
+
+    private val _sortOrderFlow = MutableStateFlow(
+        try {
+            TileSortOrder.valueOf(prefs.getString(KEY_SORT_ORDER, TileSortOrder.LAST_UPDATED.name) ?: TileSortOrder.LAST_UPDATED.name)
+        } catch (e: Exception) {
+            TileSortOrder.LAST_UPDATED
+        }
+    )
+    val sortOrderFlow: StateFlow<TileSortOrder> = _sortOrderFlow.asStateFlow()
+
     fun isPrivateActivityLaunchable(): Boolean = _privateActivityLaunchableFlow.value
 
     fun setPrivateActivityLaunchable(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_PRIVATE_ACTIVITY_LAUNCHABLE, enabled).apply()
         _privateActivityLaunchableFlow.value = enabled
+    }
+
+    fun isShowCategories(): Boolean = _showCategoriesFlow.value
+
+    fun setShowCategories(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SHOW_CATEGORIES, enabled).apply()
+        _showCategoriesFlow.value = enabled
+    }
+
+    fun getSortOrder(): TileSortOrder = _sortOrderFlow.value
+
+    fun setSortOrder(order: TileSortOrder) {
+        prefs.edit().putString(KEY_SORT_ORDER, order.name).apply()
+        _sortOrderFlow.value = order
     }
 
     init {
@@ -85,19 +114,20 @@ class TileRepository(private val context: Context) {
         val index = current.indexOfFirst { it.id == tile.id }
         val oldSlot = if (index >= 0) current[index].slotNumber else -1
 
-        val finalTile = if (tile.isActive) {
-            val assignedSlot = if (tile.slotNumber in 1..MAX_SLOTS) {
-                tile.slotNumber
+        val tileToSave = tile.copy(createdAt = System.currentTimeMillis())
+        val finalTile = if (tileToSave.isActive) {
+            val assignedSlot = if (tileToSave.slotNumber in 1..MAX_SLOTS) {
+                tileToSave.slotNumber
             } else {
-                findNextAvailableSlot(current.filter { it.id != tile.id })
+                findNextAvailableSlot(current.filter { it.id != tileToSave.id })
             }
             if (assignedSlot in 1..MAX_SLOTS) {
-                tile.copy(isActive = true, slotNumber = assignedSlot)
+                tileToSave.copy(isActive = true, slotNumber = assignedSlot)
             } else {
-                tile.copy(isActive = false, slotNumber = -1, isAddedToQs = false)
+                tileToSave.copy(isActive = false, slotNumber = -1, isAddedToQs = false)
             }
         } else {
-            tile.copy(slotNumber = -1, isAddedToQs = false)
+            tileToSave.copy(slotNumber = -1, isAddedToQs = false)
         }
 
         if (index >= 0) {
@@ -255,6 +285,8 @@ class TileRepository(private val context: Context) {
         const val MAX_SLOTS = 50
         private const val KEY_TILES = "saved_tiles_list"
         const val KEY_PRIVATE_ACTIVITY_LAUNCHABLE = "private_activity_launchable"
+        const val KEY_SHOW_CATEGORIES = "show_categories"
+        const val KEY_SORT_ORDER = "tile_sort_order"
 
         @Volatile
         private var INSTANCE: TileRepository? = null

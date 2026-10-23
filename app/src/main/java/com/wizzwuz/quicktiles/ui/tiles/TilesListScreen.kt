@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.model.TileItem
+import com.wizzwuz.quicktiles.model.TileType
 import com.wizzwuz.quicktiles.util.IconProcessor
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -38,6 +40,7 @@ import com.wizzwuz.quicktiles.util.IconProcessor
 fun TilesListScreen(
     tiles: List<TileItem>,
     isActiveTab: Boolean,
+    showCategories: Boolean = true,
     selectedTileIds: Set<String> = emptySet(),
     onTileClick: (TileItem) -> Unit,
     onTileLongClick: (TileItem) -> Unit = {},
@@ -50,6 +53,15 @@ fun TilesListScreen(
 ) {
     val context = LocalContext.current
     var tileToDelete by remember { mutableStateOf<TileItem?>(null) }
+    var selectedCategory by remember(isActiveTab) { mutableStateOf<TileType?>(null) }
+
+    val filteredTiles = remember(tiles, selectedCategory, showCategories) {
+        if (!showCategories || selectedCategory == null) {
+            tiles
+        } else {
+            tiles.filter { it.type == selectedCategory }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -79,6 +91,16 @@ fun TilesListScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+
+        // Categories filter panel (All + each TileType)
+        if (showCategories) {
+            CategoriesPanel(
+                tiles = tiles,
+                selectedCategory = selectedCategory,
+                onSelectCategory = { selectedCategory = it }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
         if (tiles.isEmpty()) {
@@ -127,13 +149,52 @@ fun TilesListScreen(
                     }
                 }
             }
+        } else if (filteredTiles.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 80.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(0.9f),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FilterAltOff,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(56.dp)
+                        )
+                        Text(
+                            text = "No ${selectedCategory?.displayName ?: ""} Tiles",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "There are no ${selectedCategory?.displayName?.lowercase() ?: ""} tiles in ${if (isActiveTab) "active" else "inactive"} tiles.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                        FilledTonalButton(onClick = { selectedCategory = null }) {
+                            Text("Show All Tiles (${tiles.size})")
+                        }
+                    }
+                }
+            }
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(bottom = 100.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(tiles, key = { it.id }) { tile ->
+                items(filteredTiles, key = { it.id }) { tile ->
                     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
                     val previewBitmap = remember(tile.iconConfig, isDark) {
                         IconProcessor.processIconBitmap(context, tile.iconConfig, targetPixelSize = 96, isDarkTheme = isDark)
@@ -341,3 +402,78 @@ fun TilesListScreen(
         )
     }
 }
+
+@Composable
+fun CategoriesPanel(
+    tiles: List<TileItem>,
+    selectedCategory: TileType?,
+    onSelectCategory: (TileType?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
+    ) {
+        // "All" button
+        item {
+            val isSelected = selectedCategory == null
+            FilterChip(
+                selected = isSelected,
+                onClick = { onSelectCategory(null) },
+                label = {
+                    Text(
+                        text = if (tiles.isNotEmpty()) "All (${tiles.size})" else "All",
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.AllInclusive,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+                shape = CircleShape
+            )
+        }
+
+        // Each TileType category button
+        items(TileType.values()) { type ->
+            val count = remember(tiles, type) { tiles.count { it.type == type } }
+            val isSelected = selectedCategory == type
+            val icon = when (type) {
+                TileType.APPS -> Icons.Default.Apps
+                TileType.WEBSITE -> Icons.Default.Language
+                TileType.SHORTCUT -> Icons.Default.OpenInNew
+                TileType.ACTIVITY -> Icons.Default.Extension
+                TileType.INTENT -> Icons.Default.Send
+                TileType.SHELL -> Icons.Default.Terminal
+                TileType.FILES -> Icons.Default.InsertDriveFile
+                TileType.FOLDERS -> Icons.Default.Folder
+            }
+
+            FilterChip(
+                selected = isSelected,
+                onClick = {
+                    onSelectCategory(if (isSelected) null else type)
+                },
+                label = {
+                    Text(
+                        text = if (count > 0) "${type.displayName} ($count)" else type.displayName,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+                shape = CircleShape
+            )
+        }
+    }
+}
+
