@@ -11,9 +11,13 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,7 +32,9 @@ import androidx.compose.ui.unit.sp
 import com.wizzwuz.quicktiles.model.IconConfig
 import com.wizzwuz.quicktiles.model.IconSourceType
 import com.wizzwuz.quicktiles.util.AppHelper
+import com.wizzwuz.quicktiles.util.CommandResult
 import com.wizzwuz.quicktiles.util.IconProcessor
+import com.wizzwuz.quicktiles.util.ShellMode
 import com.wizzwuz.quicktiles.util.ShortcutProviderItem
 import com.wizzwuz.quicktiles.util.ShizukuHelper
 import kotlinx.coroutines.launch
@@ -237,6 +243,7 @@ fun IntentDialog(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ShellDialog(
     initialName: String = "",
@@ -246,13 +253,30 @@ fun ShellDialog(
 ) {
     var name by remember { mutableStateOf(initialName) }
     var command by remember { mutableStateOf(initialCommand) }
+    var selectedMode by remember { mutableStateOf(ShellMode.AUTO) }
     val shizukuStatus by ShizukuHelper.statusFlow.collectAsState()
+
+    val coroutineScope = rememberCoroutineScope()
+    var isTesting by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<CommandResult?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Shell Script Tile") },
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Shell Script Tile")
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -262,53 +286,167 @@ fun ShellDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                // Shell Mode Selection
+                Text("Execution Mode", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    ShellMode.values().forEach { mode ->
+                        FilterChip(
+                            selected = selectedMode == mode,
+                            onClick = { selectedMode = mode },
+                            label = { Text(mode.name, fontSize = 11.sp) }
+                        )
+                    }
+                }
+
                 OutlinedTextField(
                     value = command,
-                    onValueChange = { command = it },
-                    label = { Text("Shell Script / Commands") },
-                    placeholder = { Text("echo 'Hello'\ninput tap 500 500") },
-                    minLines = 4,
+                    onValueChange = {
+                        command = it
+                        testResult = null // reset test result on command edit
+                    },
+                    label = { Text("Shell Command(s)") },
+                    placeholder = { Text("echo 'Hello'\ninput tap 500 500\npm list packages") },
+                    minLines = 3,
                     maxLines = 6,
-                    textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp),
+                    textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                // Shizuku status indicator card
                 val isPermRequired = shizukuStatus == com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED
 
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = when (shizukuStatus) {
-                            com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> MaterialTheme.colorScheme.primaryContainer
-                            com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> MaterialTheme.colorScheme.tertiaryContainer
+                            com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
                             com.wizzwuz.quicktiles.util.ShizukuStatus.NOT_RUNNING -> MaterialTheme.colorScheme.surfaceVariant
                         }
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = when (shizukuStatus) {
-                                    com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> "Shizuku: Active & Authorized (UID 2000)"
-                                    com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> "Shizuku: Running (Permission Required)"
-                                    com.wizzwuz.quicktiles.util.ShizukuStatus.NOT_RUNNING -> "Shizuku: Not Running (Will use Root / sh)"
-                                },
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
-                        }
+                    Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = when (shizukuStatus) {
+                                com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> "✓ Shizuku: Connected & Authorized"
+                                com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> "⚠ Shizuku: Permission Required"
+                                com.wizzwuz.quicktiles.util.ShizukuStatus.NOT_RUNNING -> "ℹ Shizuku: Not Running (Will use Root or sh)"
+                            },
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 11.sp
+                        )
                         if (isPermRequired) {
                             Button(
-                                onClick = {
-                                    ShizukuHelper.requestShizukuPermission()
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                modifier = Modifier.height(32.dp)
+                                onClick = { ShizukuHelper.requestShizukuPermission() },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp)
                             ) {
-                                Text("Request Shizuku Permission", fontSize = 11.sp)
+                                Text("Grant Shizuku Permission", fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+
+                // TEST COMMAND BUTTON
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            if (command.isNotBlank() && !isTesting) {
+                                isTesting = true
+                                testResult = null
+                                coroutineScope.launch {
+                                    val res = ShizukuHelper.executeCommand(
+                                        command = command.trim(),
+                                        mode = selectedMode
+                                    )
+                                    testResult = res
+                                    isTesting = false
+                                }
+                            }
+                        },
+                        enabled = command.isNotBlank() && !isTesting,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isTesting) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Running Test...", fontSize = 12.sp)
+                        } else {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Test Command", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                // TEST RESULT CARD
+                testResult?.let { result ->
+                    val isSuccess = result.exitCode == 0
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSuccess)
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                            else
+                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSuccess) Icons.Default.Check else Icons.Default.Error,
+                                        contentDescription = null,
+                                        tint = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = if (isSuccess) "Exit 0 (Success)" else "Exit ${result.exitCode}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                    )
+                                }
+                                Text(
+                                    text = "${result.executionMode} • ${result.durationMs}ms",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        MaterialTheme.colorScheme.surface,
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .padding(8.dp)
+                            ) {
+                                Text(
+                                    text = if (result.output.isNotBlank()) result.output else "(No stdout or stderr produced)",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 8
+                                )
                             }
                         }
                     }

@@ -20,12 +20,14 @@ import com.wizzwuz.quicktiles.model.TileItem
 import com.wizzwuz.quicktiles.model.TileType
 import com.wizzwuz.quicktiles.ui.create.ActivityPickerScreen
 import com.wizzwuz.quicktiles.ui.create.CreateTileScreen
+import com.wizzwuz.quicktiles.ui.settings.SettingsScreen
 import com.wizzwuz.quicktiles.ui.tiles.TilesListScreen
 
 enum class MainDestination {
     LIST,
     CREATE_OR_EDIT,
-    ACTIVITY_PICKER
+    ACTIVITY_PICKER,
+    SETTINGS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,6 +62,11 @@ fun MainScreen() {
                                 text = "QuickSetTiles",
                                 fontWeight = FontWeight.ExtraBold
                             )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { currentDestination = MainDestination.SETTINGS }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings & Diagnostics")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -255,6 +262,12 @@ fun MainScreen() {
                             )
                             currentDestination = MainDestination.CREATE_OR_EDIT
                         }
+                    )
+                }
+
+                MainDestination.SETTINGS -> {
+                    SettingsScreen(
+                        onBack = { currentDestination = MainDestination.LIST }
                     )
                 }
             }

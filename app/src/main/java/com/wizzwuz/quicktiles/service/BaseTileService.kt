@@ -154,6 +154,10 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                         val snippet = result.output.take(80)
                         "Shell (${result.executionMode}) Success: ${if (snippet.isNotBlank()) snippet else "OK"}"
                     } else {
+                        com.wizzwuz.quicktiles.util.LogManager.logError(
+                            "TileExecution",
+                            "Tile '${item.name}' (Slot $slotNumber) Shell (${result.executionMode}) failed with exit code ${result.exitCode}: ${result.output}"
+                        )
                         "Shell (${result.executionMode}) Exit ${result.exitCode}: ${result.output.take(80)}"
                     }
                     showToast(msg)

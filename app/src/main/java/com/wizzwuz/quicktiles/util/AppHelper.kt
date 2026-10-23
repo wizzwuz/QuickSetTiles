@@ -120,6 +120,7 @@ object AppHelper {
             Result.success("Launched via ${result.executionMode}")
         } else {
             val errDetails = if (result.output.isNotBlank()) result.output else "Process exited with code ${result.exitCode}"
+            LogManager.logError("ActivityLaunch", "Failed to launch $componentStr via ${result.executionMode}: $errDetails")
             Result.failure(Exception("Privileged launch failed (${result.executionMode}): $errDetails"))
         }
     }
