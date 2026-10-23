@@ -45,7 +45,12 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                 com.wizzwuz.quicktiles.model.TileVisualState.DISABLED -> Tile.STATE_INACTIVE
                 com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
             }
-            tile.label = item.name.ifBlank { "Tile $slotNumber" }
+            val displayName = when (item.visualState) {
+                com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) item.onTileName.ifBlank { item.name } else item.offTileName.ifBlank { item.name }
+                com.wizzwuz.quicktiles.model.TileVisualState.ENABLED -> item.onTileName.ifBlank { item.name }
+                com.wizzwuz.quicktiles.model.TileVisualState.DISABLED -> item.offTileName.ifBlank { item.name }
+            }
+            tile.label = displayName.ifBlank { "Tile $slotNumber" }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 tile.subtitle = when (item.visualState) {
                     com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) "Enabled" else "Disabled"
@@ -53,8 +58,13 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                     com.wizzwuz.quicktiles.model.TileVisualState.DISABLED -> "Disabled"
                 }
             }
+            val effectiveIcon = when (item.visualState) {
+                com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) item.onIconConfig ?: item.iconConfig else item.offIconConfig ?: item.iconConfig
+                com.wizzwuz.quicktiles.model.TileVisualState.ENABLED -> item.onIconConfig ?: item.iconConfig
+                com.wizzwuz.quicktiles.model.TileVisualState.DISABLED -> item.offIconConfig ?: item.iconConfig
+            }
             try {
-                tile.icon = IconProcessor.createTileIcon(this, item.iconConfig)
+                tile.icon = IconProcessor.createTileIcon(this, effectiveIcon)
             } catch (e: Throwable) {
                 tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_default)
             }

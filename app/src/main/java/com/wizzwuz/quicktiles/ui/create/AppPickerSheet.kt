@@ -32,20 +32,22 @@ fun AppPickerSheet(
     var searchQuery by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(true) }
 
+    var showSystemApps by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         apps = AppHelper.getInstalledApps(context)
         isLoading = false
     }
 
-    val filteredApps = remember(apps, searchQuery) {
-        if (searchQuery.isBlank()) {
-            apps
-        } else {
+    val filteredApps = remember(apps, searchQuery, showSystemApps) {
+        var list = if (showSystemApps) apps else apps.filter { !it.isSystemApp }
+        if (searchQuery.isNotBlank()) {
             val q = searchQuery.trim().lowercase()
-            apps.filter {
+            list = list.filter {
                 it.label.lowercase().contains(q) || it.packageName.lowercase().contains(q)
             }
         }
+        list
     }
 
     ModalBottomSheet(
@@ -68,7 +70,7 @@ fun AppPickerSheet(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                label = { Text("Search installed apps (including system apps)") },
+                label = { Text("Search installed apps") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
@@ -81,7 +83,35 @@ fun AppPickerSheet(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showSystemApps = !showSystemApps }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "Show system apps",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = if (showSystemApps) "Displaying user and system apps" else "Displaying user installed apps only",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = showSystemApps,
+                    onCheckedChange = { showSystemApps = it }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

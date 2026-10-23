@@ -1,6 +1,7 @@
 package com.wizzwuz.quicktiles.ui.create
 
 import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
@@ -29,6 +31,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.wizzwuz.quicktiles.model.IconConfig
 import com.wizzwuz.quicktiles.model.IconSourceType
 import com.wizzwuz.quicktiles.model.TileVisualState
@@ -244,6 +248,176 @@ fun IntentDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FullscreenScriptEditorDialog(
+    title: String,
+    initialScript: String,
+    selectedMode: ShellMode = ShellMode.AUTO,
+    onDismissAndSave: (String) -> Unit
+) {
+    var script by remember { mutableStateOf(initialScript) }
+    var currentMode by remember { mutableStateOf(selectedMode) }
+    val coroutineScope = rememberCoroutineScope()
+    var isTesting by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<CommandResult?>(null) }
+
+    BackHandler {
+        onDismissAndSave(script)
+    }
+
+    Dialog(
+        onDismissRequest = { onDismissAndSave(script) },
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(title, maxLines = 1, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Fullscreen Script Editor",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { onDismissAndSave(script) }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back & Save")
+                        }
+                    },
+                    actions = {
+                        Button(
+                            onClick = { onDismissAndSave(script) },
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Save", fontSize = 13.sp)
+                        }
+                    }
+                )
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Execution Mode", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    OutlinedButton(
+                        onClick = {
+                            if (script.isNotBlank() && !isTesting) {
+                                isTesting = true
+                                testResult = null
+                                coroutineScope.launch {
+                                    val res = ShizukuHelper.executeCommand(script.trim(), currentMode)
+                                    testResult = res
+                                    isTesting = false
+                                }
+                            }
+                        },
+                        enabled = script.isNotBlank() && !isTesting,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        if (isTesting) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Running...", fontSize = 11.sp)
+                        } else {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Test Script", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ShellMode.values().forEach { mode ->
+                        FilterChip(
+                            selected = currentMode == mode,
+                            onClick = { currentMode = mode },
+                            label = { Text(mode.name, fontSize = 11.sp) }
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = script,
+                    onValueChange = {
+                        script = it
+                        testResult = null
+                    },
+                    placeholder = { Text("echo 'Hello'\ninput tap 500 500\npm list packages") },
+                    textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                )
+
+                testResult?.let { result ->
+                    val isSuccess = result.exitCode == 0
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSuccess)
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                            else
+                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 140.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .padding(8.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = if (isSuccess) "Exit 0 (Success)" else "Exit ${result.exitCode}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    color = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                )
+                                Text(
+                                    text = "${result.executionMode} • ${result.durationMs}ms",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                text = if (result.output.isNotBlank()) result.output else "(No output produced)",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun ShellCommandInputField(
     label: String,
@@ -258,18 +432,49 @@ fun ShellCommandInputField(
     val coroutineScope = rememberCoroutineScope()
     var isTesting by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<CommandResult?>(null) }
+    var showFullscreenEditor by remember { mutableStateOf(false) }
+
+    if (showFullscreenEditor) {
+        FullscreenScriptEditorDialog(
+            title = label,
+            initialScript = command,
+            selectedMode = selectedMode,
+            onDismissAndSave = { updated ->
+                showFullscreenEditor = false
+                onCommandChange(updated)
+            }
+        )
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            OutlinedButton(
+                onClick = { showFullscreenEditor = true },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                modifier = Modifier.height(26.dp)
+            ) {
+                Text(
+                    text = "<> Expand",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp
+                )
+            }
+        }
+
         OutlinedTextField(
             value = command,
             onValueChange = {
                 onCommandChange(it)
                 testResult = null
             },
-            label = { Text(label) },
             placeholder = { Text(placeholder) },
             minLines = minLines,
             maxLines = maxLines,
@@ -387,7 +592,10 @@ fun ShellDialog(
     initialOnCommand: String = "",
     initialOffCommand: String = "",
     initialVisualState: TileVisualState = TileVisualState.ENABLED,
-    initialCollapseOnTap: Boolean = true,
+    initialOnTileName: String = "",
+    initialOffTileName: String = "",
+    initialOnIconConfig: IconConfig? = null,
+    initialOffIconConfig: IconConfig? = null,
     onDismiss: () -> Unit,
     onConfirm: (
         name: String,
@@ -395,16 +603,54 @@ fun ShellDialog(
         onCommand: String,
         offCommand: String,
         visualState: TileVisualState,
-        collapseOnTap: Boolean
+        onTileName: String,
+        offTileName: String,
+        onIconConfig: IconConfig?,
+        offIconConfig: IconConfig?
     ) -> Unit
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf(initialName) }
     var visualState by remember { mutableStateOf(initialVisualState) }
+    var onTileName by remember { mutableStateOf(initialOnTileName.ifBlank { initialName }) }
+    var offTileName by remember { mutableStateOf(initialOffTileName.ifBlank { initialName }) }
+    var onIconConfig by remember { mutableStateOf(initialOnIconConfig ?: IconConfig(sourceType = IconSourceType.PRESET, sourceData = "terminal")) }
+    var offIconConfig by remember { mutableStateOf(initialOffIconConfig ?: IconConfig(sourceType = IconSourceType.PRESET, sourceData = "power")) }
     var onCommand by remember { mutableStateOf(initialOnCommand.ifBlank { initialCommand }) }
     var offCommand by remember { mutableStateOf(initialOffCommand) }
-    var collapseOnTap by remember { mutableStateOf(initialCollapseOnTap) }
     var selectedMode by remember { mutableStateOf(ShellMode.AUTO) }
     val shizukuStatus by ShizukuHelper.statusFlow.collectAsState()
+
+    var showPresetPickerForOn by remember { mutableStateOf(false) }
+    var showPresetPickerForOff by remember { mutableStateOf(false) }
+
+    if (showPresetPickerForOn) {
+        IconPresetsDialog(
+            currentKey = onIconConfig.sourceData,
+            onDismiss = { showPresetPickerForOn = false },
+            onSelectPreset = { key ->
+                showPresetPickerForOn = false
+                onIconConfig = onIconConfig.copy(
+                    sourceType = IconSourceType.PRESET,
+                    sourceData = key
+                )
+            }
+        )
+    }
+
+    if (showPresetPickerForOff) {
+        IconPresetsDialog(
+            currentKey = offIconConfig.sourceData,
+            onDismiss = { showPresetPickerForOff = false },
+            onSelectPreset = { key ->
+                showPresetPickerForOff = false
+                offIconConfig = offIconConfig.copy(
+                    sourceType = IconSourceType.PRESET,
+                    sourceData = key
+                )
+            }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -418,14 +664,166 @@ fun ShellDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Tile Name") },
-                    placeholder = { Text("e.g. Restart SystemUI") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                // Visual State: Enabled, Disabled, Toggle (Both)
+                Text("Tile Appearance & State", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = visualState == TileVisualState.ENABLED,
+                        onClick = { visualState = TileVisualState.ENABLED },
+                        label = { Text("Enabled", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = visualState == TileVisualState.DISABLED,
+                        onClick = { visualState = TileVisualState.DISABLED },
+                        label = { Text("Disabled", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = visualState == TileVisualState.TOGGLE,
+                        onClick = { visualState = TileVisualState.TOGGLE },
+                        label = { Text("Both", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Tile Name(s) based on visual state
+                if (visualState == TileVisualState.TOGGLE) {
+                    OutlinedTextField(
+                        value = onTileName,
+                        onValueChange = { onTileName = it },
+                        label = { Text("Tile Name (when Enabled / ON)") },
+                        placeholder = { Text("e.g. WiFi On") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = offTileName,
+                        onValueChange = { offTileName = it },
+                        label = { Text("Tile Name (when Disabled / OFF)") },
+                        placeholder = { Text("e.g. WiFi Off") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Tile Name") },
+                        placeholder = { Text("e.g. Restart SystemUI") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // Tile Icon(s) based on visual state
+                Text("Tile Icon(s)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                if (visualState == TileVisualState.TOGGLE) {
+                    // Enabled Icon row
+                    val onBmp = remember(onIconConfig) { IconProcessor.processIconBitmap(context, onIconConfig, 40) }
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Image(bitmap = onBmp.asImageBitmap(), contentDescription = "Enabled Icon", modifier = Modifier.size(32.dp))
+                                Column {
+                                    Text("Enabled Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("Preset: ${onIconConfig.sourceData}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            OutlinedButton(
+                                onClick = { showPresetPickerForOn = true },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(30.dp)
+                            ) {
+                                Text("Change", fontSize = 11.sp)
+                            }
+                        }
+                    }
+
+                    // Disabled Icon row
+                    val offBmp = remember(offIconConfig) { IconProcessor.processIconBitmap(context, offIconConfig, 40) }
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Image(bitmap = offBmp.asImageBitmap(), contentDescription = "Disabled Icon", modifier = Modifier.size(32.dp))
+                                Column {
+                                    Text("Disabled Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("Preset: ${offIconConfig.sourceData}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            OutlinedButton(
+                                onClick = { showPresetPickerForOff = true },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(30.dp)
+                            ) {
+                                Text("Change", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                } else {
+                    // Single icon
+                    val currentCfg = if (visualState == TileVisualState.DISABLED) offIconConfig else onIconConfig
+                    val bmp = remember(currentCfg) { IconProcessor.processIconBitmap(context, currentCfg, 40) }
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Image(bitmap = bmp.asImageBitmap(), contentDescription = "Tile Icon", modifier = Modifier.size(32.dp))
+                                Column {
+                                    Text(if (visualState == TileVisualState.DISABLED) "Disabled Icon" else "Enabled Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("Preset: ${currentCfg.sourceData}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    if (visualState == TileVisualState.DISABLED) showPresetPickerForOff = true else showPresetPickerForOn = true
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(30.dp)
+                            ) {
+                                Text("Change", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
 
                 // Shell Mode Selection
                 Text("Execution Mode", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -477,32 +875,6 @@ fun ShellDialog(
                     }
                 }
 
-                // Visual State: Enabled, Disabled, Toggle (Both)
-                Text("Tile Appearance & State", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    FilterChip(
-                        selected = visualState == TileVisualState.ENABLED,
-                        onClick = { visualState = TileVisualState.ENABLED },
-                        label = { Text("Enabled", fontSize = 11.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = visualState == TileVisualState.DISABLED,
-                        onClick = { visualState = TileVisualState.DISABLED },
-                        label = { Text("Disabled", fontSize = 11.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = visualState == TileVisualState.TOGGLE,
-                        onClick = { visualState = TileVisualState.TOGGLE },
-                        label = { Text("Both", fontSize = 11.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
                 // Commands based on visual state
                 if (visualState == TileVisualState.TOGGLE) {
                     ShellCommandInputField(
@@ -536,28 +908,6 @@ fun ShellDialog(
                         placeholder = "e.g. echo 'Tile inactive'"
                     )
                 }
-
-                // Collapse notification panel on tap option
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { collapseOnTap = !collapseOnTap },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                        Text("Collapse panel on click", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "Close Quick Settings drawer when tapped",
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = collapseOnTap,
-                        onCheckedChange = { collapseOnTap = it }
-                    )
-                }
             }
         },
         confirmButton = {
@@ -569,19 +919,26 @@ fun ShellDialog(
             Button(
                 onClick = {
                     if (canSave) {
-                        val finalName = if (name.isNotBlank()) name else "Shell Command"
+                        val finalPrimaryName = if (visualState == TileVisualState.TOGGLE) {
+                            onTileName.ifBlank { offTileName.ifBlank { "Shell Toggle Tile" } }
+                        } else {
+                            name.ifBlank { "Shell Command" }
+                        }
                         val effectiveCmd = when (visualState) {
                             TileVisualState.TOGGLE -> onCommand.ifBlank { offCommand }
                             TileVisualState.DISABLED -> offCommand
                             TileVisualState.ENABLED -> onCommand
                         }
                         onConfirm(
-                            finalName,
+                            finalPrimaryName,
                             effectiveCmd.trim(),
                             onCommand.trim(),
                             offCommand.trim(),
                             visualState,
-                            collapseOnTap
+                            onTileName.trim(),
+                            offTileName.trim(),
+                            onIconConfig,
+                            offIconConfig
                         )
                     }
                 },

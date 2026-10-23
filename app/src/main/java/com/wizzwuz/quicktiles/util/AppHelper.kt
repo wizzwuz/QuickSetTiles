@@ -1,12 +1,16 @@
 package com.wizzwuz.quicktiles.util
 
+import android.app.SearchManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import android.os.Bundle
+import android.provider.Settings
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 data class AppItem(
@@ -95,10 +99,6 @@ object AppHelper {
             }
         }
 
-        // Privileged execution strictly via Shizuku (UID 2000) or Superuser Root (UID 0)
-        val componentStr = "$packageName/$activityName"
-        val cmd = "am start -n $componentStr"
-
         // If Shizuku is running and permission not yet granted, prompt for permission immediately
         if (ShizukuHelper.isShizukuRunning() && !ShizukuHelper.hasShizukuPermission()) {
             withContext(Dispatchers.Main) {
@@ -109,19 +109,118 @@ object AppHelper {
             )
         }
 
-        val result = ShizukuHelper.executePrivilegedCommand(cmd)
+        val componentStr = "$packageName/$activityName"
+        val escapedComponent = componentStr.replace("$", "\\$")
+
+        // Strategy 1: If Root is present, root can launch any private/unexported activity directly
+        if (ShizukuHelper.isRootBinaryPresent()) {
+            val rootCmd = "am start -n '$escapedComponent'"
+            val rootRes = ShizukuHelper.executeCommand(rootCmd, mode = ShellMode.ROOT)
+            val hasRootDenial = rootRes.output.contains("SecurityException") ||
+                    rootRes.output.contains("Permission Denial") ||
+                    rootRes.output.contains("Error: Activity class")
+            if (rootRes.exitCode == 0 && !hasRootDenial) {
+                return@withContext Result.success("Launched via Root (su)")
+            }
+        }
+
+        // Strategy 2: Assistant Method (Official ActivityLauncherShizukuPlugin mechanism)
+        if (ShizukuHelper.isShizukuRunning() && ShizukuHelper.hasShizukuPermission()) {
+            val assistantRes = launchViaAssistantMethod(context, componentStr)
+            if (assistantRes.isSuccess) {
+                return@withContext assistantRes
+            }
+        }
+
+        // Strategy 3: Direct am start via Shizuku with proper quoting
+        val shizukuCmd = "am start -n '$escapedComponent'"
+        val result = ShizukuHelper.executePrivilegedCommand(shizukuCmd)
         val hasDenial = result.output.contains("SecurityException") ||
-                        result.output.contains("Permission Denial") ||
-                        result.output.contains("not exported") ||
-                        result.output.contains("requires permission") ||
-                        result.output.contains("Error:")
+                result.output.contains("Permission Denial") ||
+                result.output.contains("not exported") ||
+                result.output.contains("requires permission") ||
+                result.output.contains("Error:")
 
         if (result.executionMode != "None" && result.exitCode == 0 && !hasDenial) {
             Result.success("Launched via ${result.executionMode}")
         } else {
-            val errDetails = if (result.output.isNotBlank()) result.output else "Process exited with code ${result.exitCode}"
-            LogManager.logError("ActivityLaunch", "Failed to launch $componentStr via ${result.executionMode}: $errDetails")
-            Result.failure(Exception("Privileged launch failed (${result.executionMode}): $errDetails"))
+            // Strategy 4: Fallback to am start with user 0 flag
+            val userCmd = "am start --user 0 -n '$escapedComponent'"
+            val userRes = ShizukuHelper.executeCommand(userCmd, mode = ShellMode.AUTO)
+            val userHasDenial = userRes.output.contains("SecurityException") ||
+                    userRes.output.contains("Permission Denial") ||
+                    userRes.output.contains("not exported") ||
+                    userRes.output.contains("requires permission") ||
+                    userRes.output.contains("Error:")
+            if (userRes.exitCode == 0 && !userHasDenial) {
+                Result.success("Launched via Privileged Shell")
+            } else {
+                val errDetails = if (result.output.isNotBlank()) result.output else "Process exited with code ${result.exitCode}"
+                LogManager.logError("ActivityLaunch", "Failed to launch $componentStr via ${result.executionMode}: $errDetails")
+                Result.failure(Exception("Privileged launch failed (${result.executionMode}): $errDetails"))
+            }
+        }
+    }
+
+    private suspend fun launchViaAssistantMethod(
+        context: Context,
+        componentStr: String
+    ): Result<String> {
+        try {
+            // Ensure WRITE_SECURE_SETTINGS is granted to our app
+            ShizukuHelper.executePrivilegedCommand("pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS")
+
+            // Read original assistant setting
+            val origRes = ShizukuHelper.executePrivilegedCommand("settings get secure assistant")
+            val originalAssistant = origRes.output.trim()
+
+            try {
+                // Set assistant to target activity
+                ShizukuHelper.executePrivilegedCommand("settings put secure assistant '$componentStr'")
+                try {
+                    Settings.Secure.putString(context.contentResolver, "assistant", componentStr)
+                } catch (e: Throwable) {
+                    // Ignore
+                }
+
+                // Trigger assistant launch via SearchManager reflection
+                val sm = context.getSystemService(Context.SEARCH_SERVICE) as? SearchManager
+                if (sm != null) {
+                    try {
+                        val m = sm.javaClass.getDeclaredMethod("launchAssist", Bundle::class.java)
+                        m.isAccessible = true
+                        m.invoke(sm, Bundle())
+                    } catch (e: Throwable) {
+                        try {
+                            val m = sm.javaClass.getDeclaredMethod("startAssist", Bundle::class.java)
+                            m.isAccessible = true
+                            m.invoke(sm, Bundle())
+                        } catch (e2: Throwable) {
+                            // Handled by keyevent below
+                        }
+                    }
+                }
+
+                // Also inject KEYCODE_ASSIST (219) via privileged shell
+                ShizukuHelper.executePrivilegedCommand("input keyevent 219")
+                delay(350)
+
+                return Result.success("Launched private activity via Assistant Method")
+            } finally {
+                // Restore original assistant
+                if (originalAssistant.isNotBlank() && originalAssistant != "null") {
+                    ShizukuHelper.executePrivilegedCommand("settings put secure assistant '$originalAssistant'")
+                    try {
+                        Settings.Secure.putString(context.contentResolver, "assistant", originalAssistant)
+                    } catch (e: Throwable) {
+                        // Ignore
+                    }
+                } else {
+                    ShizukuHelper.executePrivilegedCommand("settings delete secure assistant")
+                }
+            }
+        } catch (e: Throwable) {
+            return Result.failure(e)
         }
     }
 

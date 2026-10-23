@@ -69,7 +69,11 @@ data class TileItem(
     val onCommand: String = "",
     val offCommand: String = "",
     val currentToggleOn: Boolean = true,
-    val collapseOnTap: Boolean = true
+    val collapseOnTap: Boolean = true,
+    val onTileName: String = "",
+    val offTileName: String = "",
+    val onIconConfig: IconConfig? = null,
+    val offIconConfig: IconConfig? = null
 ) {
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -86,6 +90,10 @@ data class TileItem(
             put("offCommand", offCommand)
             put("currentToggleOn", currentToggleOn)
             put("collapseOnTap", collapseOnTap)
+            put("onTileName", onTileName)
+            put("offTileName", offTileName)
+            if (onIconConfig != null) put("onIconConfig", onIconConfig.toJson())
+            if (offIconConfig != null) put("offIconConfig", offIconConfig.toJson())
         }
     }
 
@@ -104,7 +112,11 @@ data class TileItem(
                 onCommand = json.optString("onCommand", ""),
                 offCommand = json.optString("offCommand", ""),
                 currentToggleOn = json.optBoolean("currentToggleOn", true),
-                collapseOnTap = json.optBoolean("collapseOnTap", true)
+                collapseOnTap = json.optBoolean("collapseOnTap", true),
+                onTileName = json.optString("onTileName", ""),
+                offTileName = json.optString("offTileName", ""),
+                onIconConfig = if (json.has("onIconConfig")) IconConfig.fromJson(json.getJSONObject("onIconConfig")) else null,
+                offIconConfig = if (json.has("offIconConfig")) IconConfig.fromJson(json.getJSONObject("offIconConfig")) else null
             )
         }
     }

@@ -1,5 +1,6 @@
 package com.wizzwuz.quicktiles.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -43,6 +44,15 @@ fun MainScreen() {
 
     val activeTiles = remember(allTiles) { allTiles.filter { it.isActive } }
     val inactiveTiles = remember(allTiles) { allTiles.filter { !it.isActive } }
+
+    BackHandler(enabled = currentDestination != MainDestination.LIST || selectedTab != 0) {
+        if (currentDestination == MainDestination.ACTIVITY_PICKER) {
+            currentDestination = MainDestination.CREATE_OR_EDIT
+        } else {
+            selectedTab = 0
+            currentDestination = MainDestination.LIST
+        }
+    }
 
     Scaffold(
         topBar = {
