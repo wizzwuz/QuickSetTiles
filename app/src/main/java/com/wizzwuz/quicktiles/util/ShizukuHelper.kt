@@ -246,6 +246,51 @@ object ShizukuHelper {
         errResult
     }
 
+    suspend fun executePrivilegedRaw(
+        args: Array<String>,
+        timeoutMs: Long = 15000L
+    ): CommandResult = withContext(Dispatchers.IO) {
+        val startTime = System.currentTimeMillis()
+
+        if (isShizukuRunning() && hasShizukuPermission()) {
+            try {
+                val method = Shizuku::class.java.getDeclaredMethod(
+                    "newProcess",
+                    Array<String>::class.java,
+                    Array<String>::class.java,
+                    String::class.java
+                )
+                method.isAccessible = true
+                val proc = method.invoke(null, args, null, null) as Process
+                val res = readProcessWithTimeout(proc, "Shizuku", timeoutMs)
+                val duration = System.currentTimeMillis() - startTime
+                val finalRes = res.copy(durationMs = duration)
+                LogManager.logCommand("Shizuku", args.joinToString(" "), finalRes.exitCode, finalRes.output, duration)
+                return@withContext finalRes
+            } catch (e: Throwable) {
+                LogManager.logError("ShizukuHelper", "Raw Shizuku execution failed", e)
+            }
+        }
+
+        if (isRootBinaryPresent()) {
+            try {
+                val cmdList = mutableListOf("su", "-c")
+                cmdList.add(args.joinToString(" "))
+                val proc = Runtime.getRuntime().exec(cmdList.toTypedArray())
+                val res = readProcessWithTimeout(proc, "Root (su)", timeoutMs)
+                val duration = System.currentTimeMillis() - startTime
+                val finalRes = res.copy(durationMs = duration)
+                LogManager.logCommand("Root (su)", args.joinToString(" "), finalRes.exitCode, finalRes.output, duration)
+                return@withContext finalRes
+            } catch (e: Throwable) {
+                LogManager.logError("ShizukuHelper", "Raw Root execution failed", e)
+            }
+        }
+
+        val duration = System.currentTimeMillis() - startTime
+        CommandResult(-1, "Privileged execution unavailable", "None", duration)
+    }
+
     private suspend fun tryFallbackAfterShizuku(
         command: String,
         timeoutMs: Long,

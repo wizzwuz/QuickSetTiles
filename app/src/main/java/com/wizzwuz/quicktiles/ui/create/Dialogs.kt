@@ -478,6 +478,19 @@ fun ShellCommandInputField(
             placeholder = { Text(placeholder) },
             minLines = minLines,
             maxLines = maxLines,
+            trailingIcon = {
+                IconButton(
+                    onClick = { showFullscreenEditor = true },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Text(
+                        text = "<>",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
             textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp),
             modifier = Modifier.fillMaxWidth()
         )

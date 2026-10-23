@@ -40,6 +40,8 @@ fun ActivityPickerScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val repository = remember { com.wizzwuz.quicktiles.data.TileRepository.getInstance(context) }
+    val isPrivateLaunchable by repository.privateActivityLaunchableFlow.collectAsState()
 
     var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
@@ -215,9 +217,25 @@ fun ActivityPickerScreen(
                                                         .clip(RoundedCornerShape(6.dp))
                                                         .combinedClickable(
                                                             onClick = {
-                                                                onActivitySelected(app, act)
+                                                                if (!act.isExported && !isPrivateLaunchable) {
+                                                                    Toast.makeText(
+                                                                        context,
+                                                                        "Private activity launch is disabled in Settings. Enable 'Private Activity Launchable' in Settings to use private activities.",
+                                                                        Toast.LENGTH_LONG
+                                                                    ).show()
+                                                                } else {
+                                                                    onActivitySelected(app, act)
+                                                                }
                                                             },
                                                             onLongClick = {
+                                                                if (!act.isExported && !isPrivateLaunchable) {
+                                                                    Toast.makeText(
+                                                                        context,
+                                                                        "Launch test failed: Private activity launch is disabled in Settings. Enable 'Private Activity Launchable' in Settings.",
+                                                                        Toast.LENGTH_LONG
+                                                                    ).show()
+                                                                    return@combinedClickable
+                                                                }
                                                                 // Execute activity immediately for testing!
                                                                 coroutineScope.launch {
                                                                     val result = AppHelper.testLaunchActivity(
@@ -267,7 +285,13 @@ fun ActivityPickerScreen(
                                                         if (!act.isExported) {
                                                             SuggestionChip(
                                                                 onClick = {},
-                                                                label = { Text("Private (Shizuku)", fontSize = 9.sp) },
+                                                                label = {
+                                                                    Text(
+                                                                        if (isPrivateLaunchable) "Private (Shizuku)" else "Private (Disabled)",
+                                                                        fontSize = 9.sp,
+                                                                        color = if (isPrivateLaunchable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                                                    )
+                                                                },
                                                                 modifier = Modifier.height(20.dp)
                                                             )
                                                         } else {

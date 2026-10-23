@@ -3,16 +3,9 @@ name: Build QuickSetTiles APK
 on:
   push:
     branches: [ "main", "master" ]
-    tags: [ "v*" ]
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
-    inputs:
-      create_release:
-        description: 'Publish as GitHub Release?'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -81,20 +74,6 @@ jobs:
         path: app/build/outputs/apk/debug/*.apk
         if-no-files-found: error
         retention-days: 14
-
-    - name: Publish GitHub Release
-      if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
-      uses: softprops/action-gh-release@v2
-      with:
-        files: |
-          app/build/outputs/apk/release/*.apk
-          app/build/outputs/apk/debug/*.apk
-        name: QuickSetTiles Release ${{ github.ref_name }}
-        draft: false
-        prerelease: false
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Add Build Summary
       run: |

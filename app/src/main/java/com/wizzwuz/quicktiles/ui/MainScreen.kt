@@ -46,12 +46,8 @@ fun MainScreen() {
     val inactiveTiles = remember(allTiles) { allTiles.filter { !it.isActive } }
 
     BackHandler(enabled = currentDestination != MainDestination.LIST || selectedTab != 0) {
-        if (currentDestination == MainDestination.ACTIVITY_PICKER) {
-            currentDestination = MainDestination.CREATE_OR_EDIT
-        } else {
-            selectedTab = 0
-            currentDestination = MainDestination.LIST
-        }
+        selectedTab = 0
+        currentDestination = MainDestination.LIST
     }
 
     Scaffold(

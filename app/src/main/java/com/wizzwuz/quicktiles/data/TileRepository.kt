@@ -18,6 +18,18 @@ class TileRepository(private val context: Context) {
     private val _tilesFlow = MutableStateFlow<List<TileItem>>(emptyList())
     val tilesFlow: StateFlow<List<TileItem>> = _tilesFlow.asStateFlow()
 
+    private val _privateActivityLaunchableFlow = MutableStateFlow(
+        prefs.getBoolean(KEY_PRIVATE_ACTIVITY_LAUNCHABLE, true)
+    )
+    val privateActivityLaunchableFlow: StateFlow<Boolean> = _privateActivityLaunchableFlow.asStateFlow()
+
+    fun isPrivateActivityLaunchable(): Boolean = _privateActivityLaunchableFlow.value
+
+    fun setPrivateActivityLaunchable(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_PRIVATE_ACTIVITY_LAUNCHABLE, enabled).apply()
+        _privateActivityLaunchableFlow.value = enabled
+    }
+
     init {
         loadTiles()
     }
@@ -149,6 +161,7 @@ class TileRepository(private val context: Context) {
     companion object {
         const val MAX_SLOTS = 15
         private const val KEY_TILES = "saved_tiles_list"
+        const val KEY_PRIVATE_ACTIVITY_LAUNCHABLE = "private_activity_launchable"
 
         @Volatile
         private var INSTANCE: TileRepository? = null

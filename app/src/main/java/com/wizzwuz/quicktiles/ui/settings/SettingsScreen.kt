@@ -42,6 +42,9 @@ fun SettingsScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
+    val repository = remember { com.wizzwuz.quicktiles.data.TileRepository.getInstance(context) }
+    val isPrivateLaunchable by repository.privateActivityLaunchableFlow.collectAsState()
+
     var diagnostics by remember { mutableStateOf(ShizukuHelper.getDiagnostics(context)) }
     var logStats by remember { mutableStateOf<LogStats?>(null) }
     var logContent by remember { mutableStateOf("Loading logs...") }
@@ -130,7 +133,78 @@ fun SettingsScreen(
                 }
             }
 
-            // 2. Shizuku / Shevery Diagnostics Section
+            // 2. Private Activity Launching Configuration Card
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                repository.setPrivateActivityLaunchable(!isPrivateLaunchable)
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Launch,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "Private Activity Launchable",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Allow selecting and launching non-exported/private activities using privileged access (Shizuku, Superuser Root, or Activity Launcher Plugin).",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isPrivateLaunchable,
+                            onCheckedChange = {
+                                repository.setPrivateActivityLaunchable(it)
+                            }
+                        )
+                    }
+
+                    if (isPrivateLaunchable) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Execution Engine: ${if (diagnostics.isRootBinaryPresent) "Root (su)" else if (diagnostics.hasShizukuPermission) "Shizuku Service" else "Permission Required"}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 3. Shizuku / Shevery Diagnostics Section
             Text(
                 text = "Privileged Service Diagnostics",
                 style = MaterialTheme.typography.titleMedium,
