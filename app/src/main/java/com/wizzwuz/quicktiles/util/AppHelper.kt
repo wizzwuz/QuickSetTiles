@@ -285,9 +285,10 @@ object AppHelper {
                     }
                 }
 
-                // Also inject KEYCODE_ASSIST (219) via privileged shell
+                // Also inject KEYCODE_ASSIST (219) and ASSIST action via privileged shell
                 ShizukuHelper.executePrivilegedCommand("input keyevent 219")
-                delay(400)
+                ShizukuHelper.executePrivilegedCommand("am start -a android.intent.action.ASSIST")
+                delay(350)
 
                 return Result.success("Launched private activity via Assistant Method")
             } finally {

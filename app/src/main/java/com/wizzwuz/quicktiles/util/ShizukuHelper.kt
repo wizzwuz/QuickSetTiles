@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -172,6 +173,20 @@ object ShizukuHelper {
         timeoutMs: Long = 15000L
     ): CommandResult = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
+
+        // 1. Check for explicit private launch alias
+        val trimmed = command.trim()
+        if (trimmed.startsWith("launch-private ") || trimmed.startsWith("am-private ")) {
+            val targetComp = trimmed.substringAfter(" ").trim()
+            if (isShizukuRunning() && hasShizukuPermission()) {
+                val bypassRes = tryAssistantMethodBypass(targetComp)
+                val totalDuration = System.currentTimeMillis() - startTime
+                val finalResult = bypassRes.copy(durationMs = totalDuration)
+                LogManager.logCommand(finalResult.executionMode, command, finalResult.exitCode, finalResult.output, totalDuration)
+                return@withContext finalResult
+            }
+        }
+
         val result: CommandResult = when (mode) {
             ShellMode.SHIZUKU -> runShizukuProcess(command, timeoutMs)
             ShellMode.ROOT -> runRootProcess(command, timeoutMs)
@@ -197,8 +212,25 @@ object ShizukuHelper {
             }
         }
 
+        // 2. Automatic Private Activity Permission Denial detection & Assistant Method bypass
+        val resolvedResult: CommandResult = if (result.exitCode != 0 && isPermissionDenialForPrivateActivity(result.output)) {
+            val comp = extractComponentFromCommand(command) ?: extractComponentFromOutput(result.output)
+            if (comp != null && isShizukuRunning() && hasShizukuPermission()) {
+                val bypassRes = tryAssistantMethodBypass(comp)
+                if (bypassRes.exitCode == 0) {
+                    bypassRes
+                } else {
+                    result
+                }
+            } else {
+                result
+            }
+        } else {
+            result
+        }
+
         val totalDuration = System.currentTimeMillis() - startTime
-        val finalResult = result.copy(durationMs = totalDuration)
+        val finalResult = resolvedResult.copy(durationMs = totalDuration)
 
         LogManager.logCommand(
             mode = finalResult.executionMode,
@@ -445,5 +477,61 @@ object ShizukuHelper {
         return lower.contains("securityexception") ||
                 lower.contains("permission denial") ||
                 lower.contains("requires permission")
+    }
+
+    private fun isPermissionDenialForPrivateActivity(output: String): Boolean {
+        val lower = output.lowercase()
+        return (lower.contains("securityexception") || lower.contains("permission denial")) &&
+                (lower.contains("not exported") || lower.contains("uid 2000") || lower.contains("exported=false"))
+    }
+
+    private fun extractComponentFromCommand(command: String): String? {
+        val nMatch = Regex("""-n\s+([^\s]+)""").find(command)
+        if (nMatch != null) return nMatch.groupValues[1]
+        val cMatch = Regex("""\b([a-zA-Z0-9._]+/[a-zA-Z0-9._$]+)\b""").find(command)
+        return cMatch?.groupValues?.get(1)
+    }
+
+    private fun extractComponentFromOutput(output: String): String? {
+        val cmpMatch = Regex("""cmp=([^\s}]+)""").find(output)
+        return cmpMatch?.groupValues?.get(1)
+    }
+
+    suspend fun tryAssistantMethodBypass(componentStr: String): CommandResult {
+        val origRes = runShizukuProcess("settings get secure assistant", 4000L)
+        val originalAssistant = origRes.output.trim()
+
+        return try {
+            val setRes = runShizukuProcess("settings put secure assistant $componentStr", 4000L)
+            if (setRes.exitCode != 0) {
+                CommandResult(
+                    setRes.exitCode,
+                    "Failed to set assistant for private launch: ${setRes.output}",
+                    "Shizuku (Assistant Bypass)"
+                )
+            } else {
+                runShizukuProcess("input keyevent 219", 4000L)
+                runShizukuProcess("am start -a android.intent.action.ASSIST", 4000L)
+                delay(300)
+
+                CommandResult(
+                    0,
+                    "Starting: Intent { cmp=$componentStr }\n[Success] Private activity started via Assistant Method (bypassing UID 2000 restriction)",
+                    "Shizuku (Assistant Bypass)"
+                )
+            }
+        } catch (e: Throwable) {
+            CommandResult(
+                -1,
+                "Assistant bypass failed: ${e.message}",
+                "Shizuku (Assistant Bypass)"
+            )
+        } finally {
+            if (originalAssistant.isNotBlank() && originalAssistant != "null") {
+                runShizukuProcess("settings put secure assistant $originalAssistant", 4000L)
+            } else {
+                runShizukuProcess("settings delete secure assistant", 4000L)
+            }
+        }
     }
 }
