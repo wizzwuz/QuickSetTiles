@@ -641,7 +641,7 @@ fun CreateTileScreen(
                 showAppPicker = false
                 selectedType = TileType.APPS
                 targetData = app.packageName
-                if (tileName.isBlank()) tileName = app.label
+                tileName = app.label
                 // Immediately draw outline of its icon element and set it as default tile icon!
                 iconConfig = IconConfig(
                     sourceType = IconSourceType.APP_ICON,
