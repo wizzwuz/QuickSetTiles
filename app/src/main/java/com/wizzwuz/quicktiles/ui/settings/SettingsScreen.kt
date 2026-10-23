@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.wizzwuz.quicktiles.BuildConfig
+import com.wizzwuz.quicktiles.ui.theme.AppThemeMode
+import com.wizzwuz.quicktiles.ui.theme.ThemeManager
 import com.wizzwuz.quicktiles.util.DiagnosticsInfo
 import com.wizzwuz.quicktiles.util.LogManager
 import com.wizzwuz.quicktiles.util.LogStats
@@ -134,7 +136,115 @@ fun SettingsScreen(
                 }
             }
 
-            // 2. Private Activity Launching Configuration Card
+            // 2. App Theme Flyout Menu Card
+            var showThemeFlyout by remember { mutableStateOf(false) }
+            val currentTheme by ThemeManager.themeFlow.collectAsState()
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showThemeFlyout = true }
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f).padding(end = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = when (currentTheme) {
+                                    AppThemeMode.LIGHT -> Icons.Default.LightMode
+                                    AppThemeMode.DARK -> Icons.Default.DarkMode
+                                    AppThemeMode.AMOLED -> Icons.Default.Brightness1
+                                    AppThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
+                                },
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(26.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "Theme",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "${currentTheme.title} — ${currentTheme.subtitle}",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        IconButton(onClick = { showThemeFlyout = true }) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = "Choose Theme",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = showThemeFlyout,
+                        onDismissRequest = { showThemeFlyout = false }
+                    ) {
+                        AppThemeMode.values().forEach { mode ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(
+                                            text = mode.title,
+                                            fontWeight = if (mode == currentTheme) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                        Text(
+                                            text = mode.subtitle,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = when (mode) {
+                                            AppThemeMode.LIGHT -> Icons.Default.LightMode
+                                            AppThemeMode.DARK -> Icons.Default.DarkMode
+                                            AppThemeMode.AMOLED -> Icons.Default.Brightness1
+                                            AppThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
+                                        },
+                                        contentDescription = null,
+                                        tint = if (mode == currentTheme) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (mode == currentTheme) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Selected",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    ThemeManager.setTheme(context, mode)
+                                    showThemeFlyout = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 3. Private Activity Launching Configuration Card
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
                 shape = RoundedCornerShape(14.dp),
