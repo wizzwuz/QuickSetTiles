@@ -88,7 +88,11 @@ class TileRepository(private val context: Context) {
             } else {
                 findNextAvailableSlot(current.filter { it.id != tile.id })
             }
-            tile.copy(slotNumber = assignedSlot)
+            if (assignedSlot in 1..MAX_SLOTS) {
+                tile.copy(isActive = true, slotNumber = assignedSlot)
+            } else {
+                tile.copy(isActive = false, slotNumber = -1)
+            }
         } else {
             tile.copy(slotNumber = -1)
         }
@@ -159,7 +163,7 @@ class TileRepository(private val context: Context) {
     }
 
     companion object {
-        const val MAX_SLOTS = 15
+        const val MAX_SLOTS = 50
         private const val KEY_TILES = "saved_tiles_list"
         const val KEY_PRIVATE_ACTIVITY_LAUNCHABLE = "private_activity_launchable"
 

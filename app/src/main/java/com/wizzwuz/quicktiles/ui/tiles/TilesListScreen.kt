@@ -59,7 +59,7 @@ fun TilesListScreen(
         ) {
             Column {
                 Text(
-                    text = if (isActiveTab) "Active Quick Tiles (${tiles.size}/15)" else "Inactive Tiles (${tiles.size})",
+                    text = if (isActiveTab) "Active Quick Tiles (${tiles.size})" else "Inactive Tiles (${tiles.size})",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -184,7 +184,7 @@ fun TilesListScreen(
                                         fontSize = 16.sp,
                                         maxLines = 1
                                     )
-                                    if (tile.isActive && tile.slotNumber in 1..15) {
+                                    if (tile.isActive && tile.slotNumber in 1..TileRepository.MAX_SLOTS) {
                                         Badge(containerColor = MaterialTheme.colorScheme.primary) {
                                             Text("Slot ${tile.slotNumber}", fontSize = 10.sp)
                                         }

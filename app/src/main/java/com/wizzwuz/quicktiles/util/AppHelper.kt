@@ -260,7 +260,14 @@ object AppHelper {
             val origRes = ShizukuHelper.executePrivilegedCommand("settings get secure assistant")
             val originalAssistant = origRes.output.trim()
 
+            val origVisRes = ShizukuHelper.executePrivilegedCommand("settings get secure voice_interaction_service")
+            val originalVis = origVisRes.output.trim()
+
             try {
+                if (originalVis.isNotBlank() && originalVis != "null") {
+                    ShizukuHelper.executePrivilegedCommand("settings put secure voice_interaction_service \"\"")
+                }
+
                 // Set assistant to target activity
                 val setRes = ShizukuHelper.executePrivilegedCommand("settings put secure assistant $componentStr")
                 if (setRes.exitCode != 0) {
@@ -285,18 +292,22 @@ object AppHelper {
                     }
                 }
 
-                // Also inject KEYCODE_ASSIST (219) and ASSIST action via privileged shell
+                // Inject KEYCODE_ASSIST (219) via privileged shell (NO implicit am start -a ASSIST)
                 ShizukuHelper.executePrivilegedCommand("input keyevent 219")
-                ShizukuHelper.executePrivilegedCommand("am start -a android.intent.action.ASSIST")
-                delay(350)
+                delay(600)
 
                 return Result.success("Launched private activity via Assistant Method")
             } finally {
-                // Restore original assistant
+                // Restore original assistant & voice_interaction_service
                 if (originalAssistant.isNotBlank() && originalAssistant != "null") {
                     ShizukuHelper.executePrivilegedCommand("settings put secure assistant $originalAssistant")
                 } else {
                     ShizukuHelper.executePrivilegedCommand("settings delete secure assistant")
+                }
+                if (originalVis.isNotBlank() && originalVis != "null") {
+                    ShizukuHelper.executePrivilegedCommand("settings put secure voice_interaction_service $originalVis")
+                } else {
+                    ShizukuHelper.executePrivilegedCommand("settings delete secure voice_interaction_service")
                 }
             }
         } catch (e: Throwable) {

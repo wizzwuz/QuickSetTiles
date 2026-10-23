@@ -501,7 +501,15 @@ object ShizukuHelper {
         val origRes = runShizukuProcess("settings get secure assistant", 4000L)
         val originalAssistant = origRes.output.trim()
 
+        val origVisRes = runShizukuProcess("settings get secure voice_interaction_service", 4000L)
+        val originalVis = origVisRes.output.trim()
+
         return try {
+            // Temporarily clear voice interaction service so voice services don't conflict or trigger chooser
+            if (originalVis.isNotBlank() && originalVis != "null") {
+                runShizukuProcess("settings put secure voice_interaction_service \"\"", 4000L)
+            }
+
             val setRes = runShizukuProcess("settings put secure assistant $componentStr", 4000L)
             if (setRes.exitCode != 0) {
                 CommandResult(
@@ -510,9 +518,9 @@ object ShizukuHelper {
                     "Shizuku (Assistant Bypass)"
                 )
             } else {
+                // Trigger assist hardware hook (NO implicit am start -a ASSIST to prevent 'Complete action using' chooser)
                 runShizukuProcess("input keyevent 219", 4000L)
-                runShizukuProcess("am start -a android.intent.action.ASSIST", 4000L)
-                delay(300)
+                delay(600)
 
                 CommandResult(
                     0,
@@ -531,6 +539,11 @@ object ShizukuHelper {
                 runShizukuProcess("settings put secure assistant $originalAssistant", 4000L)
             } else {
                 runShizukuProcess("settings delete secure assistant", 4000L)
+            }
+            if (originalVis.isNotBlank() && originalVis != "null") {
+                runShizukuProcess("settings put secure voice_interaction_service $originalVis", 4000L)
+            } else {
+                runShizukuProcess("settings delete secure voice_interaction_service", 4000L)
             }
         }
     }
