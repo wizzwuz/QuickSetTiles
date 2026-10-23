@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wizzwuz.quicktiles.model.IconConfig
 import com.wizzwuz.quicktiles.model.IconSourceType
+import com.wizzwuz.quicktiles.model.TileVisualState
 import com.wizzwuz.quicktiles.util.AppHelper
 import com.wizzwuz.quicktiles.util.CommandResult
 import com.wizzwuz.quicktiles.util.IconProcessor
@@ -243,32 +244,172 @@ fun IntentDialog(
     )
 }
 
+@Composable
+fun ShellCommandInputField(
+    label: String,
+    command: String,
+    onCommandChange: (String) -> Unit,
+    selectedMode: ShellMode = ShellMode.AUTO,
+    placeholder: String = "e.g. input tap 500 500\npm list packages",
+    minLines: Int = 2,
+    maxLines: Int = 5,
+    modifier: Modifier = Modifier
+) {
+    val coroutineScope = rememberCoroutineScope()
+    var isTesting by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<CommandResult?>(null) }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        OutlinedTextField(
+            value = command,
+            onValueChange = {
+                onCommandChange(it)
+                testResult = null
+            },
+            label = { Text(label) },
+            placeholder = { Text(placeholder) },
+            minLines = minLines,
+            maxLines = maxLines,
+            textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            OutlinedButton(
+                onClick = {
+                    if (command.isNotBlank() && !isTesting) {
+                        isTesting = true
+                        testResult = null
+                        coroutineScope.launch {
+                            val res = ShizukuHelper.executeCommand(
+                                command = command.trim(),
+                                mode = selectedMode
+                            )
+                            testResult = res
+                            isTesting = false
+                        }
+                    }
+                },
+                enabled = command.isNotBlank() && !isTesting,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                modifier = Modifier.height(32.dp)
+            ) {
+                if (isTesting) {
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Testing...", fontSize = 11.sp)
+                } else {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Test Command", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        testResult?.let { result ->
+            val isSuccess = result.exitCode == 0
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isSuccess)
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                    else
+                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isSuccess) Icons.Default.Check else Icons.Default.Error,
+                                contentDescription = null,
+                                tint = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = if (isSuccess) "Exit 0 (Success)" else "Exit ${result.exitCode}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Text(
+                            text = "${result.executionMode} • ${result.durationMs}ms",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.surface,
+                                RoundedCornerShape(4.dp)
+                            )
+                            .padding(6.dp)
+                    ) {
+                        Text(
+                            text = if (result.output.isNotBlank()) result.output else "(No stdout or stderr produced)",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 6
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ShellDialog(
     initialName: String = "",
     initialCommand: String = "",
+    initialOnCommand: String = "",
+    initialOffCommand: String = "",
+    initialVisualState: TileVisualState = TileVisualState.ENABLED,
+    initialCollapseOnTap: Boolean = true,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, command: String) -> Unit
+    onConfirm: (
+        name: String,
+        targetData: String,
+        onCommand: String,
+        offCommand: String,
+        visualState: TileVisualState,
+        collapseOnTap: Boolean
+    ) -> Unit
 ) {
     var name by remember { mutableStateOf(initialName) }
-    var command by remember { mutableStateOf(initialCommand) }
+    var visualState by remember { mutableStateOf(initialVisualState) }
+    var onCommand by remember { mutableStateOf(initialOnCommand.ifBlank { initialCommand }) }
+    var offCommand by remember { mutableStateOf(initialOffCommand) }
+    var collapseOnTap by remember { mutableStateOf(initialCollapseOnTap) }
     var selectedMode by remember { mutableStateOf(ShellMode.AUTO) }
     val shizukuStatus by ShizukuHelper.statusFlow.collectAsState()
-
-    val coroutineScope = rememberCoroutineScope()
-    var isTesting by remember { mutableStateOf(false) }
-    var testResult by remember { mutableStateOf<CommandResult?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("Shell Script Tile")
-            }
+            Text("Configure Shell Tile")
         },
         text = {
             Column(
@@ -280,7 +421,7 @@ fun ShellDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Script / Command Name") },
+                    label = { Text("Tile Name") },
                     placeholder = { Text("e.g. Restart SystemUI") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -300,20 +441,6 @@ fun ShellDialog(
                         )
                     }
                 }
-
-                OutlinedTextField(
-                    value = command,
-                    onValueChange = {
-                        command = it
-                        testResult = null // reset test result on command edit
-                    },
-                    label = { Text("Shell Command(s)") },
-                    placeholder = { Text("echo 'Hello'\ninput tap 500 500\npm list packages") },
-                    minLines = 3,
-                    maxLines = 6,
-                    textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp),
-                    modifier = Modifier.fillMaxWidth()
-                )
 
                 // Shizuku status indicator card
                 val isPermRequired = shizukuStatus == com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED
@@ -350,118 +477,115 @@ fun ShellDialog(
                     }
                 }
 
-                // TEST COMMAND BUTTON
+                // Visual State: Enabled, Disabled, Toggle (Both)
+                Text("Tile Appearance & State", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = visualState == TileVisualState.ENABLED,
+                        onClick = { visualState = TileVisualState.ENABLED },
+                        label = { Text("Enabled", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = visualState == TileVisualState.DISABLED,
+                        onClick = { visualState = TileVisualState.DISABLED },
+                        label = { Text("Disabled", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = visualState == TileVisualState.TOGGLE,
+                        onClick = { visualState = TileVisualState.TOGGLE },
+                        label = { Text("Both", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Commands based on visual state
+                if (visualState == TileVisualState.TOGGLE) {
+                    ShellCommandInputField(
+                        label = "Enabled Command (turning ON)",
+                        command = onCommand,
+                        onCommandChange = { onCommand = it },
+                        selectedMode = selectedMode,
+                        placeholder = "e.g. svc wifi enable"
+                    )
+                    ShellCommandInputField(
+                        label = "Disabled Command (turning OFF)",
+                        command = offCommand,
+                        onCommandChange = { offCommand = it },
+                        selectedMode = selectedMode,
+                        placeholder = "e.g. svc wifi disable"
+                    )
+                } else if (visualState == TileVisualState.ENABLED) {
+                    ShellCommandInputField(
+                        label = "Shell Command (Enabled state)",
+                        command = onCommand,
+                        onCommandChange = { onCommand = it },
+                        selectedMode = selectedMode,
+                        placeholder = "e.g. echo 'Tile active'"
+                    )
+                } else {
+                    ShellCommandInputField(
+                        label = "Shell Command (Disabled state)",
+                        command = offCommand,
+                        onCommandChange = { offCommand = it },
+                        selectedMode = selectedMode,
+                        placeholder = "e.g. echo 'Tile inactive'"
+                    )
+                }
+
+                // Collapse notification panel on tap option
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { collapseOnTap = !collapseOnTap },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    OutlinedButton(
-                        onClick = {
-                            if (command.isNotBlank() && !isTesting) {
-                                isTesting = true
-                                testResult = null
-                                coroutineScope.launch {
-                                    val res = ShizukuHelper.executeCommand(
-                                        command = command.trim(),
-                                        mode = selectedMode
-                                    )
-                                    testResult = res
-                                    isTesting = false
-                                }
-                            }
-                        },
-                        enabled = command.isNotBlank() && !isTesting,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (isTesting) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Running Test...", fontSize = 12.sp)
-                        } else {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Test Command", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        }
+                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                        Text("Collapse panel on click", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Close Quick Settings drawer when tapped",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                }
-
-                // TEST RESULT CARD
-                testResult?.let { result ->
-                    val isSuccess = result.exitCode == 0
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isSuccess)
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                            else
-                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (isSuccess) Icons.Default.Check else Icons.Default.Error,
-                                        contentDescription = null,
-                                        tint = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = if (isSuccess) "Exit 0 (Success)" else "Exit ${result.exitCode}",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                                    )
-                                }
-                                Text(
-                                    text = "${result.executionMode} • ${result.durationMs}ms",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        MaterialTheme.colorScheme.surface,
-                                        RoundedCornerShape(6.dp)
-                                    )
-                                    .padding(8.dp)
-                            ) {
-                                Text(
-                                    text = if (result.output.isNotBlank()) result.output else "(No stdout or stderr produced)",
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 8
-                                )
-                            }
-                        }
-                    }
+                    Switch(
+                        checked = collapseOnTap,
+                        onCheckedChange = { collapseOnTap = it }
+                    )
                 }
             }
         },
         confirmButton = {
+            val canSave = when (visualState) {
+                TileVisualState.TOGGLE -> onCommand.isNotBlank() || offCommand.isNotBlank()
+                TileVisualState.ENABLED -> onCommand.isNotBlank()
+                TileVisualState.DISABLED -> offCommand.isNotBlank()
+            }
             Button(
                 onClick = {
-                    if (command.isNotBlank()) {
+                    if (canSave) {
                         val finalName = if (name.isNotBlank()) name else "Shell Command"
-                        onConfirm(finalName, command.trim())
+                        val effectiveCmd = when (visualState) {
+                            TileVisualState.TOGGLE -> onCommand.ifBlank { offCommand }
+                            TileVisualState.DISABLED -> offCommand
+                            TileVisualState.ENABLED -> onCommand
+                        }
+                        onConfirm(
+                            finalName,
+                            effectiveCmd.trim(),
+                            onCommand.trim(),
+                            offCommand.trim(),
+                            visualState,
+                            collapseOnTap
+                        )
                     }
                 },
-                enabled = command.isNotBlank()
+                enabled = canSave
             ) {
                 Text("Select")
             }

@@ -40,10 +40,18 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
         val item = repo.getTileBySlot(slotNumber)
 
         if (item != null && item.isActive) {
-            tile.state = Tile.STATE_ACTIVE
+            tile.state = when (item.visualState) {
+                com.wizzwuz.quicktiles.model.TileVisualState.ENABLED -> Tile.STATE_ACTIVE
+                com.wizzwuz.quicktiles.model.TileVisualState.DISABLED -> Tile.STATE_INACTIVE
+                com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+            }
             tile.label = item.name.ifBlank { "Tile $slotNumber" }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                tile.subtitle = item.type.name
+                tile.subtitle = when (item.visualState) {
+                    com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) "Enabled" else "Disabled"
+                    com.wizzwuz.quicktiles.model.TileVisualState.ENABLED -> "Enabled"
+                    com.wizzwuz.quicktiles.model.TileVisualState.DISABLED -> "Disabled"
+                }
             }
             try {
                 tile.icon = IconProcessor.createTileIcon(this, item.iconConfig)
@@ -118,6 +126,9 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                     val comp = ComponentName.unflattenFromString(item.targetData)
                     if (comp != null) {
                         serviceScope.launch {
+                            if (item.collapseOnTap) {
+                                mainHandler.post { collapseShade() }
+                            }
                             val res = AppHelper.launchActivityPrivileged(
                                 this@BaseTileService,
                                 comp.packageName,
@@ -149,16 +160,56 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
             }
             TileType.SHELL -> {
                 serviceScope.launch {
-                    val result = ShizukuHelper.executeCommand(item.targetData)
+                    val repo = TileRepository.getInstance(this@BaseTileService)
+                    val cmdToRun: String
+                    val nextToggleState: Boolean
+
+                    when (item.visualState) {
+                        com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> {
+                            if (item.currentToggleOn) {
+                                // Currently ON, toggle to OFF! Execute offCommand
+                                cmdToRun = if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                                nextToggleState = false
+                            } else {
+                                // Currently OFF, toggle to ON! Execute onCommand
+                                cmdToRun = if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                                nextToggleState = true
+                            }
+                            // Save updated toggle state in repository and update QS Tile UI
+                            val updatedItem = item.copy(currentToggleOn = nextToggleState)
+                            repo.saveTile(updatedItem)
+                            mainHandler.post {
+                                updateTileState()
+                            }
+                        }
+                        com.wizzwuz.quicktiles.model.TileVisualState.ENABLED -> {
+                            cmdToRun = if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                            nextToggleState = true
+                        }
+                        com.wizzwuz.quicktiles.model.TileVisualState.DISABLED -> {
+                            cmdToRun = if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                            nextToggleState = false
+                        }
+                    }
+
+                    if (item.collapseOnTap) {
+                        mainHandler.post { collapseShade() }
+                    }
+
+                    val result = ShizukuHelper.executeCommand(cmdToRun)
+                    val stateLabel = when (item.visualState) {
+                        com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> if (nextToggleState) "[ON] " else "[OFF] "
+                        else -> ""
+                    }
                     val msg = if (result.exitCode == 0) {
                         val snippet = result.output.take(80)
-                        "Shell (${result.executionMode}) Success: ${if (snippet.isNotBlank()) snippet else "OK"}"
+                        "Shell ${stateLabel}(${result.executionMode}) Success: ${if (snippet.isNotBlank()) snippet else "OK"}"
                     } else {
                         com.wizzwuz.quicktiles.util.LogManager.logError(
                             "TileExecution",
-                            "Tile '${item.name}' (Slot $slotNumber) Shell (${result.executionMode}) failed with exit code ${result.exitCode}: ${result.output}"
+                            "Tile '${item.name}' (Slot $slotNumber) Shell ${stateLabel}(${result.executionMode}) failed with exit code ${result.exitCode}: ${result.output}"
                         )
-                        "Shell (${result.executionMode}) Exit ${result.exitCode}: ${result.output.take(80)}"
+                        "Shell ${stateLabel}(${result.executionMode}) Exit ${result.exitCode}: ${result.output.take(80)}"
                     }
                     showToast(msg)
                 }
@@ -197,6 +248,29 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                     }
                 }
             }
+        }
+    }
+
+    private fun collapseShade() {
+        try {
+            val intent = Intent(this, com.wizzwuz.quicktiles.ui.InternalPluginActivity::class.java).apply {
+                action = "collapse_panel"
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val pendingIntent = PendingIntent.getActivity(
+                    this,
+                    slotNumber + 1000,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                startActivityAndCollapse(pendingIntent)
+            } else {
+                @Suppress("DEPRECATION")
+                startActivityAndCollapse(intent)
+            }
+        } catch (e: Throwable) {
+            // Ignore collapse error
         }
     }
 

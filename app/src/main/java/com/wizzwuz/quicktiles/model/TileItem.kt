@@ -50,6 +50,12 @@ data class IconConfig(
     }
 }
 
+enum class TileVisualState(val label: String) {
+    ENABLED("Always Enabled"),
+    DISABLED("Always Disabled"),
+    TOGGLE("Toggle (Both)")
+}
+
 data class TileItem(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
@@ -58,7 +64,12 @@ data class TileItem(
     val iconConfig: IconConfig = IconConfig(),
     val isActive: Boolean = true,
     val slotNumber: Int = -1,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val visualState: TileVisualState = TileVisualState.ENABLED,
+    val onCommand: String = "",
+    val offCommand: String = "",
+    val currentToggleOn: Boolean = true,
+    val collapseOnTap: Boolean = true
 ) {
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -70,6 +81,11 @@ data class TileItem(
             put("isActive", isActive)
             put("slotNumber", slotNumber)
             put("createdAt", createdAt)
+            put("visualState", visualState.name)
+            put("onCommand", onCommand)
+            put("offCommand", offCommand)
+            put("currentToggleOn", currentToggleOn)
+            put("collapseOnTap", collapseOnTap)
         }
     }
 
@@ -83,7 +99,12 @@ data class TileItem(
                 iconConfig = if (json.has("iconConfig")) IconConfig.fromJson(json.getJSONObject("iconConfig")) else IconConfig(),
                 isActive = json.optBoolean("isActive", true),
                 slotNumber = json.optInt("slotNumber", -1),
-                createdAt = json.optLong("createdAt", System.currentTimeMillis())
+                createdAt = json.optLong("createdAt", System.currentTimeMillis()),
+                visualState = try { TileVisualState.valueOf(json.optString("visualState", "ENABLED")) } catch (e: Exception) { TileVisualState.ENABLED },
+                onCommand = json.optString("onCommand", ""),
+                offCommand = json.optString("offCommand", ""),
+                currentToggleOn = json.optBoolean("currentToggleOn", true),
+                collapseOnTap = json.optBoolean("collapseOnTap", true)
             )
         }
     }

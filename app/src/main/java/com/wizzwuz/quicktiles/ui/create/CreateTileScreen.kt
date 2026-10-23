@@ -34,6 +34,7 @@ import com.wizzwuz.quicktiles.model.IconConfig
 import com.wizzwuz.quicktiles.model.IconSourceType
 import com.wizzwuz.quicktiles.model.TileItem
 import com.wizzwuz.quicktiles.model.TileType
+import com.wizzwuz.quicktiles.model.TileVisualState
 import com.wizzwuz.quicktiles.util.IconProcessor
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,6 +50,24 @@ fun CreateTileScreen(
     var tileName by remember { mutableStateOf(initialTile?.name ?: "") }
     var selectedType by remember { mutableStateOf<TileType?>(initialTile?.type) }
     var targetData by remember { mutableStateOf(initialTile?.targetData ?: "") }
+
+    var visualState by remember { mutableStateOf(initialTile?.visualState ?: TileVisualState.ENABLED) }
+    var onCommand by remember {
+        mutableStateOf(
+            initialTile?.onCommand?.ifBlank {
+                if (initialTile.type == TileType.SHELL && initialTile.visualState != TileVisualState.DISABLED) initialTile.targetData else ""
+            } ?: (if (initialTile?.type == TileType.SHELL && initialTile.visualState != TileVisualState.DISABLED) initialTile.targetData else "")
+        )
+    }
+    var offCommand by remember {
+        mutableStateOf(
+            initialTile?.offCommand?.ifBlank {
+                if (initialTile.type == TileType.SHELL && initialTile.visualState == TileVisualState.DISABLED) initialTile.targetData else ""
+            } ?: (if (initialTile?.type == TileType.SHELL && initialTile.visualState == TileVisualState.DISABLED) initialTile.targetData else "")
+        )
+    }
+    var collapseOnTap by remember { mutableStateOf(initialTile?.collapseOnTap ?: true) }
+    var currentToggleOn by remember { mutableStateOf(initialTile?.currentToggleOn ?: true) }
 
     // Icon state
     var iconConfig by remember { mutableStateOf(initialTile?.iconConfig ?: IconConfig()) }
@@ -124,6 +143,52 @@ fun CreateTileScreen(
         IconProcessor.processIconBitmap(context, iconConfig, targetPixelSize = 120)
     }
 
+    val saveTileAction = {
+        if (tileName.isBlank()) {
+            Toast.makeText(context, "Please enter a tile name", Toast.LENGTH_SHORT).show()
+        } else if (selectedType == null) {
+            Toast.makeText(context, "Please select and configure a tile type", Toast.LENGTH_SHORT).show()
+        } else {
+            val effectiveTargetData = if (selectedType == TileType.SHELL) {
+                when (visualState) {
+                    TileVisualState.TOGGLE -> onCommand.ifBlank { offCommand.ifBlank { targetData } }
+                    TileVisualState.DISABLED -> offCommand.ifBlank { onCommand.ifBlank { targetData } }
+                    TileVisualState.ENABLED -> onCommand.ifBlank { targetData }
+                }
+            } else {
+                targetData
+            }
+
+            if (effectiveTargetData.isBlank()) {
+                Toast.makeText(context, "Please configure tile command or target data", Toast.LENGTH_SHORT).show()
+            } else {
+                val tile = (initialTile ?: TileItem(
+                    name = tileName.trim(),
+                    type = selectedType!!,
+                    targetData = effectiveTargetData.trim(),
+                    iconConfig = iconConfig,
+                    isActive = true,
+                    visualState = visualState,
+                    onCommand = onCommand.trim(),
+                    offCommand = offCommand.trim(),
+                    currentToggleOn = currentToggleOn,
+                    collapseOnTap = collapseOnTap
+                )).copy(
+                    name = tileName.trim(),
+                    type = selectedType!!,
+                    targetData = effectiveTargetData.trim(),
+                    iconConfig = iconConfig,
+                    visualState = visualState,
+                    onCommand = onCommand.trim(),
+                    offCommand = offCommand.trim(),
+                    currentToggleOn = currentToggleOn,
+                    collapseOnTap = collapseOnTap
+                )
+                onSaveTile(tile)
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -134,31 +199,7 @@ fun CreateTileScreen(
                     }
                 },
                 actions = {
-                    TextButton(
-                        onClick = {
-                            if (tileName.isBlank()) {
-                                Toast.makeText(context, "Please enter a tile name", Toast.LENGTH_SHORT).show()
-                                return@TextButton
-                            }
-                            if (selectedType == null || targetData.isBlank()) {
-                                Toast.makeText(context, "Please configure a tile type", Toast.LENGTH_SHORT).show()
-                                return@TextButton
-                            }
-                            val tile = (initialTile ?: TileItem(
-                                name = tileName.trim(),
-                                type = selectedType!!,
-                                targetData = targetData,
-                                iconConfig = iconConfig,
-                                isActive = true
-                            )).copy(
-                                name = tileName.trim(),
-                                type = selectedType!!,
-                                targetData = targetData,
-                                iconConfig = iconConfig
-                            )
-                            onSaveTile(tile)
-                        }
-                    ) {
+                    TextButton(onClick = saveTileAction) {
                         Text("Save", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 }
@@ -456,32 +497,190 @@ fun CreateTileScreen(
                 }
             }
 
+            // --- TILE BEHAVIOR & APPEARANCE (BELOW TILE CATEGORIES) ---
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(
+                        text = "Tile Behavior & Appearance",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    // 1. Visual State Selector: Enabled / Disabled / Both (Toggle)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Tile Appearance in Quick Settings",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = when (visualState) {
+                                TileVisualState.ENABLED -> "Tile is permanently highlighted (active state)"
+                                TileVisualState.DISABLED -> "Tile is permanently dimmed (inactive state)"
+                                TileVisualState.TOGGLE -> "Tile dynamically switches between enabled and disabled on tap"
+                            },
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = visualState == TileVisualState.ENABLED,
+                                onClick = { visualState = TileVisualState.ENABLED },
+                                label = { Text("Enabled", fontSize = 12.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = visualState == TileVisualState.DISABLED,
+                                onClick = { visualState = TileVisualState.DISABLED },
+                                label = { Text("Disabled", fontSize = 12.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Cancel,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = visualState == TileVisualState.TOGGLE,
+                                onClick = { visualState = TileVisualState.TOGGLE },
+                                label = { Text("Both", fontSize = 12.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Sync,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    // 2. Shell Command Configuration & Testing (when Shell tile is active)
+                    if (selectedType == TileType.SHELL) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+
+                        Text(
+                            text = "Shell Commands",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+
+                        if (visualState == TileVisualState.TOGGLE) {
+                            Text(
+                                text = "Provide separate commands to execute when switching ON vs switching OFF:",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            ShellCommandInputField(
+                                label = "Enabled Command (turning ON)",
+                                command = onCommand,
+                                onCommandChange = {
+                                    onCommand = it
+                                    if (targetData.isBlank() || targetData == offCommand) {
+                                        targetData = it
+                                    }
+                                },
+                                placeholder = "e.g. settings put global airplane_mode_on 1"
+                            )
+
+                            ShellCommandInputField(
+                                label = "Disabled Command (turning OFF)",
+                                command = offCommand,
+                                onCommandChange = { offCommand = it },
+                                placeholder = "e.g. settings put global airplane_mode_on 0"
+                            )
+                        } else if (visualState == TileVisualState.ENABLED) {
+                            Text(
+                                text = "Command executed when the enabled tile is tapped:",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            ShellCommandInputField(
+                                label = "Shell Command (Enabled state)",
+                                command = onCommand.ifBlank { targetData },
+                                onCommandChange = {
+                                    onCommand = it
+                                    targetData = it
+                                },
+                                placeholder = "e.g. input tap 500 500\npm list packages"
+                            )
+                        } else {
+                            Text(
+                                text = "Command executed when the disabled tile is tapped:",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            ShellCommandInputField(
+                                label = "Shell Command (Disabled state)",
+                                command = offCommand.ifBlank { targetData },
+                                onCommandChange = {
+                                    offCommand = it
+                                    targetData = it
+                                },
+                                placeholder = "e.g. svc wifi disable"
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+
+                    // 3. Collapse notification shade on tap option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { collapseOnTap = !collapseOnTap },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text(
+                                text = "Collapse panel on click",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Automatically close Quick Settings notification shade after tapping this tile",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = collapseOnTap,
+                            onCheckedChange = { collapseOnTap = it }
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
-                onClick = {
-                    if (tileName.isBlank()) {
-                        Toast.makeText(context, "Please enter a tile name", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    if (selectedType == null || targetData.isBlank()) {
-                        Toast.makeText(context, "Please select and configure a tile type", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    val tile = (initialTile ?: TileItem(
-                        name = tileName.trim(),
-                        type = selectedType!!,
-                        targetData = targetData,
-                        iconConfig = iconConfig,
-                        isActive = true
-                    )).copy(
-                        name = tileName.trim(),
-                        type = selectedType!!,
-                        targetData = targetData,
-                        iconConfig = iconConfig
-                    )
-                    onSaveTile(tile)
-                },
+                onClick = saveTileAction,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
@@ -567,12 +766,20 @@ fun CreateTileScreen(
     if (showShellDialog) {
         ShellDialog(
             initialName = tileName,
-            initialCommand = if (selectedType == TileType.SHELL) targetData else "",
+            initialCommand = targetData,
+            initialOnCommand = onCommand,
+            initialOffCommand = offCommand,
+            initialVisualState = visualState,
+            initialCollapseOnTap = collapseOnTap,
             onDismiss = { showShellDialog = false },
-            onConfirm = { name, cmd ->
+            onConfirm = { name, cmd, onCmd, offCmd, vState, collapse ->
                 showShellDialog = false
                 selectedType = TileType.SHELL
                 targetData = cmd
+                onCommand = onCmd
+                offCommand = offCmd
+                visualState = vState
+                collapseOnTap = collapse
                 if (tileName.isBlank()) tileName = name
                 iconConfig = iconConfig.copy(
                     sourceType = IconSourceType.PRESET,
