@@ -101,6 +101,7 @@ fun WebsiteDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShortcutDialog(
     onDismiss: () -> Unit,
@@ -111,6 +112,7 @@ fun ShortcutDialog(
     var isLoading by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
     val expandedApps = remember { mutableStateMapOf<String, Boolean>() }
+    var isSearchExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         appsWithShortcuts = com.wizzwuz.quicktiles.util.AppHelper.getAppsWithShortcuts(context)
@@ -141,52 +143,66 @@ fun ShortcutDialog(
         }
     }
 
-    Dialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = true)
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
-        Card(
-            modifier = androidx.compose.ui.Modifier
-                .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.85f),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.88f)
+                .padding(horizontal = 16.dp)
         ) {
-            Column(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
-                // Header with title and close X button
-                Row(
-                    modifier = androidx.compose.ui.Modifier
-                        .fillMaxWidth()
-                        .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 0.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = androidx.compose.ui.Modifier.weight(1f)) {
+            // Header: Title, shortcut count, search button, and close X button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "App Shortcuts",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (!isLoading) {
                         Text(
-                            text = "App Shortcuts",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (!isLoading) {
-                            Text(
-                                text = "${filteredApps.size} apps with shortcuts",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Filled.Close,
-                            contentDescription = "Close",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = "${filteredApps.size} apps with shortcuts",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                HorizontalDivider(modifier = androidx.compose.ui.Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                // Search toggle button in the floating menu
+                IconButton(onClick = {
+                    isSearchExpanded = !isSearchExpanded
+                    if (!isSearchExpanded) searchQuery = ""
+                }) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Filled.Search,
+                        contentDescription = "Search shortcuts",
+                        tint = if (isSearchExpanded || searchQuery.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-                // Search bar
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Filled.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Search bar: visible when search button is toggled or when searchQuery is non-empty
+            AnimatedVisibility(visible = isSearchExpanded || searchQuery.isNotEmpty()) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -195,7 +211,7 @@ fun ShortcutDialog(
                         Icon(
                             imageVector = androidx.compose.material.icons.Icons.Filled.Search,
                             contentDescription = "Search",
-                            modifier = androidx.compose.ui.Modifier.size(20.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     },
                     trailingIcon = {
@@ -204,198 +220,205 @@ fun ShortcutDialog(
                                 Icon(
                                     imageVector = androidx.compose.material.icons.Icons.Filled.Close,
                                     contentDescription = "Clear",
-                                    modifier = androidx.compose.ui.Modifier.size(18.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
                     },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
-                    modifier = androidx.compose.ui.Modifier
+                    modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .padding(bottom = 8.dp)
                 )
+            }
 
-                // Content
-                when {
-                    isLoading -> {
-                        Box(
-                            modifier = androidx.compose.ui.Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator()
-                                Spacer(modifier = androidx.compose.ui.Modifier.height(12.dp))
-                                Text("Loading app shortcuts...", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+            // Content
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator()
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Loading app shortcuts...", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    filteredApps.isEmpty() && appsWithShortcuts.isEmpty() -> {
-                        Box(
-                            modifier = androidx.compose.ui.Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "No apps with shortcuts found on this device.",
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = androidx.compose.ui.Modifier.padding(24.dp)
-                            )
-                        }
+                }
+                filteredApps.isEmpty() && appsWithShortcuts.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "No apps with shortcuts found on this device.",
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(24.dp)
+                        )
                     }
-                    filteredApps.isEmpty() -> {
-                        Box(
-                            modifier = androidx.compose.ui.Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
+                }
+                filteredApps.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 "No results for \"$searchQuery\"",
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = androidx.compose.ui.Modifier.padding(24.dp)
+                                modifier = Modifier.padding(16.dp)
                             )
+                            TextButton(onClick = { searchQuery = "" }) {
+                                Text("Clear search")
+                            }
                         }
                     }
-                    else -> {
-                        LazyColumn(
-                            modifier = androidx.compose.ui.Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                            contentPadding = PaddingValues(bottom = 12.dp, top = 4.dp)
-                        ) {
-                            items(filteredApps) { app ->
-                                val isExpanded = expandedApps[app.packageName] == true
-                                val matchingShortcuts = if (searchQuery.isBlank()) app.shortcuts else {
-                                    val q = searchQuery.trim().lowercase()
-                                    app.shortcuts.filter { s ->
-                                        s.label.lowercase().contains(q) ||
-                                        (s.longLabel?.lowercase()?.contains(q) == true)
-                                    }.ifEmpty { app.shortcuts }
-                                }
+                }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp, top = 4.dp)
+                    ) {
+                        items(filteredApps, key = { it.packageName }) { app ->
+                            val isExpanded = expandedApps[app.packageName] == true
+                            val matchingShortcuts = if (searchQuery.isBlank()) app.shortcuts else {
+                                val q = searchQuery.trim().lowercase()
+                                app.shortcuts.filter { s ->
+                                    s.label.lowercase().contains(q) ||
+                                    (s.longLabel?.lowercase()?.contains(q) == true)
+                                }.ifEmpty { app.shortcuts }
+                            }
 
-                                Card(
-                                    modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(14.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                    )
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isExpanded)
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                                    else
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                )
+                            ) {
+                                // App header row (tap to expand/collapse dropdown menu)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { expandedApps[app.packageName] = !isExpanded }
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    // App header row (tap to expand/collapse)
-                                    Row(
-                                        modifier = androidx.compose.ui.Modifier
-                                            .fillMaxWidth()
-                                            .clickable { expandedApps[app.packageName] = !isExpanded }
-                                            .padding(10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        // App icon
-                                        val appBmp = remember(app.packageName) {
-                                            IconProcessor.drawableToBitmap(app.appIcon, 80, 80)
-                                        }
-                                        Image(
-                                            bitmap = appBmp.asImageBitmap(),
-                                            contentDescription = app.appLabel,
-                                            modifier = androidx.compose.ui.Modifier
-                                                .size(40.dp)
-                                                .clip(RoundedCornerShape(8.dp))
+                                    val appBmp = remember(app.packageName) {
+                                        IconProcessor.drawableToBitmap(app.appIcon, 80, 80)
+                                    }
+                                    Image(
+                                        bitmap = appBmp.asImageBitmap(),
+                                        contentDescription = app.appLabel,
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                    )
+
+                                    // App name + shortcut count
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = app.appLabel,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 15.sp,
+                                            maxLines = 1
                                         )
-
-                                        // App name + shortcut count
-                                        Column(modifier = androidx.compose.ui.Modifier.weight(1f)) {
-                                            Text(
-                                                text = app.appLabel,
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize = 14.sp,
-                                                maxLines = 1
-                                            )
-                                            Text(
-                                                text = "${app.shortcuts.size} shortcut${if (app.shortcuts.size != 1) "s" else ""}",
-                                                fontSize = 11.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-
-                                        // Dropdown arrow
-                                        Icon(
-                                            imageVector = if (isExpanded)
-                                                androidx.compose.material.icons.Icons.Filled.KeyboardArrowUp
-                                            else
-                                                androidx.compose.material.icons.Icons.Filled.KeyboardArrowDown,
-                                            contentDescription = if (isExpanded) "Collapse" else "Expand",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        Text(
+                                            text = "${app.shortcuts.size} shortcut${if (app.shortcuts.size != 1) "s" else ""}",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
 
-                                    // Expanded shortcuts list
-                                    if (isExpanded) {
+                                    // Dropdown arrow
+                                    Icon(
+                                        imageVector = if (isExpanded)
+                                            androidx.compose.material.icons.Icons.Filled.KeyboardArrowUp
+                                        else
+                                            androidx.compose.material.icons.Icons.Filled.KeyboardArrowDown,
+                                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                // Drop down menu (Expanded shortcuts list)
+                                AnimatedVisibility(visible = isExpanded) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 6.dp)
+                                    ) {
                                         HorizontalDivider(
-                                            modifier = androidx.compose.ui.Modifier.padding(horizontal = 8.dp),
+                                            modifier = Modifier.padding(horizontal = 12.dp),
                                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                         )
-                                        Column(
-                                            modifier = androidx.compose.ui.Modifier.padding(bottom = 6.dp)
-                                        ) {
-                                            matchingShortcuts.forEach { shortcut ->
-                                                Row(
-                                                    modifier = androidx.compose.ui.Modifier
-                                                        .fillMaxWidth()
-                                                        .clickable {
-                                                            onSelect(
-                                                                shortcut.label,
-                                                                shortcut.intentUri,
-                                                                shortcut.packageName,
-                                                                shortcut.iconBitmap
-                                                            )
-                                                        }
-                                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                                ) {
-                                                    // Shortcut icon or fallback
-                                                    if (shortcut.iconBitmap != null) {
-                                                        Image(
-                                                            bitmap = shortcut.iconBitmap.asImageBitmap(),
-                                                            contentDescription = shortcut.label,
-                                                            modifier = androidx.compose.ui.Modifier
-                                                                .size(32.dp)
-                                                                .clip(RoundedCornerShape(6.dp))
-                                                        )
-                                                    } else {
-                                                        Icon(
-                                                            imageVector = androidx.compose.material.icons.Icons.Filled.OpenInNew,
-                                                            contentDescription = shortcut.label,
-                                                            modifier = androidx.compose.ui.Modifier.size(32.dp),
-                                                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                        matchingShortcuts.forEach { shortcut ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        onSelect(
+                                                            shortcut.label,
+                                                            shortcut.intentUri,
+                                                            shortcut.packageName,
+                                                            shortcut.iconBitmap
                                                         )
                                                     }
-
-                                                    // Shortcut label + long label
-                                                    Column(modifier = androidx.compose.ui.Modifier.weight(1f)) {
-                                                        Text(
-                                                            text = shortcut.label,
-                                                            fontWeight = FontWeight.Medium,
-                                                            fontSize = 13.sp,
-                                                            maxLines = 1
-                                                        )
-                                                        if (!shortcut.longLabel.isNullOrBlank() && shortcut.longLabel != shortcut.label) {
-                                                            Text(
-                                                                text = shortcut.longLabel,
-                                                                fontSize = 11.sp,
-                                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                                maxLines = 1
-                                                            )
-                                                        }
-                                                    }
-
+                                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                // Shortcut icon (with app icon fallback)
+                                                if (shortcut.iconBitmap != null) {
+                                                    Image(
+                                                        bitmap = shortcut.iconBitmap.asImageBitmap(),
+                                                        contentDescription = shortcut.label,
+                                                        modifier = Modifier
+                                                            .size(36.dp)
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                    )
+                                                } else {
                                                     Icon(
-                                                        imageVector = androidx.compose.material.icons.Icons.Filled.ChevronRight,
-                                                        contentDescription = "Select",
-                                                        modifier = androidx.compose.ui.Modifier.size(18.dp),
-                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                                        imageVector = androidx.compose.material.icons.Icons.Filled.OpenInNew,
+                                                        contentDescription = shortcut.label,
+                                                        modifier = Modifier.size(36.dp),
+                                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
                                                     )
                                                 }
+
+                                                // Shortcut label + long label
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = shortcut.label,
+                                                        fontWeight = FontWeight.Medium,
+                                                        fontSize = 14.sp,
+                                                        maxLines = 1
+                                                    )
+                                                    if (!shortcut.longLabel.isNullOrBlank() && shortcut.longLabel != shortcut.label) {
+                                                        Text(
+                                                            text = shortcut.longLabel,
+                                                            fontSize = 11.sp,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            maxLines = 1
+                                                        )
+                                                    }
+                                                }
+
+                                                Icon(
+                                                    imageVector = androidx.compose.material.icons.Icons.Filled.ChevronRight,
+                                                    contentDescription = "Select",
+                                                    modifier = Modifier.size(20.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                                )
                                             }
                                         }
                                     }

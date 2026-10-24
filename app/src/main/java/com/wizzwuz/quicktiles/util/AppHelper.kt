@@ -8,6 +8,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.util.TypedValue
@@ -401,163 +402,241 @@ object AppHelper {
      * <meta-data android:name="android.app.shortcuts"> in their launcher activities.
      * Parses the shortcuts XML resource to extract label, long label, icon, and intent.
      */
+    /**
+     * Extracts all apps that have shortcuts defined in their manifest
+     * via <meta-data android:name="android.app.shortcuts">.
+     * Parses the shortcuts XML resource to extract label, long label, icon, and intent.
+     */
     suspend fun getAppsWithShortcuts(context: Context): List<AppWithShortcuts> = withContext(Dispatchers.IO) {
         val cacheKey = "all"
         shortcutsCache[cacheKey]?.let { return@withContext it }
 
         val pm = context.packageManager
+
+        // 1. Gather candidate components from launcher activities (includes aliases)
+        val launcherIntent = Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
+        val launcherActivities = try {
+            pm.queryIntentActivities(launcherIntent, PackageManager.MATCH_ALL)
+        } catch (e: Throwable) {
+            try { pm.queryIntentActivities(launcherIntent, 0) } catch (e: Throwable) { emptyList() }
+        }
+
+        // Map of packageName -> Set of ComponentName candidates
+        val packageComponents = mutableMapOf<String, MutableSet<ComponentName>>()
+        for (resolveInfo in launcherActivities) {
+            val actInfo = resolveInfo.activityInfo ?: continue
+            val pkg = actInfo.packageName ?: continue
+            packageComponents.getOrPut(pkg) { mutableSetOf() }.add(ComponentName(pkg, actInfo.name))
+        }
+
+        // 2. Also query all installed packages to ensure any app declaring shortcuts
+        // on non-launcher activities is not missed
+        val installedPackages = try {
+            pm.getInstalledPackages(PackageManager.GET_ACTIVITIES or PackageManager.GET_META_DATA)
+        } catch (e: Throwable) {
+            emptyList()
+        }
+        for (pkgInfo in installedPackages) {
+            val pkg = pkgInfo.packageName ?: continue
+            val activities = pkgInfo.activities ?: continue
+            for (act in activities) {
+                if (act.metaData?.containsKey("android.app.shortcuts") == true) {
+                    packageComponents.getOrPut(pkg) { mutableSetOf() }.add(ComponentName(pkg, act.name))
+                }
+            }
+        }
+
         val result = mutableListOf<AppWithShortcuts>()
 
-        // Query all launcher activities (they declare shortcuts in their meta-data)
-        val launcherIntent = Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
-        val launcherApps = pm.queryIntentActivities(launcherIntent, PackageManager.GET_META_DATA)
-
-        // Group by package (each package appears once even if multiple activities)
-        val processedPkgs = mutableSetOf<String>()
-
-        for (resolveInfo in launcherApps) {
-            val actInfo = resolveInfo.activityInfo ?: continue
-            val pkg = actInfo.packageName
-            if (pkg in processedPkgs) continue
-            processedPkgs.add(pkg)
-
-            val metaData = actInfo.metaData ?: continue
-            val shortcutsResId = metaData.getInt("android.app.shortcuts", 0)
-            if (shortcutsResId == 0) continue
-
-            try {
-                val appLabel = try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (e: Throwable) { pkg }
-                val appIcon = try { pm.getApplicationIcon(pkg) } catch (e: Throwable) { pm.defaultActivityIcon }
-                val appRes = pm.getResourcesForApplication(pkg)
-
-                val shortcuts = mutableListOf<AppShortcutItem>()
-                val parser = appRes.getXml(shortcutsResId)
-
-                var shortcutId = ""
-                var shortcutLabel = ""
-                var shortcutLongLabel: String? = null
-                var shortcutIconResId = 0
-                var insideShortcut = false
-                val intents = mutableListOf<Intent>()
-
-                var eventType = parser.eventType
-                while (eventType != XmlPullParser.END_DOCUMENT) {
-                    val tagName = parser.name ?: ""
-
-                    when {
-                        eventType == XmlPullParser.START_TAG && tagName == "shortcut" -> {
-                            insideShortcut = true
-                            shortcutId = ""
-                            shortcutLabel = ""
-                            shortcutLongLabel = null
-                            shortcutIconResId = 0
-                            intents.clear()
-
-                            // Parse shortcut attributes
-                            for (i in 0 until parser.attributeCount) {
-                                val attrName = parser.getAttributeName(i)
-                                val attrValue = parser.getAttributeValue(i)
-                                when (attrName) {
-                                    "shortcutId" -> shortcutId = attrValue ?: ""
-                                    "shortcutShortLabel" -> {
-                                        val resId = parser.getAttributeResourceValue(i, 0)
-                                        shortcutLabel = if (resId != 0) {
-                                            try { appRes.getString(resId) } catch (e: Throwable) { attrValue ?: "" }
-                                        } else { attrValue ?: "" }
-                                    }
-                                    "shortcutLongLabel" -> {
-                                        val resId = parser.getAttributeResourceValue(i, 0)
-                                        shortcutLongLabel = if (resId != 0) {
-                                            try { appRes.getString(resId) } catch (e: Throwable) { attrValue }
-                                        } else { attrValue }
-                                    }
-                                    "icon" -> {
-                                        shortcutIconResId = parser.getAttributeResourceValue(i, 0)
-                                    }
-                                }
-                            }
-                        }
-
-                        eventType == XmlPullParser.START_TAG && tagName == "intent" && insideShortcut -> {
-                            var action = "android.intent.action.MAIN"
-                            var intentPkg = pkg
-                            var intentClass = ""
-                            val extras = mutableMapOf<String, String>()
-
-                            for (i in 0 until parser.attributeCount) {
-                                val attrName = parser.getAttributeName(i)
-                                val attrValue = parser.getAttributeValue(i)
-                                when (attrName) {
-                                    "action" -> action = attrValue?.removePrefix("android.intent.action.").let { "android.intent.action.$it" } ?: action
-                                    "targetPackage" -> intentPkg = attrValue ?: pkg
-                                    "targetClass" -> intentClass = attrValue ?: ""
-                                }
-                            }
-
-                            // Fix fully-qualified action strings that arrive as raw attr values
-                            for (i in 0 until parser.attributeCount) {
-                                val attrName = parser.getAttributeName(i)
-                                val attrValue = parser.getAttributeValue(i) ?: continue
-                                when (attrName) {
-                                    "action" -> action = attrValue
-                                    "targetPackage" -> intentPkg = attrValue
-                                    "targetClass" -> intentClass = attrValue
-                                }
-                            }
-
-                            try {
-                                val intent = Intent(action).apply {
-                                    if (intentClass.isNotBlank()) {
-                                        component = ComponentName(intentPkg, intentClass)
-                                    } else {
-                                        setPackage(intentPkg)
-                                    }
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                intents.add(intent)
-                            } catch (e: Throwable) { /* skip malformed intent */ }
-                        }
-
-                        eventType == XmlPullParser.END_TAG && tagName == "shortcut" && insideShortcut -> {
-                            insideShortcut = false
-                            if (shortcutLabel.isNotBlank() && intents.isNotEmpty()) {
-                                // Resolve icon
-                                val iconBitmap: Bitmap? = if (shortcutIconResId != 0) {
-                                    try {
-                                        val drawable = appRes.getDrawable(shortcutIconResId, null)
-                                        IconProcessor.drawableToBitmap(drawable, 96, 96)
-                                    } catch (e: Throwable) { null }
-                                } else null
-
-                                // Build intent URI from the primary intent
-                                val primaryIntent = intents.first()
-                                val intentUri = try { primaryIntent.toUri(Intent.URI_INTENT_SCHEME) } catch (e: Throwable) { "" }
-
-                                if (intentUri.isNotBlank()) {
-                                    shortcuts.add(
-                                        AppShortcutItem(
-                                            id = shortcutId,
-                                            label = shortcutLabel,
-                                            longLabel = shortcutLongLabel,
-                                            iconBitmap = iconBitmap,
-                                            intentUri = intentUri,
-                                            packageName = pkg
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    eventType = parser.next()
-                }
-                parser.close()
-
-                if (shortcuts.isNotEmpty()) {
-                    result.add(AppWithShortcuts(appLabel, pkg, appIcon, shortcuts))
-                }
+        for ((pkg, components) in packageComponents) {
+            val appLabel = try {
+                val appInfo = pm.getApplicationInfo(pkg, 0)
+                pm.getApplicationLabel(appInfo).toString()
             } catch (e: Throwable) {
-                // Skip apps whose shortcut XML fails to parse
+                pkg
+            }
+
+            val appIcon = try {
+                pm.getApplicationIcon(pkg)
+            } catch (e: Throwable) {
+                pm.defaultActivityIcon
+            }
+
+            val appIconBitmap = try {
+                IconProcessor.drawableToBitmap(appIcon, 96, 96)
+            } catch (e: Throwable) {
+                null
+            }
+
+            val appShortcuts = mutableListOf<AppShortcutItem>()
+            val seenShortcutIds = mutableSetOf<String>()
+
+            for (comp in components) {
+                val actInfo = try {
+                    pm.getActivityInfo(comp, PackageManager.GET_META_DATA)
+                } catch (e: Throwable) {
+                    null
+                } ?: continue
+
+                val metaData = actInfo.metaData ?: continue
+                val shortcutsResId = try {
+                    when (val raw = metaData.get("android.app.shortcuts")) {
+                        is Int -> raw
+                        is Number -> raw.toInt()
+                        else -> metaData.getInt("android.app.shortcuts", 0)
+                    }
+                } catch (e: Throwable) {
+                    0
+                }
+
+                if (shortcutsResId == 0) continue
+
+                try {
+                    val appRes = pm.getResourcesForApplication(pkg)
+                    val parser = appRes.getXml(shortcutsResId)
+
+                    var shortcutId = ""
+                    var shortcutLabel = ""
+                    var shortcutLongLabel: String? = null
+                    var shortcutIconResId = 0
+                    var insideShortcut = false
+                    val intents = mutableListOf<Intent>()
+
+                    var eventType = parser.eventType
+                    while (eventType != XmlPullParser.END_DOCUMENT) {
+                        val tagName = parser.name ?: ""
+
+                        when {
+                            eventType == XmlPullParser.START_TAG && tagName == "shortcut" -> {
+                                insideShortcut = true
+                                shortcutId = ""
+                                shortcutLabel = ""
+                                shortcutLongLabel = null
+                                shortcutIconResId = 0
+                                intents.clear()
+
+                                for (i in 0 until parser.attributeCount) {
+                                    val attrName = parser.getAttributeName(i).substringAfterLast(":")
+                                    val attrValue = parser.getAttributeValue(i)
+                                    when (attrName) {
+                                        "shortcutId" -> shortcutId = attrValue ?: ""
+                                        "shortcutShortLabel" -> {
+                                            val resId = parser.getAttributeResourceValue(i, 0)
+                                            shortcutLabel = if (resId != 0) {
+                                                try { appRes.getString(resId) } catch (e: Throwable) { attrValue ?: "" }
+                                            } else { attrValue ?: "" }
+                                        }
+                                        "shortcutLongLabel" -> {
+                                            val resId = parser.getAttributeResourceValue(i, 0)
+                                            shortcutLongLabel = if (resId != 0) {
+                                                try { appRes.getString(resId) } catch (e: Throwable) { attrValue }
+                                            } else { attrValue }
+                                        }
+                                        "icon" -> {
+                                            shortcutIconResId = parser.getAttributeResourceValue(i, 0)
+                                            if (shortcutIconResId == 0 && attrValue?.startsWith("@") == true) {
+                                                try { shortcutIconResId = attrValue.substring(1).toInt() } catch (e: Throwable) {}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            eventType == XmlPullParser.START_TAG && tagName == "intent" && insideShortcut -> {
+                                var action = "android.intent.action.MAIN"
+                                var intentPkg = pkg
+                                var intentClass = ""
+                                var intentData: String? = null
+
+                                for (i in 0 until parser.attributeCount) {
+                                    val attrName = parser.getAttributeName(i).substringAfterLast(":")
+                                    val attrValue = parser.getAttributeValue(i) ?: continue
+                                    when (attrName) {
+                                        "action" -> action = attrValue
+                                        "targetPackage" -> intentPkg = attrValue
+                                        "targetClass" -> intentClass = attrValue
+                                        "data" -> intentData = attrValue
+                                    }
+                                }
+
+                                if (!action.contains(".")) {
+                                    action = "android.intent.action.$action"
+                                }
+
+                                try {
+                                    val intent = Intent(action).apply {
+                                        if (intentClass.isNotBlank()) {
+                                            component = ComponentName(intentPkg, intentClass)
+                                        } else {
+                                            setPackage(intentPkg)
+                                        }
+                                        if (!intentData.isNullOrBlank()) {
+                                            data = Uri.parse(intentData)
+                                        }
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    intents.add(intent)
+                                } catch (e: Throwable) { /* skip malformed intent */ }
+                            }
+
+                            eventType == XmlPullParser.END_TAG && tagName == "shortcut" && insideShortcut -> {
+                                insideShortcut = false
+
+                                val effectiveLabel = when {
+                                    shortcutLabel.isNotBlank() -> shortcutLabel
+                                    !shortcutLongLabel.isNullOrBlank() -> shortcutLongLabel
+                                    shortcutId.isNotBlank() -> shortcutId.replace("_", " ").replace("-", " ")
+                                        .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+                                    else -> ""
+                                }
+
+                                if (effectiveLabel.isNotBlank()) {
+                                    val targetIntent = intents.firstOrNull() ?: try {
+                                        pm.getLaunchIntentForPackage(pkg)
+                                    } catch (e: Throwable) { null }
+
+                                    val intentUri = try {
+                                        targetIntent?.toUri(Intent.URI_INTENT_SCHEME) ?: ""
+                                    } catch (e: Throwable) { "" }
+
+                                    val uniqueKey = shortcutId.ifBlank { effectiveLabel }
+                                    if (intentUri.isNotBlank() && uniqueKey !in seenShortcutIds) {
+                                        seenShortcutIds.add(uniqueKey)
+
+                                        val iconBitmap: Bitmap? = if (shortcutIconResId != 0) {
+                                            try {
+                                                val drawable = appRes.getDrawable(shortcutIconResId, null)
+                                                IconProcessor.drawableToBitmap(drawable, 96, 96)
+                                            } catch (e: Throwable) { null }
+                                        } else null
+
+                                        val finalBitmap = iconBitmap ?: appIconBitmap
+
+                                        appShortcuts.add(
+                                            AppShortcutItem(
+                                                id = uniqueKey,
+                                                label = effectiveLabel,
+                                                longLabel = shortcutLongLabel,
+                                                iconBitmap = finalBitmap,
+                                                intentUri = intentUri,
+                                                packageName = pkg
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        eventType = parser.next()
+                    }
+                    parser.close()
+                } catch (e: Throwable) {
+                    // Skip unparseable XML
+                }
+            }
+
+            if (appShortcuts.isNotEmpty()) {
+                result.add(AppWithShortcuts(appLabel, pkg, appIcon, appShortcuts))
             }
         }
 

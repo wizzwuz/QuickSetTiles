@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
 fun CreateTileScreen(
     initialTile: TileItem? = null,
     onBack: () -> Unit,
-    onOpenActivityPicker: () -> Unit,
+    onOpenActivityPicker: (TileItem) -> Unit,
     onSaveTile: (TileItem) -> Unit
 ) {
     val context = LocalContext.current
@@ -486,7 +486,24 @@ fun CreateTileScreen(
                         subtitle = "Inspect & test run",
                         icon = Icons.Default.Extension,
                         isSelected = selectedType == TileType.ACTIVITY,
-                        onClick = { onOpenActivityPicker() }
+                        onClick = {
+                            val currentDraft = (initialTile ?: TileItem(name = tileName)).copy(
+                                name = tileName,
+                                type = selectedType ?: TileType.ACTIVITY,
+                                targetData = targetData,
+                                visualState = visualState,
+                                onCommand = onCommand,
+                                offCommand = offCommand,
+                                collapseOnTap = collapseOnTap,
+                                currentToggleOn = currentToggleOn,
+                                onTileName = onTileName,
+                                offTileName = offTileName,
+                                iconConfig = iconConfig,
+                                onIconConfig = onIconConfig,
+                                offIconConfig = offIconConfig
+                            )
+                            onOpenActivityPicker(currentDraft)
+                        }
                     )
                 }
 
