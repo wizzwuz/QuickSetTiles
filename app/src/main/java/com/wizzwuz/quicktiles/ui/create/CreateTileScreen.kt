@@ -37,6 +37,8 @@ import com.wizzwuz.quicktiles.model.TileItem
 import com.wizzwuz.quicktiles.model.TileType
 import com.wizzwuz.quicktiles.model.TileVisualState
 import com.wizzwuz.quicktiles.util.IconProcessor
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -677,17 +679,35 @@ fun CreateTileScreen(
     }
 
     if (showShortcutDialog) {
+        val coroutineScope = rememberCoroutineScope()
         ShortcutDialog(
             onDismiss = { showShortcutDialog = false },
-            onSelect = { name, shortcutUri, pkg ->
+            onSelect = { name, shortcutUri, pkg, iconBitmap ->
                 showShortcutDialog = false
                 selectedType = TileType.SHORTCUT
                 targetData = shortcutUri
                 if (tileName.isBlank()) tileName = name
-                iconConfig = iconConfig.copy(
-                    sourceType = IconSourceType.APP_ICON,
-                    sourceData = pkg
-                )
+                if (iconBitmap != null) {
+                    coroutineScope.launch(Dispatchers.IO) {
+                        val savedPath = IconProcessor.saveBitmapToFile(context, iconBitmap, "shortcut_${pkg}")
+                        if (savedPath != null) {
+                            iconConfig = iconConfig.copy(
+                                sourceType = IconSourceType.CUSTOM_FILE,
+                                sourceData = savedPath
+                            )
+                        } else {
+                            iconConfig = iconConfig.copy(
+                                sourceType = IconSourceType.APP_ICON,
+                                sourceData = pkg
+                            )
+                        }
+                    }
+                } else {
+                    iconConfig = iconConfig.copy(
+                        sourceType = IconSourceType.APP_ICON,
+                        sourceData = pkg
+                    )
+                }
             }
         )
     }

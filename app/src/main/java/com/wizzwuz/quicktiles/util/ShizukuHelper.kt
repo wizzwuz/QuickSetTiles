@@ -35,6 +35,15 @@ data class CommandResult(
     val durationMs: Long = 0L
 )
 
+/** Root manager types detected on the device */
+enum class RootManagerType(val displayName: String) {
+    NONE("None"),
+    MAGISK("Magisk"),
+    KERNELSU("KernelSU"),
+    APATCH("APatch"),
+    OTHER("Root (Other)")
+}
+
 data class DiagnosticsInfo(
     val isShizukuRunning: Boolean,
     val hasShizukuPermission: Boolean,
@@ -42,8 +51,13 @@ data class DiagnosticsInfo(
     val shizukuUid: Int,
     val isSheveryInstalled: Boolean,
     val isOfficialShizukuInstalled: Boolean,
-    val isRootBinaryPresent: Boolean
+    val isRootBinaryPresent: Boolean,
+    /** True if root was actually granted (su -c id returned uid=0) */
+    val isRootGranted: Boolean = false,
+    /** The detected root manager (Magisk, KernelSU, etc.) */
+    val rootManagerType: RootManagerType = RootManagerType.NONE
 )
+
 
 object ShizukuHelper {
 
@@ -138,12 +152,86 @@ object ShizukuHelper {
             "/system/bin/failsafe/su",
             "/data/local/xbin/su",
             "/data/local/bin/su",
-            "/data/local/su"
+            "/data/local/su",
+            "/data/adb/magisk/busybox"  // Magisk managed su
         )
         return paths.any { File(it).exists() }
     }
 
-    fun getDiagnostics(context: Context): DiagnosticsInfo {
+    /**
+     * Actually tests if root is accessible by running `su -c id` and checking the output
+     * for uid=0. This is more reliable than just checking for the su binary.
+     */
+    fun isRootGranted(): Boolean {
+        return try {
+            val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
+            val output = proc.inputStream.bufferedReader().readText()
+            val exitCode = proc.waitFor()
+            exitCode == 0 && output.contains("uid=0")
+        } catch (e: Throwable) {
+            false
+        }
+    }
+
+    /**
+     * Detects the root manager type (Magisk, KernelSU, APatch, or other).
+     * Checks known package names and binaries specific to each manager.
+     */
+    fun detectRootManager(context: android.content.Context): RootManagerType {
+        val pm = context.packageManager
+
+        // KernelSU — package name check
+        val kernelsuPackages = listOf(
+            "me.weishu.kernelsu",
+            "com.kernelsu.ksu",
+            "me.bmax.apatch" // APatch uses same style
+        )
+        for (pkg in kernelsuPackages) {
+            try {
+                pm.getPackageInfo(pkg, 0)
+                return if (pkg.contains("apatch")) RootManagerType.APATCH else RootManagerType.KERNELSU
+            } catch (e: Throwable) { /* not installed */ }
+        }
+
+        // Magisk — package name check (original + various forks)
+        val magiskPackages = listOf(
+            "com.topjohnwu.magisk",
+            "io.github.huskydg.magisk",  // Delta/Kitsune
+            "com.fox2code.mmm",           // Module Manager
+            "io.github.vvb2060.magisk"
+        )
+        for (pkg in magiskPackages) {
+            try {
+                pm.getPackageInfo(pkg, 0)
+                return RootManagerType.MAGISK
+            } catch (e: Throwable) { /* not installed */ }
+        }
+
+        // KernelSU — binary check
+        if (File("/data/adb/ksu").exists() || File("/data/adb/ksud").exists()) {
+            return RootManagerType.KERNELSU
+        }
+
+        // APatch — binary check
+        if (File("/data/adb/ap").exists() || File("/data/adb/apd").exists()) {
+            return RootManagerType.APATCH
+        }
+
+        // Magisk — binary check
+        if (File("/data/adb/magisk").exists() || File("/sbin/.magisk").exists() ||
+            File("/data/adb/magisk/magiskd").exists()) {
+            return RootManagerType.MAGISK
+        }
+
+        // Generic su binary present but no known manager
+        if (isRootBinaryPresent()) {
+            return RootManagerType.OTHER
+        }
+
+        return RootManagerType.NONE
+    }
+
+    fun getDiagnostics(context: android.content.Context): DiagnosticsInfo {
         val pm = context.packageManager
         val isShevery = try {
             pm.getPackageInfo("com.hamondev.shevery", 0) != null
@@ -156,6 +244,10 @@ object ShizukuHelper {
             false
         }
 
+        val rootBinaryPresent = isRootBinaryPresent()
+        val rootGranted = if (rootBinaryPresent) isRootGranted() else false
+        val rootManagerType = detectRootManager(context)
+
         return DiagnosticsInfo(
             isShizukuRunning = isShizukuRunning(),
             hasShizukuPermission = hasShizukuPermission(),
@@ -163,7 +255,9 @@ object ShizukuHelper {
             shizukuUid = getShizukuUid(),
             isSheveryInstalled = isShevery,
             isOfficialShizukuInstalled = isOfficial,
-            isRootBinaryPresent = isRootBinaryPresent()
+            isRootBinaryPresent = rootBinaryPresent,
+            isRootGranted = rootGranted,
+            rootManagerType = rootManagerType
         )
     }
 
@@ -192,19 +286,27 @@ object ShizukuHelper {
             ShellMode.ROOT -> runRootProcess(command, timeoutMs)
             ShellMode.STANDARD -> runStandardProcess(command, timeoutMs)
             ShellMode.AUTO -> {
-                if (isShizukuRunning() && hasShizukuPermission()) {
+                // Prefer Root if granted, then Shizuku, then standard
+                if (isRootBinaryPresent()) {
+                    val rootRes = runRootProcess(command, timeoutMs)
+                    if (rootRes.exitCode == 0 && !isRootDenied(rootRes.output, rootRes.exitCode)) {
+                        rootRes
+                    } else if (isShizukuRunning() && hasShizukuPermission()) {
+                        val shizukuRes = runShizukuProcess(command, timeoutMs)
+                        if (shizukuRes.exitCode == 0 || !isFatalShellError(shizukuRes.output)) {
+                            shizukuRes
+                        } else {
+                            runStandardProcess(command, timeoutMs)
+                        }
+                    } else {
+                        runStandardProcess(command, timeoutMs)
+                    }
+                } else if (isShizukuRunning() && hasShizukuPermission()) {
                     val shizukuRes = runShizukuProcess(command, timeoutMs)
                     if (shizukuRes.exitCode == 0 || !isFatalShellError(shizukuRes.output)) {
                         shizukuRes
                     } else {
                         tryFallbackAfterShizuku(command, timeoutMs, shizukuRes)
-                    }
-                } else if (isRootBinaryPresent()) {
-                    val rootRes = runRootProcess(command, timeoutMs)
-                    if (rootRes.exitCode == 0 && !isRootDenied(rootRes.output, rootRes.exitCode)) {
-                        rootRes
-                    } else {
-                        runStandardProcess(command, timeoutMs)
                     }
                 } else {
                     runStandardProcess(command, timeoutMs)

@@ -18,6 +18,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +34,7 @@ import com.wizzwuz.quicktiles.util.ActivityItem
 import com.wizzwuz.quicktiles.util.AppHelper
 import com.wizzwuz.quicktiles.util.AppItem
 import com.wizzwuz.quicktiles.util.IconProcessor
+import com.wizzwuz.quicktiles.util.ShizukuHelper
 import kotlinx.coroutines.launch
 
 data class AppPickerItem(
@@ -50,10 +53,16 @@ fun ActivityPickerScreen(
     val coroutineScope = rememberCoroutineScope()
     val repository = remember { com.wizzwuz.quicktiles.data.TileRepository.getInstance(context) }
     val isPrivateLaunchable by repository.privateActivityLaunchableFlow.collectAsState()
+    // Detect root access once for the lifetime of this screen
+    var isRootGranted by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        isRootGranted = ShizukuHelper.isRootGranted()
+    }
 
     var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
     var searchQuery by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(true) }
+    var showSystemApps by remember { mutableStateOf(false) }
 
     // Map of packageName to activities list
     val activitiesMap = remember { mutableStateMapOf<String, List<ActivityItem>>() }
@@ -75,9 +84,14 @@ fun ActivityPickerScreen(
 
     val q = searchQuery.trim().lowercase()
 
-    val filteredItems = remember(apps, q, activitiesMap.toMap()) {
+    // Filter system apps based on toggle
+    val visibleApps = remember(apps, showSystemApps) {
+        if (showSystemApps) apps else apps.filter { !it.isSystemApp }
+    }
+
+    val filteredItems = remember(visibleApps, q, activitiesMap.toMap()) {
         if (q.isBlank()) {
-            apps.map { app ->
+            visibleApps.map { app ->
                 AppPickerItem(
                     app = app,
                     matchingActivities = emptyList(),
@@ -85,7 +99,7 @@ fun ActivityPickerScreen(
                 )
             }
         } else {
-            apps.mapNotNull { app ->
+            visibleApps.mapNotNull { app ->
                 val appMatches = app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q)
                 val activities = activitiesMap[app.packageName]
                 val matchingActivities = activities?.filter { act ->
@@ -149,12 +163,38 @@ fun ActivityPickerScreen(
                     .padding(vertical = 8.dp)
             )
 
-            Text(
-                text = "Tip: Search matches app names, package names, and both short & full activity names. Tap to select, long-press to test run.",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            // System apps toggle + tip row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Tap to select, long-press to test run.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                )
+                FilterChip(
+                    selected = showSystemApps,
+                    onClick = { showSystemApps = !showSystemApps },
+                    label = {
+                        Text(
+                            text = if (showSystemApps) "System: On" else "System: Off",
+                            fontSize = 11.sp
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = if (showSystemApps) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                )
+            }
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -341,10 +381,10 @@ fun ActivityPickerScreen(
                                                         .clip(RoundedCornerShape(6.dp))
                                                         .combinedClickable(
                                                             onClick = {
-                                                                if (!act.isExported && !isPrivateLaunchable) {
+                                                                if (!act.isExported && !isPrivateLaunchable && !isRootGranted) {
                                                                     Toast.makeText(
                                                                         context,
-                                                                        "Private activity launch is disabled in Settings. Enable 'Private Activity Launchable' in Settings to use private activities.",
+                                                                        "Private activity: enable root or 'Private Activity Launchable' in Settings.",
                                                                         Toast.LENGTH_LONG
                                                                     ).show()
                                                                 } else {
@@ -352,10 +392,10 @@ fun ActivityPickerScreen(
                                                                 }
                                                             },
                                                             onLongClick = {
-                                                                if (!act.isExported && !isPrivateLaunchable) {
+                                                                if (!act.isExported && !isPrivateLaunchable && !isRootGranted) {
                                                                     Toast.makeText(
                                                                         context,
-                                                                        "Launch test failed: Private activity launch is disabled in Settings. Enable 'Private Activity Launchable' in Settings.",
+                                                                        "Launch test failed: enable root or 'Private Activity Launchable' in Settings.",
                                                                         Toast.LENGTH_LONG
                                                                     ).show()
                                                                     return@combinedClickable
@@ -400,30 +440,49 @@ fun ActivityPickerScreen(
                                                             )
                                                             Text(
                                                                 text = act.fullName,
-                                                                fontSize = 11.sp,
+                                                                fontSize = 10.sp,
                                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                                maxLines = 1
+                                                                softWrap = true
                                                             )
                                                         }
 
+                                                        // Compact access-mode chip (fixed narrow width)
                                                         if (!act.isExported) {
-                                                            SuggestionChip(
-                                                                onClick = {},
-                                                                label = {
-                                                                    Text(
-                                                                        if (isPrivateLaunchable) "Private (Shizuku)" else "Private (Disabled)",
-                                                                        fontSize = 9.sp,
-                                                                        color = if (isPrivateLaunchable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                                                                    )
-                                                                },
-                                                                modifier = Modifier.height(20.dp)
-                                                            )
+                                                            val (chipLabel, chipColor) = when {
+                                                                isRootGranted ->
+                                                                    "Root" to MaterialTheme.colorScheme.tertiary
+                                                                isPrivateLaunchable ->
+                                                                    "Shizuku" to MaterialTheme.colorScheme.primary
+                                                                else ->
+                                                                    "Off" to MaterialTheme.colorScheme.error
+                                                            }
+                                                            Surface(
+                                                                shape = RoundedCornerShape(4.dp),
+                                                                color = chipColor.copy(alpha = 0.12f),
+                                                                modifier = Modifier.padding(start = 4.dp)
+                                                            ) {
+                                                                Text(
+                                                                    text = chipLabel,
+                                                                    fontSize = 9.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = chipColor,
+                                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                                )
+                                                            }
                                                         } else {
-                                                            SuggestionChip(
-                                                                onClick = {},
-                                                                label = { Text("Exported", fontSize = 9.sp) },
-                                                                modifier = Modifier.height(20.dp)
-                                                            )
+                                                            Surface(
+                                                                shape = RoundedCornerShape(4.dp),
+                                                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                                                modifier = Modifier.padding(start = 4.dp)
+                                                            ) {
+                                                                Text(
+                                                                    text = "Public",
+                                                                    fontSize = 9.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = MaterialTheme.colorScheme.primary,
+                                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }

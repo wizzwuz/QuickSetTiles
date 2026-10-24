@@ -67,6 +67,12 @@
             android:exported="true"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
+        <!-- Required: tells Shizuku/Shevery this app is a Shizuku API v23 client.
+             Without this the app will NOT appear in the Shizuku authorized apps list. -->
+        <meta-data
+            android:name="rikka.shizuku.API_VERSION"
+            android:value="1" />
+
         <!-- FileProvider for exporting log.txt in debug APK -->
         <provider
             android:name="androidx.core.content.FileProvider"

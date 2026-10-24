@@ -37,6 +37,7 @@ import com.wizzwuz.quicktiles.util.BackupRestoreManager
 import com.wizzwuz.quicktiles.util.DiagnosticsInfo
 import com.wizzwuz.quicktiles.util.LogManager
 import com.wizzwuz.quicktiles.util.LogStats
+import com.wizzwuz.quicktiles.util.RootManagerType
 import com.wizzwuz.quicktiles.util.ShizukuHelper
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -521,22 +522,84 @@ fun SettingsScreen(
                 )
             }
 
-            // 3. Shizuku / Shevery Diagnostics Section
+            // 5. Privileged Access / Root & Shizuku Diagnostics
             Text(
-                text = "Privileged Service Diagnostics",
+                text = "Privileged Access",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
 
+            // Root Access Card — shown prominently when root is granted
+            if (diagnostics.isRootGranted) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "Root Access Granted",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "Manager: ${diagnostics.rootManagerType.displayName}",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            DiagnosticRow(
+                                label = "Root Manager",
+                                value = diagnostics.rootManagerType.displayName,
+                                isOk = true
+                            )
+                            DiagnosticRow(
+                                label = "Superuser (su) Binary",
+                                value = "Present & Authorized (UID 0)",
+                                isOk = true
+                            )
+                            DiagnosticRow(
+                                label = "Active Execution Engine",
+                                value = "Root (su / UID 0) — Highest Priority",
+                                isOk = true
+                            )
+                        }
+                        Text(
+                            text = "Shell commands will use root access automatically. Shizuku is optional.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // Shizuku diagnostics card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (diagnostics.isShizukuRunning && diagnostics.hasShizukuPermission)
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                    else if (diagnostics.isShizukuRunning)
-                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)
-                    else
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                    containerColor = when {
+                        diagnostics.isRootGranted -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        diagnostics.isShizukuRunning && diagnostics.hasShizukuPermission ->
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                        diagnostics.isShizukuRunning ->
+                            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)
+                        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                    }
                 )
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -554,13 +617,19 @@ fun SettingsScreen(
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
+                        if (diagnostics.isRootGranted) {
+                            SuggestionChip(
+                                onClick = {},
+                                label = { Text("Optional (Root Active)", fontSize = 10.sp) }
+                            )
+                        }
                     }
 
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         DiagnosticRow(
                             label = "Permission Status",
-                            value = if (diagnostics.hasShizukuPermission) "Granted (UID 2000 ADB)" else "Not Granted",
-                            isOk = diagnostics.hasShizukuPermission
+                            value = if (diagnostics.hasShizukuPermission) "Granted (UID 2000 ADB)" else if (diagnostics.isRootGranted) "Not needed (root active)" else "Not Granted",
+                            isOk = diagnostics.hasShizukuPermission || diagnostics.isRootGranted
                         )
                         DiagnosticRow(
                             label = "Shizuku Version / UID",
@@ -572,47 +641,49 @@ fun SettingsScreen(
                             value = if (diagnostics.isSheveryInstalled) "Installed (com.hamondev.shevery)" else "Not Detected",
                             isOk = diagnostics.isSheveryInstalled
                         )
-                        DiagnosticRow(
-                            label = "Superuser (su) Binary",
-                            value = if (diagnostics.isRootBinaryPresent) "Present in PATH" else "Not Found",
-                            isOk = diagnostics.isRootBinaryPresent
-                        )
+                        if (!diagnostics.isRootGranted) {
+                            DiagnosticRow(
+                                label = "Superuser (su) Binary",
+                                value = if (diagnostics.isRootBinaryPresent) "Present in PATH" else "Not Found",
+                                isOk = diagnostics.isRootBinaryPresent
+                            )
+                        }
                     }
 
-                    // Action buttons for Shizuku / Shevery
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (diagnostics.isShizukuRunning && !diagnostics.hasShizukuPermission) {
-                            Button(
+                    // Only show Shizuku permission button if root is NOT available
+                    if (!diagnostics.isRootGranted) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (diagnostics.isShizukuRunning && !diagnostics.hasShizukuPermission) {
+                                Button(
+                                    onClick = { ShizukuHelper.requestShizukuPermission() },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Request Shizuku Permission", fontSize = 12.sp)
+                                }
+                            }
+
+                            OutlinedButton(
                                 onClick = {
-                                    ShizukuHelper.requestShizukuPermission()
+                                    val pm = context.packageManager
+                                    val sheveryIntent = pm.getLaunchIntentForPackage("com.hamondev.shevery")
+                                    val shizukuIntent = pm.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                                    val target = sheveryIntent ?: shizukuIntent
+                                    if (target != null) {
+                                        target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        context.startActivity(target)
+                                    } else {
+                                        Toast.makeText(context, "Neither Shevery nor Shizuku app is installed.", Toast.LENGTH_LONG).show()
+                                    }
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Request Shizuku Permission", fontSize = 12.sp)
+                                Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Open Manager", fontSize = 12.sp)
                             }
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                val pm = context.packageManager
-                                val sheveryIntent = pm.getLaunchIntentForPackage("com.hamondev.shevery")
-                                val shizukuIntent = pm.getLaunchIntentForPackage("moe.shizuku.privileged.api")
-                                val target = sheveryIntent ?: shizukuIntent
-                                if (target != null) {
-                                    target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    context.startActivity(target)
-                                } else {
-                                    Toast.makeText(context, "Neither Shevery nor Shizuku app is installed.", Toast.LENGTH_LONG).show()
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Open Manager", fontSize = 12.sp)
                         }
                     }
                 }

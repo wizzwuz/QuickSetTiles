@@ -535,6 +535,23 @@ object IconProcessor {
         }
     }
 
+    /**
+     * Saves a Bitmap directly to the icons directory (for shortcut icons, etc.)
+     * Returns the absolute file path on success, null on failure.
+     */
+    fun saveBitmapToFile(context: Context, bitmap: Bitmap, prefix: String = "shortcut"): String? {
+        return try {
+            val iconsDir = File(context.filesDir, "icons").apply { if (!exists()) mkdirs() }
+            val destFile = File(iconsDir, "${prefix}_${System.currentTimeMillis()}.png")
+            FileOutputStream(destFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            destFile.absolutePath
+        } catch (e: Throwable) {
+            null
+        }
+    }
+
     fun drawableToBitmap(drawable: Drawable, widthOverride: Int = -1, heightOverride: Int = -1): Bitmap {
         if (drawable is BitmapDrawable && drawable.bitmap != null && widthOverride <= 0 && heightOverride <= 0) {
             return drawable.bitmap
