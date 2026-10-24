@@ -487,7 +487,11 @@ fun CreateTileScreen(
                         icon = Icons.Default.Extension,
                         isSelected = selectedType == TileType.ACTIVITY,
                         onClick = {
-                            val currentDraft = (initialTile ?: TileItem(name = tileName)).copy(
+                            val currentDraft = (initialTile ?: TileItem(
+                                name = tileName,
+                                type = selectedType ?: TileType.ACTIVITY,
+                                targetData = targetData
+                            )).copy(
                                 name = tileName,
                                 type = selectedType ?: TileType.ACTIVITY,
                                 targetData = targetData,

@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,11 +20,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -186,7 +185,7 @@ fun ShortcutDialog(
                     if (!isSearchExpanded) searchQuery = ""
                 }) {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Filled.Search,
+                        imageVector = Icons.Default.Search,
                         contentDescription = "Search shortcuts",
                         tint = if (isSearchExpanded || searchQuery.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -194,7 +193,7 @@ fun ShortcutDialog(
 
                 IconButton(onClick = onDismiss) {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Filled.Close,
+                        imageVector = Icons.Default.Close,
                         contentDescription = "Close",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -209,7 +208,7 @@ fun ShortcutDialog(
                     placeholder = { Text("Search apps & shortcuts...", fontSize = 14.sp) },
                     leadingIcon = {
                         Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Filled.Search,
+                            imageVector = Icons.Default.Search,
                             contentDescription = "Search",
                             modifier = Modifier.size(20.dp)
                         )
@@ -218,7 +217,7 @@ fun ShortcutDialog(
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { searchQuery = "" }) {
                                 Icon(
-                                    imageVector = androidx.compose.material.icons.Icons.Filled.Close,
+                                    imageVector = Icons.Default.Close,
                                     contentDescription = "Clear",
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -342,9 +341,9 @@ fun ShortcutDialog(
                                     // Dropdown arrow
                                     Icon(
                                         imageVector = if (isExpanded)
-                                            androidx.compose.material.icons.Icons.Filled.KeyboardArrowUp
+                                            Icons.Default.KeyboardArrowUp
                                         else
-                                            androidx.compose.material.icons.Icons.Filled.KeyboardArrowDown,
+                                            Icons.Default.KeyboardArrowDown,
                                         contentDescription = if (isExpanded) "Collapse" else "Expand",
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -388,7 +387,7 @@ fun ShortcutDialog(
                                                     )
                                                 } else {
                                                     Icon(
-                                                        imageVector = androidx.compose.material.icons.Icons.Filled.OpenInNew,
+                                                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                                                         contentDescription = shortcut.label,
                                                         modifier = Modifier.size(36.dp),
                                                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
@@ -414,7 +413,7 @@ fun ShortcutDialog(
                                                 }
 
                                                 Icon(
-                                                    imageVector = androidx.compose.material.icons.Icons.Filled.ChevronRight,
+                                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                                     contentDescription = "Select",
                                                     modifier = Modifier.size(20.dp),
                                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
