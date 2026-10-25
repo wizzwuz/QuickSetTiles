@@ -146,20 +146,15 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                             if (item.collapseOnTap) {
                                 mainHandler.post { collapseShade() }
                             }
-                            val res = AppHelper.launchActivityPrivileged(
+                            AppHelper.launchActivityPrivileged(
                                 this@BaseTileService,
                                 comp.packageName,
                                 comp.className
                             )
-                            res.onFailure {
-                                showToast("Launch failed: ${it.message}")
-                            }
                         }
-                    } else {
-                        showToast("Invalid activity: ${item.targetData}")
                     }
                 } catch (e: Throwable) {
-                    showToast("Error launching activity: ${e.message}")
+                    // Silent failure
                 }
             }
             TileType.INTENT -> {
@@ -218,17 +213,12 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                         com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> if (nextToggleState) "[ON] " else "[OFF] "
                         else -> ""
                     }
-                    val msg = if (result.exitCode == 0) {
-                        val snippet = result.output.take(80)
-                        "Shell ${stateLabel}(${result.executionMode}) Success: ${if (snippet.isNotBlank()) snippet else "OK"}"
-                    } else {
+                    if (result.exitCode != 0) {
                         com.wizzwuz.quicktiles.util.LogManager.logError(
                             "TileExecution",
                             "Tile '${item.name}' (Slot $slotNumber) Shell ${stateLabel}(${result.executionMode}) failed with exit code ${result.exitCode}: ${result.output}"
                         )
-                        "Shell ${stateLabel}(${result.executionMode}) Exit ${result.exitCode}: ${result.output.take(80)}"
                     }
-                    showToast(msg)
                 }
             }
             TileType.FILES -> {

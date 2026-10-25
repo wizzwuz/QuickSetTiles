@@ -281,6 +281,17 @@ object ShizukuHelper {
             }
         }
 
+        // 2. For multi-line scripts containing 'am start', handle each line intelligently
+        val lines = trimmed.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val hasAmStart = lines.any { it.startsWith("am start") }
+        if (lines.size > 1 && hasAmStart && (isShizukuRunning() && hasShizukuPermission())) {
+            val multiResult = executeMultiLineWithAmStartBypass(lines, mode, timeoutMs)
+            val totalDuration = System.currentTimeMillis() - startTime
+            val finalResult = multiResult.copy(durationMs = totalDuration)
+            LogManager.logCommand(finalResult.executionMode, command, finalResult.exitCode, finalResult.output, totalDuration)
+            return@withContext finalResult
+        }
+
         val result: CommandResult = when (mode) {
             ShellMode.SHIZUKU -> runShizukuProcess(command, timeoutMs)
             ShellMode.ROOT -> runRootProcess(command, timeoutMs)
@@ -314,7 +325,7 @@ object ShizukuHelper {
             }
         }
 
-        // 2. Automatic Private Activity Permission Denial detection & Assistant Method bypass
+        // 3. Automatic Private Activity Permission Denial detection & Assistant Method bypass
         val resolvedResult: CommandResult = if (result.exitCode != 0 && isPermissionDenialForPrivateActivity(result.output)) {
             val comp = extractComponentFromCommand(command) ?: extractComponentFromOutput(result.output)
             if (comp != null && isShizukuRunning() && hasShizukuPermission()) {
@@ -343,6 +354,71 @@ object ShizukuHelper {
         )
 
         finalResult
+    }
+
+    /**
+     * Executes a multi-line script where some lines are `am start -n <component>`.
+     * `am start` lines for private/non-exported activities are handled via assistant bypass;
+     * all other lines are batched and run as a normal shell script via Shizuku.
+     */
+    private suspend fun executeMultiLineWithAmStartBypass(
+        lines: List<String>,
+        mode: ShellMode,
+        timeoutMs: Long
+    ): CommandResult = withContext(Dispatchers.IO) {
+        val outputParts = mutableListOf<String>()
+        var overallExitCode = 0
+        val executionMode = "Shizuku+Bypass"
+
+        // Collect consecutive non-am-start lines into batches, run am start lines via bypass
+        val batch = mutableListOf<String>()
+
+        suspend fun flushBatch() {
+            if (batch.isEmpty()) return
+            val script = batch.joinToString("\n")
+            batch.clear()
+            val res = if (isShizukuRunning() && hasShizukuPermission()) {
+                runShizukuProcess(script, timeoutMs)
+            } else {
+                runRootProcess(script, timeoutMs)
+            }
+            if (res.output.isNotBlank()) outputParts.add(res.output)
+            if (res.exitCode != 0) overallExitCode = res.exitCode
+        }
+
+        for (line in lines) {
+            if (line.startsWith("am start")) {
+                // Run batched non-am-start commands first
+                flushBatch()
+                // Try am start normally first
+                val amRes = if (isShizukuRunning() && hasShizukuPermission()) {
+                    runShizukuProcess(line, timeoutMs)
+                } else {
+                    runRootProcess(line, timeoutMs)
+                }
+                if (amRes.exitCode != 0 && isPermissionDenialForPrivateActivity(amRes.output)) {
+                    // Private activity — use assistant bypass
+                    val comp = extractComponentFromCommand(line) ?: extractComponentFromOutput(amRes.output)
+                    if (comp != null) {
+                        val bypassRes = tryAssistantMethodBypass(comp)
+                        if (bypassRes.output.isNotBlank()) outputParts.add(bypassRes.output)
+                        if (bypassRes.exitCode != 0) overallExitCode = bypassRes.exitCode
+                    } else {
+                        if (amRes.output.isNotBlank()) outputParts.add(amRes.output)
+                        overallExitCode = amRes.exitCode
+                    }
+                } else {
+                    if (amRes.output.isNotBlank()) outputParts.add(amRes.output)
+                    if (amRes.exitCode != 0) overallExitCode = amRes.exitCode
+                }
+            } else {
+                batch.add(line)
+            }
+        }
+        // Flush any remaining batch
+        flushBatch()
+
+        CommandResult(overallExitCode, outputParts.joinToString("\n").trim(), executionMode)
     }
 
     suspend fun executePrivilegedCommand(
