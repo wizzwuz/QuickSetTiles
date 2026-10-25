@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
@@ -82,14 +81,6 @@ fun TilesListScreen(
                     text = if (isActiveTab) "Active Quick Tiles (${tiles.size})" else "Inactive Tiles (${tiles.size})",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = if (isActiveTab)
-                        "Tap a tile to edit. Tap Disable to deactivate."
-                    else
-                        "Tap a tile to edit. Tap Add to activate.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -477,4 +468,3 @@ fun CategoriesPanel(
         }
     }
 }
-
