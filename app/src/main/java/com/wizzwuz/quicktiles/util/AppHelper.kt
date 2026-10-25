@@ -69,30 +69,40 @@ object AppHelper {
     // Cache the full app list — rebuilt only when null (cleared on demand)
     @Volatile private var appsCache: List<AppItem>? = null
 
-    /** Call this to force a refresh of the app list (e.g. after install/uninstall) */
-    fun invalidateAppsCache() { appsCache = null }
+    /** Returns cached app list immediately if present, otherwise null. */
+    fun getCachedApps(): List<AppItem>? = appsCache
+
+    /** Returns cached shortcuts immediately if present, otherwise null. */
+    fun getCachedShortcuts(): List<AppWithShortcuts>? = shortcutsCache["all"]
+
+    /** Forces a background refresh of the app list. */
+    suspend fun refreshInstalledApps(context: Context): List<AppItem> = withContext(Dispatchers.IO) {
+        val pm = context.packageManager
+        val apps = pm.getInstalledApplications(0)
+        val result = coroutineScope {
+            apps.map { app ->
+                async {
+                    val label = try { pm.getApplicationLabel(app).toString() } catch (e: Throwable) { app.packageName }
+                    val icon = try { pm.getApplicationIcon(app.packageName) } catch (e: Throwable) { pm.defaultActivityIcon }
+                    val isSystem = (app.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                    AppItem(label = label, packageName = app.packageName, isSystemApp = isSystem, icon = icon)
+                }
+            }.awaitAll()
+        }
+        val sorted = result.sortedBy { it.label.lowercase() }
+        appsCache = sorted
+        sorted
+    }
+
+    /** Forces a background refresh of the shortcuts list. */
+    suspend fun refreshAppsWithShortcuts(context: Context): List<AppWithShortcuts> = withContext(Dispatchers.IO) {
+        shortcutsCache.remove("all")
+        getAppsWithShortcuts(context)
+    }
 
     suspend fun getInstalledApps(context: Context): List<AppItem> {
         appsCache?.let { return it }
-        return withContext(Dispatchers.IO) {
-            val pm = context.packageManager
-            // Fetch app info list without GET_META_DATA — faster, we don't need it for basic list
-            val apps = pm.getInstalledApplications(0)
-            // Load labels + icons in parallel
-            val result = coroutineScope {
-                apps.map { app ->
-                    async {
-                        val label = try { pm.getApplicationLabel(app).toString() } catch (e: Throwable) { app.packageName }
-                        val icon = try { pm.getApplicationIcon(app.packageName) } catch (e: Throwable) { pm.defaultActivityIcon }
-                        val isSystem = (app.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-                        AppItem(label = label, packageName = app.packageName, isSystemApp = isSystem, icon = icon)
-                    }
-                }.awaitAll()
-            }
-            val sorted = result.sortedBy { it.label.lowercase() }
-            appsCache = sorted
-            sorted
-        }
+        return refreshInstalledApps(context)
     }
 
     suspend fun getAppActivities(context: Context, packageName: String): List<ActivityItem> = withContext(Dispatchers.IO) {

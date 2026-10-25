@@ -33,6 +33,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
@@ -117,8 +118,15 @@ fun ShortcutDialog(
     var searchQuery by remember { mutableStateOf("") }
     val expandedApps = remember { mutableStateMapOf<String, Boolean>() }
 
+    // Instant cached display + background refresh every time dialog opens
     LaunchedEffect(Unit) {
-        appsWithShortcuts = com.wizzwuz.quicktiles.util.AppHelper.getAppsWithShortcuts(context)
+        val cached = com.wizzwuz.quicktiles.util.AppHelper.getCachedShortcuts()
+        if (cached != null) {
+            appsWithShortcuts = cached
+            isLoading = false
+        }
+        val fresh = com.wizzwuz.quicktiles.util.AppHelper.refreshAppsWithShortcuts(context)
+        appsWithShortcuts = fresh
         isLoading = false
     }
 
@@ -939,19 +947,19 @@ fun ShellDialog(
                     FilterChip(
                         selected = visualState == TileVisualState.ENABLED,
                         onClick = { visualState = TileVisualState.ENABLED },
-                        label = { Text("Enabled", fontSize = 11.sp) },
+                        label = { Text("Enabled", fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                         modifier = Modifier.weight(1f)
                     )
                     FilterChip(
                         selected = visualState == TileVisualState.DISABLED,
                         onClick = { visualState = TileVisualState.DISABLED },
-                        label = { Text("Disabled", fontSize = 11.sp) },
+                        label = { Text("Disabled", fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                         modifier = Modifier.weight(1f)
                     )
                     FilterChip(
                         selected = visualState == TileVisualState.TOGGLE,
                         onClick = { visualState = TileVisualState.TOGGLE },
-                        label = { Text("Both", fontSize = 11.sp) },
+                        label = { Text("Both", fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                         modifier = Modifier.weight(1f)
                     )
                 }

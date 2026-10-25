@@ -75,8 +75,14 @@ fun ActivityPickerScreen(
     var manuallyCollapsedApps by remember { mutableStateOf(setOf<String>()) }
     var manuallyExpandedApps by remember { mutableStateOf(setOf<String>()) }
 
+    // Instant cached display + background refresh every time activity picker opens
     LaunchedEffect(Unit) {
-        val loadedApps = AppHelper.getInstalledApps(context)
+        val cached = AppHelper.getCachedApps()
+        if (cached != null) {
+            apps = cached
+            isLoading = false
+        }
+        val loadedApps = AppHelper.refreshInstalledApps(context)
         apps = loadedApps
         isLoading = false
 
