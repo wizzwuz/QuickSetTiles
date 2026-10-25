@@ -1386,4 +1386,3 @@ fun IconPresetsDialog(
         }
     )
 }
-q
