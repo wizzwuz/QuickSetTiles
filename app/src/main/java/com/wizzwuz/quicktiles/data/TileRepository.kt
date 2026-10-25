@@ -88,7 +88,7 @@ class TileRepository(private val context: Context) {
         for (item in list) {
             jsonArray.put(item.toJson())
         }
-        prefs.edit().putString(KEY_TILES, jsonArray.toString()).apply()
+        prefs.edit().putString(KEY_TILES, jsonArray.toString()).commit()
         _tilesFlow.value = list
     }
 
@@ -101,7 +101,9 @@ class TileRepository(private val context: Context) {
     }
 
     fun getTileBySlot(slot: Int): TileItem? {
-        return _tilesFlow.value.find { it.isActive && it.slotNumber == slot }
+        val cached = _tilesFlow.value.find { it.isActive && it.slotNumber == slot }
+        if (cached != null) return cached
+        return loadTiles().find { it.isActive && it.slotNumber == slot }
     }
 
     fun getTileById(id: String): TileItem? {
@@ -122,7 +124,7 @@ class TileRepository(private val context: Context) {
                 findNextAvailableSlot(current.filter { it.id != tileToSave.id })
             }
             if (assignedSlot in 1..MAX_SLOTS) {
-                tileToSave.copy(isActive = true, slotNumber = assignedSlot)
+                tileToSave.copy(isActive = true, slotNumber = assignedSlot, isAddedToQs = true)
             } else {
                 tileToSave.copy(isActive = false, slotNumber = -1, isAddedToQs = false)
             }
@@ -144,13 +146,10 @@ class TileRepository(private val context: Context) {
             requestTileUpdate(context, oldSlot)
         }
 
-        // Enable new slot ONLY if active AND explicitly added to QS
-        if (finalTile.isActive && finalTile.isAddedToQs && finalTile.slotNumber in 1..MAX_SLOTS) {
+        // Always enable component and immediately refresh QS tile
+        if (finalTile.isActive && finalTile.slotNumber in 1..MAX_SLOTS) {
             setComponentEnabled(context, finalTile.slotNumber, true)
             requestTileUpdate(context, finalTile.slotNumber)
-        } else if (finalTile.slotNumber in 1..MAX_SLOTS && !finalTile.isAddedToQs) {
-            // Keep disabled until user manually adds to QS
-            setComponentEnabled(context, finalTile.slotNumber, false)
         }
     }
 
@@ -260,7 +259,7 @@ class TileRepository(private val context: Context) {
     }
 
     fun syncComponentStates(context: Context) {
-        val activeSlots = _tilesFlow.value.filter { it.isActive && it.isAddedToQs }.map { it.slotNumber }.toSet()
+        val activeSlots = _tilesFlow.value.filter { it.isActive }.map { it.slotNumber }.toSet()
         val pm = context.packageManager
         for (slot in 1..MAX_SLOTS) {
             val component = ComponentName(context, "com.wizzwuz.quicktiles.service.QuickTileService$slot")
@@ -321,6 +320,12 @@ class TileRepository(private val context: Context) {
                 val serviceClass = "com.wizzwuz.quicktiles.service.QuickTileService$slot"
                 val component = ComponentName(context, serviceClass)
                 TileService.requestListeningState(context, component)
+                // Also trigger again after slight delay in case PackageManager was just updated
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    try {
+                        TileService.requestListeningState(context, component)
+                    } catch (e: Throwable) {}
+                }, 250L)
             } catch (e: Throwable) {
                 e.printStackTrace()
             }

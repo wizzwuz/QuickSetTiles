@@ -83,13 +83,14 @@ fun CreateTileScreen(
 
     // Dialog state
     var showAppPicker by remember { mutableStateOf(false) }
+    var showAppIconPicker by remember { mutableStateOf(false) }
     var showWebsiteDialog by remember { mutableStateOf(false) }
     var showShortcutDialog by remember { mutableStateOf(false) }
     var showIntentDialog by remember { mutableStateOf(false) }
     var showShellDialog by remember { mutableStateOf(false) }
     var showPresetsDialog by remember { mutableStateOf(false) }
 
-    // File Pickers
+    // File Pickers - support all image formats including SVG, PNG, WebP, JPG, GIF
     val customImagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -199,8 +200,8 @@ fun CreateTileScreen(
                     collapseOnTap = collapseOnTap,
                     onTileName = onTileName.trim(),
                     offTileName = offTileName.trim(),
-                    onIconConfig = onIconConfig,
-                    offIconConfig = offIconConfig
+                    onIconConfig = if (visualState == TileVisualState.TOGGLE) (onIconConfig ?: iconConfig) else iconConfig,
+                    offIconConfig = if (visualState == TileVisualState.TOGGLE) (offIconConfig ?: iconConfig) else null
                 )
                 onSaveTile(tile)
             }
@@ -291,25 +292,38 @@ fun CreateTileScreen(
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 FilledTonalButton(
-                                    onClick = { customImagePicker.launch("image/*") },
+                                    onClick = { customImagePicker.launch("*/*") },
                                     modifier = Modifier.weight(1f),
-                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                    contentPadding = PaddingValues(horizontal = 4.dp)
                                 ) {
-                                    Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Pick File", fontSize = 12.sp)
+                                    Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("Pick File", fontSize = 11.sp)
                                 }
 
                                 FilledTonalButton(
                                     onClick = { showPresetsDialog = true },
                                     modifier = Modifier.weight(1f),
-                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                    contentPadding = PaddingValues(horizontal = 4.dp)
                                 ) {
-                                    Icon(Icons.Default.Widgets, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Presets", fontSize = 12.sp)
+                                    Icon(Icons.Default.Widgets, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("Presets", fontSize = 11.sp)
+                                }
+
+                                FilledTonalButton(
+                                    onClick = { showAppIconPicker = true },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("App Icon", fontSize = 11.sp)
                                 }
                             }
 
@@ -746,6 +760,34 @@ fun CreateTileScreen(
                 iconConfig = iconConfig.copy(
                     sourceType = IconSourceType.CUSTOM_FILE,
                     sourceData = path
+                )
+            },
+            onSelectAppIcon = { pkg ->
+                showPresetsDialog = false
+                iconConfig = IconConfig(
+                    sourceType = IconSourceType.APP_ICON,
+                    sourceData = pkg,
+                    outlineThickness = 2.5f,
+                    outlineThreshold = 0.4f,
+                    iconSize = 32f,
+                    outlineStyle = "OUTLINE"
+                )
+            }
+        )
+    }
+
+    if (showAppIconPicker) {
+        AppPickerSheet(
+            onDismiss = { showAppIconPicker = false },
+            onAppSelected = { app ->
+                showAppIconPicker = false
+                iconConfig = IconConfig(
+                    sourceType = IconSourceType.APP_ICON,
+                    sourceData = app.packageName,
+                    outlineThickness = 2.5f,
+                    outlineThreshold = 0.4f,
+                    iconSize = 32f,
+                    outlineStyle = "OUTLINE"
                 )
             }
         )

@@ -59,8 +59,8 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                 }
             }
             val effectiveIcon = when (item.visualState) {
-                com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) item.onIconConfig ?: item.iconConfig else item.offIconConfig ?: item.iconConfig
-                com.wizzwuz.quicktiles.model.TileVisualState.ENABLED -> item.onIconConfig ?: item.iconConfig
+                com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) (item.onIconConfig ?: item.iconConfig) else (item.offIconConfig ?: item.iconConfig)
+                com.wizzwuz.quicktiles.model.TileVisualState.ENABLED -> item.iconConfig
                 com.wizzwuz.quicktiles.model.TileVisualState.DISABLED -> item.offIconConfig ?: item.iconConfig
             }
             try {

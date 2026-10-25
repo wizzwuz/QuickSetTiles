@@ -9,6 +9,7 @@ import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import androidx.core.content.ContextCompat
+import com.caverock.androidsvg.SVG
 import com.wizzwuz.quicktiles.R
 import com.wizzwuz.quicktiles.model.IconConfig
 import com.wizzwuz.quicktiles.model.IconSourceType
@@ -454,7 +455,7 @@ object IconProcessor {
                 try {
                     val file = File(config.sourceData)
                     if (file.exists()) {
-                        BitmapFactory.decodeFile(file.absolutePath) ?: getDefaultPresetBitmap(context, isDarkTheme)
+                        loadBitmapFromFile(file, targetPixelSize) ?: getDefaultPresetBitmap(context, isDarkTheme)
                     } else {
                         getDefaultPresetBitmap(context, isDarkTheme)
                     }
@@ -486,10 +487,10 @@ object IconProcessor {
                 isDarkTheme = isDarkTheme
             )
         } else {
-            if (!isDarkTheme) {
-                tintWhitePixelsToDark(scaledElement, 0xFF111827.toInt())
+            if (isDarkTheme) {
+                ensureVisibleInDarkTheme(scaledElement)
             } else {
-                scaledElement
+                tintWhitePixelsToDark(scaledElement, 0xFF111827.toInt())
             }
         }
 
@@ -512,7 +513,16 @@ object IconProcessor {
     fun saveCustomImage(context: Context, uri: Uri): String? {
         return try {
             val iconsDir = File(context.filesDir, "icons").apply { if (!exists()) mkdirs() }
-            val destFile = File(iconsDir, "icon_${System.currentTimeMillis()}.png")
+            val mimeType = context.contentResolver.getType(uri)?.lowercase() ?: ""
+            val uriStr = uri.toString().lowercase()
+            val ext = when {
+                mimeType.contains("svg") || uriStr.endsWith(".svg") -> "svg"
+                mimeType.contains("webp") || uriStr.endsWith(".webp") -> "webp"
+                mimeType.contains("jpeg") || mimeType.contains("jpg") || uriStr.endsWith(".jpg") || uriStr.endsWith(".jpeg") -> "jpg"
+                mimeType.contains("gif") || uriStr.endsWith(".gif") -> "gif"
+                else -> "png"
+            }
+            val destFile = File(iconsDir, "icon_${System.currentTimeMillis()}.$ext")
             context.contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(destFile).use { output ->
                     input.copyTo(output)
@@ -522,6 +532,116 @@ object IconProcessor {
         } catch (e: Throwable) {
             null
         }
+    }
+
+    fun loadBitmapFromFile(file: File, targetSize: Int): Bitmap? {
+        if (!file.exists() || file.length() == 0L) return null
+
+        val isSvg = file.name.endsWith(".svg", ignoreCase = true) || isSvgFile(file)
+        if (isSvg) {
+            val svgBitmap = loadSvgBitmap(file, targetSize)
+            if (svgBitmap != null) return svgBitmap
+        }
+
+        return try {
+            BitmapFactory.decodeFile(file.absolutePath)
+        } catch (e: Throwable) {
+            null
+        }
+    }
+
+    private fun isSvgFile(file: File): Boolean {
+        return try {
+            file.inputStream().use { stream ->
+                val buffer = ByteArray(256)
+                val read = stream.read(buffer)
+                if (read > 0) {
+                    val header = String(buffer, 0, read).lowercase()
+                    header.contains("<svg") || (header.contains("<?xml") && header.contains("<svg"))
+                } else false
+            }
+        } catch (e: Throwable) {
+            false
+        }
+    }
+
+    private fun loadSvgBitmap(file: File, targetSize: Int): Bitmap? {
+        return try {
+            file.inputStream().use { stream ->
+                val svg = SVG.getFromInputStream(stream)
+                val docWidth = svg.documentWidth
+                val docHeight = svg.documentHeight
+                val renderDim = if (targetSize > 0) targetSize else 192
+
+                if (svg.documentViewBox != null) {
+                    svg.documentWidth = renderDim.toFloat()
+                    svg.documentHeight = renderDim.toFloat()
+                } else if (docWidth > 0f && docHeight > 0f) {
+                    val scale = renderDim.toFloat() / maxOf(docWidth, docHeight)
+                    svg.documentWidth = docWidth * scale
+                    svg.documentHeight = docHeight * scale
+                } else {
+                    svg.documentWidth = renderDim.toFloat()
+                    svg.documentHeight = renderDim.toFloat()
+                }
+
+                val outWidth = if (svg.documentWidth > 0f) svg.documentWidth.toInt() else renderDim
+                val outHeight = if (svg.documentHeight > 0f) svg.documentHeight.toInt() else renderDim
+
+                val bitmap = Bitmap.createBitmap(
+                    maxOf(outWidth, 24),
+                    maxOf(outHeight, 24),
+                    Bitmap.Config.ARGB_8888
+                )
+                val canvas = Canvas(bitmap)
+                svg.renderToCanvas(canvas)
+                bitmap
+            }
+        } catch (e: Throwable) {
+            null
+        }
+    }
+
+    private fun ensureVisibleInDarkTheme(src: Bitmap): Bitmap {
+        val w = src.width
+        val h = src.height
+        val pixels = IntArray(w * h)
+        src.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        var darkPixelCount = 0
+        var totalVisibleCount = 0
+        for (p in pixels) {
+            val a = (p ushr 24) and 0xFF
+            if (a > 30) {
+                totalVisibleCount++
+                val r = (p ushr 16) and 0xFF
+                val g = (p ushr 8) and 0xFF
+                val b = p and 0xFF
+                val lum = 0.299f * r + 0.587f * g + 0.114f * b
+                if (lum < 110f) darkPixelCount++
+            }
+        }
+
+        if (totalVisibleCount > 0 && (darkPixelCount.toFloat() / totalVisibleCount) > 0.5f) {
+            val outPixels = IntArray(w * h)
+            for (i in pixels.indices) {
+                val p = pixels[i]
+                val a = (p ushr 24) and 0xFF
+                if (a > 0) {
+                    val r = (p ushr 16) and 0xFF
+                    val g = (p ushr 8) and 0xFF
+                    val b = p and 0xFF
+                    val lum = (0.299f * r + 0.587f * g + 0.114f * b).toInt()
+                    if (lum < 150) {
+                        outPixels[i] = (a shl 24) or 0x00FFFFFF
+                    } else {
+                        outPixels[i] = p
+                    }
+                }
+            }
+            return Bitmap.createBitmap(outPixels, w, h, Bitmap.Config.ARGB_8888)
+        }
+        return src
     }
 
     fun saveAppOutlineIcon(context: Context, packageName: String, bitmap: Bitmap): String? {

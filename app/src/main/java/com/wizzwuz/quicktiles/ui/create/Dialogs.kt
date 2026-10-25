@@ -903,6 +903,17 @@ fun ShellDialog(
                     sourceType = IconSourceType.CUSTOM_FILE,
                     sourceData = path
                 )
+            },
+            onSelectAppIcon = { pkg ->
+                showPresetPickerForOn = false
+                onIconConfig = IconConfig(
+                    sourceType = IconSourceType.APP_ICON,
+                    sourceData = pkg,
+                    outlineThickness = 2.5f,
+                    outlineThreshold = 0.4f,
+                    iconSize = 32f,
+                    outlineStyle = "OUTLINE"
+                )
             }
         )
     }
@@ -923,6 +934,17 @@ fun ShellDialog(
                 offIconConfig = offIconConfig.copy(
                     sourceType = IconSourceType.CUSTOM_FILE,
                     sourceData = path
+                )
+            },
+            onSelectAppIcon = { pkg ->
+                showPresetPickerForOff = false
+                offIconConfig = IconConfig(
+                    sourceType = IconSourceType.APP_ICON,
+                    sourceData = pkg,
+                    outlineThickness = 2.5f,
+                    outlineThreshold = 0.4f,
+                    iconSize = 32f,
+                    outlineStyle = "OUTLINE"
                 )
             }
         )
@@ -1264,9 +1286,12 @@ fun IconPresetsDialog(
     currentKey: String,
     onDismiss: () -> Unit,
     onSelectPreset: (key: String) -> Unit,
-    onSelectCustomFile: ((filePath: String) -> Unit)? = null
+    onSelectCustomFile: ((filePath: String) -> Unit)? = null,
+    onSelectAppIcon: ((packageName: String) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    var showAppPickerInPresets by remember { mutableStateOf(false) }
+
     val imagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -1276,6 +1301,17 @@ fun IconPresetsDialog(
                 onSelectCustomFile?.invoke(savedPath)
             }
         }
+    }
+
+    if (showAppPickerInPresets) {
+        AppPickerSheet(
+            onDismiss = { showAppPickerInPresets = false },
+            onAppSelected = { app ->
+                showAppPickerInPresets = false
+                onSelectAppIcon?.invoke(app.packageName)
+                onDismiss()
+            }
+        )
     }
 
     AlertDialog(
@@ -1326,17 +1362,34 @@ fun IconPresetsDialog(
             TextButton(onClick = onDismiss) { Text("Close") }
         },
         dismissButton = {
-            if (onSelectCustomFile != null) {
-                OutlinedButton(
-                    onClick = { imagePicker.launch("image/*") }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FolderOpen,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("File Picker", fontSize = 12.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (onSelectCustomFile != null) {
+                    OutlinedButton(
+                        onClick = { imagePicker.launch("*/*") },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FolderOpen,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Pick File", fontSize = 11.sp)
+                    }
+                }
+                if (onSelectAppIcon != null) {
+                    OutlinedButton(
+                        onClick = { showAppPickerInPresets = true },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Apps,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("From Apps", fontSize = 11.sp)
+                    }
                 }
             }
         }

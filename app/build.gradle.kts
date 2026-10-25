@@ -89,4 +89,5 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
+    implementation(libs.androidsvg)
 }
