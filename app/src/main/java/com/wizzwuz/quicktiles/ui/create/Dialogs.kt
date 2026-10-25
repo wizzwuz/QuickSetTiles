@@ -1354,20 +1354,6 @@ fun IconPresetsDialog(
         },
         dismissButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (onSelectCustomFile != null) {
-                    OutlinedButton(
-                        onClick = { imagePicker.launch("*/*") },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FolderOpen,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Pick File", fontSize = 11.sp)
-                    }
-                }
                 if (onSelectAppIcon != null) {
                     OutlinedButton(
                         onClick = { showAppPickerInPresets = true },
