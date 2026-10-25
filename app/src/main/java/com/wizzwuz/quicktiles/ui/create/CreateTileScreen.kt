@@ -316,16 +316,6 @@ fun CreateTileScreen(
                                     Spacer(modifier = Modifier.width(3.dp))
                                     Text("Presets", fontSize = 11.sp)
                                 }
-
-                                FilledTonalButton(
-                                    onClick = { showAppIconPicker = true },
-                                    modifier = Modifier.weight(1f),
-                                    contentPadding = PaddingValues(horizontal = 4.dp)
-                                ) {
-                                    Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(15.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text("App Icon", fontSize = 11.sp)
-                                }
                             }
 
                             OutlinedButton(
