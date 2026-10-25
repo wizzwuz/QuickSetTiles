@@ -172,8 +172,9 @@ fun CreateTileScreen(
             if (effectiveTargetData.isBlank()) {
                 Toast.makeText(context, "Please configure tile command or target data", Toast.LENGTH_SHORT).show()
             } else {
+                val finalName = tileName.trim()
                 val tile = (initialTile ?: TileItem(
-                    name = tileName.trim(),
+                    name = finalName,
                     type = selectedType!!,
                     targetData = effectiveTargetData.trim(),
                     iconConfig = iconConfig,
@@ -184,12 +185,12 @@ fun CreateTileScreen(
                     offCommand = offCommand.trim(),
                     currentToggleOn = currentToggleOn,
                     collapseOnTap = collapseOnTap,
-                    onTileName = onTileName.trim(),
-                    offTileName = offTileName.trim(),
+                    onTileName = finalName,
+                    offTileName = finalName,
                     onIconConfig = onIconConfig,
                     offIconConfig = offIconConfig
                 )).copy(
-                    name = tileName.trim(),
+                    name = finalName,
                     type = selectedType!!,
                     targetData = effectiveTargetData.trim(),
                     iconConfig = iconConfig,
@@ -198,8 +199,8 @@ fun CreateTileScreen(
                     offCommand = offCommand.trim(),
                     currentToggleOn = currentToggleOn,
                     collapseOnTap = collapseOnTap,
-                    onTileName = onTileName.trim(),
-                    offTileName = offTileName.trim(),
+                    onTileName = if (visualState == TileVisualState.TOGGLE && onTileName.isNotBlank() && onTileName != initialTile?.name) onTileName.trim() else finalName,
+                    offTileName = if (visualState == TileVisualState.TOGGLE && offTileName.isNotBlank() && offTileName != initialTile?.name) offTileName.trim() else finalName,
                     onIconConfig = if (visualState == TileVisualState.TOGGLE) (onIconConfig ?: iconConfig) else iconConfig,
                     offIconConfig = if (visualState == TileVisualState.TOGGLE) (offIconConfig ?: iconConfig) else null
                 )

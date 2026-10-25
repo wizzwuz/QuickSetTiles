@@ -26,12 +26,35 @@ import kotlinx.coroutines.launch
 
 abstract class BaseTileService(private val slotNumber: Int) : TileService() {
 
+    companion object {
+        private val activeInstances = java.util.concurrent.ConcurrentHashMap<Int, BaseTileService>()
+
+        fun refreshSlot(slot: Int) {
+            activeInstances[slot]?.let { service ->
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    service.updateTileState()
+                }
+            }
+        }
+    }
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onStartListening() {
         super.onStartListening()
+        activeInstances[slotNumber] = this
         updateTileState()
+    }
+
+    override fun onStopListening() {
+        super.onStopListening()
+        activeInstances.remove(slotNumber)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        activeInstances.remove(slotNumber)
     }
 
     private fun updateTileState() {
@@ -46,11 +69,13 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                 com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
             }
             val displayName = when (item.visualState) {
-                com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) item.onTileName.ifBlank { item.name } else item.offTileName.ifBlank { item.name }
-                com.wizzwuz.quicktiles.model.TileVisualState.ENABLED -> item.onTileName.ifBlank { item.name }
+                com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> {
+                    if (item.currentToggleOn) item.onTileName.ifBlank { item.name } else item.offTileName.ifBlank { item.name }
+                }
+                com.wizzwuz.quicktiles.model.TileVisualState.ENABLED -> item.name
                 com.wizzwuz.quicktiles.model.TileVisualState.DISABLED -> item.offTileName.ifBlank { item.name }
             }
-            tile.label = displayName.ifBlank { "Tile $slotNumber" }
+            tile.label = displayName.ifBlank { item.name.ifBlank { "Tile $slotNumber" } }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 tile.subtitle = when (item.visualState) {
                     com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) "Enabled" else "Disabled"

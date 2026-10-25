@@ -317,12 +317,16 @@ class TileRepository(private val context: Context) {
 
         fun requestTileUpdate(context: Context, slot: Int) {
             try {
+                // If service is running in-memory right now, refresh it immediately!
+                com.wizzwuz.quicktiles.service.BaseTileService.refreshSlot(slot)
+
                 val serviceClass = "com.wizzwuz.quicktiles.service.QuickTileService$slot"
                 val component = ComponentName(context, serviceClass)
                 TileService.requestListeningState(context, component)
                 // Also trigger again after slight delay in case PackageManager was just updated
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     try {
+                        com.wizzwuz.quicktiles.service.BaseTileService.refreshSlot(slot)
                         TileService.requestListeningState(context, component)
                     } catch (e: Throwable) {}
                 }, 250L)
