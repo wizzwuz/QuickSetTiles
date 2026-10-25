@@ -202,7 +202,7 @@ fun MainScreen() {
                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
                     contentColor = MaterialTheme.colorScheme.onSurface,
                     tonalElevation = 8.dp,
-                    modifier = Modifier.height(72.dp)
+                    modifier = Modifier.height(100.dp)
                 ) {
                     // Left Tab: Active Tiles
                     NavigationBarItem(
