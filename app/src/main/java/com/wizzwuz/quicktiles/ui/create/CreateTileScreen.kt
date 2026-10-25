@@ -410,31 +410,6 @@ fun CreateTileScreen(
                 }
             }
 
-            // Current Configuration Status
-            if (selectedType != null) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Type: ${selectedType?.name}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text(
-                                text = targetData.take(60),
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-            }
-
             // 3. Tile Types Selection Section
             Text(
                 text = "Select Tile Type",
@@ -588,19 +563,19 @@ fun CreateTileScreen(
                             FilterChip(
                                 selected = visualState == TileVisualState.ENABLED,
                                 onClick = { visualState = TileVisualState.ENABLED },
-                                label = { Text("Enabled", fontSize = 12.sp) },
+                                label = { Text("Enabled", fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                                 modifier = Modifier.weight(1f)
                             )
                             FilterChip(
                                 selected = visualState == TileVisualState.DISABLED,
                                 onClick = { visualState = TileVisualState.DISABLED },
-                                label = { Text("Disabled", fontSize = 12.sp) },
+                                label = { Text("Disabled", fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                                 modifier = Modifier.weight(1f)
                             )
                             FilterChip(
                                 selected = visualState == TileVisualState.TOGGLE,
                                 onClick = { visualState = TileVisualState.TOGGLE },
-                                label = { Text("Both (Toggle)", fontSize = 12.sp) },
+                                label = { Text("Both", fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -629,11 +604,6 @@ fun CreateTileScreen(
                             text = "Collapse panel on click",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Automatically close Quick Settings notification shade after tapping this tile",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Switch(
