@@ -124,7 +124,8 @@ class TileRepository(private val context: Context) {
                 findNextAvailableSlot(current.filter { it.id != tileToSave.id })
             }
             if (assignedSlot in 1..MAX_SLOTS) {
-                tileToSave.copy(isActive = true, slotNumber = assignedSlot, isAddedToQs = true)
+                // Do NOT auto-add to Quick Settings - user must add manually
+                tileToSave.copy(isActive = true, slotNumber = assignedSlot, isAddedToQs = false)
             } else {
                 tileToSave.copy(isActive = false, slotNumber = -1, isAddedToQs = false)
             }
@@ -146,10 +147,9 @@ class TileRepository(private val context: Context) {
             requestTileUpdate(context, oldSlot)
         }
 
-        // Always enable component and immediately refresh QS tile
+        // Do NOT auto-enable/add to Quick Settings - user must manually tap "Add" button
         if (finalTile.isActive && finalTile.slotNumber in 1..MAX_SLOTS) {
-            setComponentEnabled(context, finalTile.slotNumber, true)
-            requestTileUpdate(context, finalTile.slotNumber)
+            setComponentEnabled(context, finalTile.slotNumber, false)
         }
     }
 
