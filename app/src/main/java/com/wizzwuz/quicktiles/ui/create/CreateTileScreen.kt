@@ -744,7 +744,17 @@ fun CreateTileScreen(
                 onIconConfig = onIcon
                 offIconConfig = offIcon
                 if (tileName.isBlank()) tileName = name
-                onIcon?.let { iconConfig = it }
+                when (vState) {
+                    TileVisualState.DISABLED -> {
+                        offIcon?.let { iconConfig = it }
+                    }
+                    TileVisualState.TOGGLE -> {
+                        onIcon?.let { iconConfig = it }
+                    }
+                    TileVisualState.ENABLED -> {
+                        onIcon?.let { iconConfig = it }
+                    }
+                }
             }
         )
     }
