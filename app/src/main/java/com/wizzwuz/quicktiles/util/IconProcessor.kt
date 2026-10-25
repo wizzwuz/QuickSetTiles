@@ -355,8 +355,10 @@ object IconProcessor {
 
                 when (style.uppercase()) {
                     "SOLID" -> {
-                        if (isSolid[idx]) {
-                            resultPixels[idx] = (0xFF shl 24) or strokeRgb
+                        if (edgeA > 0) {
+                            resultPixels[idx] = (edgeA shl 24) or strokeRgb
+                        } else if (isSolid[idx]) {
+                            resultPixels[idx] = (180 shl 24) or strokeRgb
                         }
                     }
                     "FROSTED" -> {
@@ -503,7 +505,7 @@ object IconProcessor {
 
     fun createTileIcon(context: Context, config: IconConfig): Icon {
         // Quick Settings tiles on Android use monochrome white mask for SystemUI tinting
-        val bmp = processIconBitmap(context, config, targetPixelSize = 96, isDarkTheme = true)
+        val bmp = processIconBitmap(context, config, targetPixelSize = 192, isDarkTheme = true)
         return Icon.createWithBitmap(bmp)
     }
 

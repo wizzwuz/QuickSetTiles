@@ -272,7 +272,7 @@ fun TilesListScreen(
                                             text = "Tile ${tile.slotNumber}",
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                         )
                                     }
                                 }

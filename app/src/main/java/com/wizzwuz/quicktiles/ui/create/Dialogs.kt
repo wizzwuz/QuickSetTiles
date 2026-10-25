@@ -880,6 +880,8 @@ fun ShellDialog(
     var offCommand by remember { mutableStateOf(initialOffCommand) }
     var selectedMode by remember { mutableStateOf(ShellMode.AUTO) }
     val shizukuStatus by ShizukuHelper.statusFlow.collectAsState()
+    var isRootGranted by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { isRootGranted = ShizukuHelper.isRootGranted() }
 
     var showPresetPickerForOn by remember { mutableStateOf(false) }
     var showPresetPickerForOff by remember { mutableStateOf(false) }
@@ -1127,36 +1129,53 @@ fun ShellDialog(
                     }
                 }
 
-                // Shizuku status indicator card
-                val isPermRequired = shizukuStatus == com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED
-
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = when (shizukuStatus) {
-                            com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                            com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
-                            com.wizzwuz.quicktiles.util.ShizukuStatus.NOT_RUNNING -> MaterialTheme.colorScheme.surfaceVariant
-                        }
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Execution access status card
+                if (isRootGranted) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Text(
-                            text = when (shizukuStatus) {
-                                com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> "✓ Shizuku: Connected & Authorized"
-                                com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> "⚠ Shizuku: Permission Required"
-                                com.wizzwuz.quicktiles.util.ShizukuStatus.NOT_RUNNING -> "ℹ Shizuku: Not Running (Will use Root or sh)"
-                            },
+                            text = "✓ Root access: Granted",
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 11.sp
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(8.dp)
                         )
-                        if (isPermRequired) {
-                            Button(
-                                onClick = { ShizukuHelper.requestShizukuPermission() },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(28.dp)
-                            ) {
-                                Text("Grant Shizuku Permission", fontSize = 10.sp)
+                    }
+                } else {
+                    // Shizuku status indicator card
+                    val isPermRequired = shizukuStatus == com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED
+
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = when (shizukuStatus) {
+                                com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+                                com.wizzwuz.quicktiles.util.ShizukuStatus.NOT_RUNNING -> MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = when (shizukuStatus) {
+                                    com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> "✓ Shizuku: Connected & Authorized"
+                                    com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> "⚠ Shizuku: Permission Required"
+                                    com.wizzwuz.quicktiles.util.ShizukuStatus.NOT_RUNNING -> "ℹ Shizuku: Not Running (Will use Root or sh)"
+                                },
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 11.sp
+                            )
+                            if (isPermRequired) {
+                                Button(
+                                    onClick = { ShizukuHelper.requestShizukuPermission() },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Text("Grant Shizuku Permission", fontSize = 10.sp)
+                                }
                             }
                         }
                     }

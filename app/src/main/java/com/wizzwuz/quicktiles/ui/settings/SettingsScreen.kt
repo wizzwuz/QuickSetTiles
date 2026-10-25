@@ -358,7 +358,7 @@ fun SettingsScreen(
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "Execution Engine: ${if (diagnostics.isRootBinaryPresent) "Root (su)" else if (diagnostics.hasShizukuPermission) "Shizuku Service" else "Permission Required"}",
+                                text = "Execution Engine: ${if (diagnostics.isRootGranted) "Root access: Granted" else if (diagnostics.hasShizukuPermission) "Shizuku Service" else "Permission Required"}",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
