@@ -29,7 +29,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wizzwuz.quicktiles.util.ActivityItem
@@ -51,9 +50,8 @@ fun ActivityPickerScreen(
     onBack: () -> Unit,
     onActivitySelected: (app: AppItem, activity: ActivityItem) -> Unit
 ) {
-    BackHandler {
-        onBack()
-    }
+    // Intercept hardware/system back button to go back to tile edit page
+    BackHandler(onBack = onBack)
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -83,8 +81,8 @@ fun ActivityPickerScreen(
         isLoading = false
 
         // Background preload all activities for instant search across both short and full activity names
-        AppHelper.preloadAllActivities(context, loadedApps) { pkg, acts ->
-            activitiesMap[pkg] = acts
+        AppHelper.preloadAllActivities(context, loadedApps) { batch ->
+            activitiesMap.putAll(batch)
         }
     }
 
@@ -95,7 +93,7 @@ fun ActivityPickerScreen(
         if (showSystemApps) apps else apps.filter { !it.isSystemApp }
     }
 
-    val filteredItems = remember(visibleApps, q, activitiesMap.toMap()) {
+    val filteredItems = remember(visibleApps, q, if (q.isBlank()) Unit else activitiesMap.size) {
         if (q.isBlank()) {
             visibleApps.map { app ->
                 AppPickerItem(
@@ -433,63 +431,63 @@ fun ActivityPickerScreen(
                                                     color = MaterialTheme.colorScheme.surface,
                                                     tonalElevation = 2.dp
                                                 ) {
-                                                    Column(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(10.dp)
+                                                    Row(
+                                                        modifier = Modifier.padding(10.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                     ) {
-                                                        Row(
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            horizontalArrangement = Arrangement.SpaceBetween
-                                                        ) {
+                                                        Column(modifier = Modifier.weight(1f)) {
                                                             Text(
                                                                 text = act.simpleName,
                                                                 fontWeight = FontWeight.SemiBold,
-                                                                fontSize = 13.sp,
-                                                                maxLines = 1,
-                                                                overflow = TextOverflow.Ellipsis,
-                                                                modifier = Modifier.weight(1f, fill = false)
+                                                                fontSize = 13.sp
                                                             )
+                                                            Text(
+                                                                text = act.fullName,
+                                                                fontSize = 10.sp,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                softWrap = true
+                                                            )
+                                                        }
 
-                                                            // Compact access-mode pill
+                                                        // Compact access-mode chip (fixed narrow width)
+                                                        if (!act.isExported) {
                                                             val (chipLabel, chipColor) = when {
-                                                                !act.isExported -> {
-                                                                    when {
-                                                                        isRootGranted -> "Private (root)" to MaterialTheme.colorScheme.tertiary
-                                                                        isPrivateLaunchable -> "Private (shizuku)" to MaterialTheme.colorScheme.primary
-                                                                        else -> "Private (disabled)" to MaterialTheme.colorScheme.error
-                                                                    }
-                                                                }
-                                                                else -> "Exported" to MaterialTheme.colorScheme.primary
+                                                                isRootGranted ->
+                                                                    "Root" to MaterialTheme.colorScheme.tertiary
+                                                                isPrivateLaunchable ->
+                                                                    "Shizuku" to MaterialTheme.colorScheme.primary
+                                                                else ->
+                                                                    "Off" to MaterialTheme.colorScheme.error
                                                             }
-
                                                             Surface(
                                                                 shape = RoundedCornerShape(4.dp),
                                                                 color = chipColor.copy(alpha = 0.12f),
-                                                                modifier = Modifier.padding(start = 6.dp)
+                                                                modifier = Modifier.padding(start = 4.dp)
                                                             ) {
                                                                 Text(
                                                                     text = chipLabel,
                                                                     fontSize = 9.sp,
                                                                     fontWeight = FontWeight.Bold,
                                                                     color = chipColor,
-                                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                                                                    maxLines = 1
+                                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                                )
+                                                            }
+                                                        } else {
+                                                            Surface(
+                                                                shape = RoundedCornerShape(4.dp),
+                                                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                                                modifier = Modifier.padding(start = 4.dp)
+                                                            ) {
+                                                                Text(
+                                                                    text = "Public",
+                                                                    fontSize = 9.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = MaterialTheme.colorScheme.primary,
+                                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                                                                 )
                                                             }
                                                         }
-
-                                                        Spacer(modifier = Modifier.height(2.dp))
-
-                                                        // Full name of activity class with full card width
-                                                        Text(
-                                                            text = act.fullName,
-                                                            fontSize = 10.sp,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            softWrap = true,
-                                                            modifier = Modifier.fillMaxWidth()
-                                                        )
                                                     }
                                                 }
                                             }

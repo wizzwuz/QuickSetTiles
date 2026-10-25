@@ -282,7 +282,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (showCategories) "Categories panel enabled" else "Categories panel disabled",
+                                text = if (showCategories) "Categories panel enabled in Active and Inactive tile lists" else "Categories panel disabled",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

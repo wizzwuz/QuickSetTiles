@@ -62,8 +62,6 @@ fun MainScreen() {
     BackHandler(enabled = selectedTileIds.isNotEmpty() || currentDestination != MainDestination.LIST || selectedTab != 0) {
         if (selectedTileIds.isNotEmpty()) {
             selectedTileIds = emptySet()
-        } else if (currentDestination == MainDestination.ACTIVITY_PICKER) {
-            currentDestination = MainDestination.CREATE_OR_EDIT
         } else if (currentDestination != MainDestination.LIST) {
             currentDestination = MainDestination.LIST
         } else if (selectedTab != 0) {
@@ -398,8 +396,7 @@ fun MainScreen() {
                     CreateTileScreen(
                         initialTile = editingTile,
                         onBack = { currentDestination = MainDestination.LIST },
-                        onOpenActivityPicker = { draftTile ->
-                            editingTile = draftTile
+                        onOpenActivityPicker = {
                             currentDestination = MainDestination.ACTIVITY_PICKER
                         },
                         onSaveTile = { tileToSave ->

@@ -82,6 +82,14 @@ fun TilesListScreen(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
+                Text(
+                    text = if (isActiveTab)
+                        "Tap a tile to edit. Tap Disable to deactivate."
+                    else
+                        "Tap a tile to edit. Tap Add to activate.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
@@ -468,3 +476,4 @@ fun CategoriesPanel(
         }
     }
 }
+
