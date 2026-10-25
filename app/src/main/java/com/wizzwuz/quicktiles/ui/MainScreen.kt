@@ -10,8 +10,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wizzwuz.quicktiles.data.TileRepository
@@ -47,6 +53,10 @@ fun MainScreen() {
     var editingTile by remember { mutableStateOf<TileItem?>(null) }
     var selectedTileIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
+    var isSearching by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     val sortedTiles = remember(allTiles, sortOrder) {
         when (sortOrder) {
@@ -56,12 +66,24 @@ fun MainScreen() {
         }
     }
 
-    val activeTiles = remember(sortedTiles) { sortedTiles.filter { it.isActive } }
-    val inactiveTiles = remember(sortedTiles) { sortedTiles.filter { !it.isActive } }
+    val searchedTiles = remember(sortedTiles, searchQuery) {
+        if (searchQuery.isBlank()) {
+            sortedTiles
+        } else {
+            sortedTiles.filter { it.name.contains(searchQuery, ignoreCase = true) }
+        }
+    }
 
-    BackHandler(enabled = selectedTileIds.isNotEmpty() || currentDestination != MainDestination.LIST || selectedTab != 0) {
+    val activeTiles = remember(searchedTiles) { searchedTiles.filter { it.isActive } }
+    val inactiveTiles = remember(searchedTiles) { searchedTiles.filter { !it.isActive } }
+
+    BackHandler(enabled = selectedTileIds.isNotEmpty() || currentDestination != MainDestination.LIST || selectedTab != 0 || isSearching) {
         if (selectedTileIds.isNotEmpty()) {
             selectedTileIds = emptySet()
+        } else if (isSearching) {
+            isSearching = false
+            searchQuery = ""
+            keyboardController?.hide()
         } else if (currentDestination != MainDestination.LIST) {
             currentDestination = MainDestination.LIST
         } else if (selectedTab != 0) {
@@ -77,6 +99,13 @@ fun MainScreen() {
                 currentDestination = MainDestination.CREATE_OR_EDIT
                 TileEditChannel.clear()
             }
+        }
+    }
+
+    LaunchedEffect(isSearching) {
+        if (isSearching) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
         }
     }
 
@@ -121,6 +150,49 @@ fun MainScreen() {
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
                         )
                     )
+                } else if (isSearching) {
+                    TopAppBar(
+                        title = {
+                            TextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("Search tiles...") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(
+                                    onSearch = { keyboardController?.hide() }
+                                ),
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedIndicatorColor = MaterialTheme.colorScheme.outline
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focusRequester)
+                            )
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = {
+                                isSearching = false
+                                searchQuery = ""
+                                keyboardController?.hide()
+                            }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Close search")
+                            }
+                        },
+                        actions = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
                 } else {
                     TopAppBar(
                         title = {
@@ -140,6 +212,12 @@ fun MainScreen() {
                             }
                         },
                         actions = {
+                            IconButton(onClick = { 
+                                isSearching = true 
+                            }) {
+                                Icon(Icons.Default.Search, contentDescription = "Search tiles")
+                            }
+                            
                             var showSortMenu by remember { mutableStateOf(false) }
 
                             Box {
@@ -197,7 +275,7 @@ fun MainScreen() {
             }
         },
         bottomBar = {
-            if (currentDestination == MainDestination.LIST) {
+            if (currentDestination == MainDestination.LIST && !isSearching) {
                 BottomAppBar(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
                     contentColor = MaterialTheme.colorScheme.onSurface,
@@ -314,7 +392,7 @@ fun MainScreen() {
                             TilesListScreen(
                                 tiles = activeTiles,
                                 isActiveTab = true,
-                                showCategories = showCategories,
+                                showCategories = showCategories && !isSearching,
                                 selectedTileIds = selectedTileIds,
                                 onTileClick = { tile ->
                                     editingTile = tile
@@ -353,7 +431,7 @@ fun MainScreen() {
                             TilesListScreen(
                                 tiles = inactiveTiles,
                                 isActiveTab = false,
-                                showCategories = showCategories,
+                                showCategories = showCategories && !isSearching,
                                 selectedTileIds = selectedTileIds,
                                 onTileClick = { tile ->
                                     editingTile = tile
