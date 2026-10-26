@@ -911,10 +911,18 @@ fun CollectionCreatorScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedItemForEdit by remember { mutableStateOf<TileItem?>(null) }
     var collapseCollectionOnClick by remember { mutableStateOf(false) }
-    
+    var addType by remember { mutableStateOf<TileType?>(null) }
+
     // Icon config for collection itself
     var collectionIconConfig by remember { mutableStateOf(IconConfig(sourceType = IconSourceType.PRESET, sourceData = "collections")) }
-    
+
+    // Dialog states
+    var showWebsiteDialog by remember { mutableStateOf(false) }
+    var showShellDialog by remember { mutableStateOf(false) }
+    var showShortcutDialog by remember { mutableStateOf(false) }
+    var showIntentDialog by remember { mutableStateOf(false) }
+    var showPresetsDialog by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -937,7 +945,6 @@ fun CollectionCreatorScreen(
                             collectionItemIds = collectionItems.map { it.id },
                             collapseCollectionOnClick = collapseCollectionOnClick
                         )
-                        // We need to save the items too - but for now just save collection reference
                         onSaveCollection(collectionTile)
                     }) {
                         Text("Save")
@@ -965,7 +972,7 @@ fun CollectionCreatorScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        items(collectionItems) { item ->
+                        items(collectionItems, key = { it.id }) { item ->
                             val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
                             val previewBitmap = remember(item.iconConfig, isDark) {
                                 IconProcessor.processIconBitmap(context, item.iconConfig, targetPixelSize = 48, isDarkTheme = isDark)
@@ -1001,7 +1008,7 @@ fun CollectionCreatorScreen(
                     }
                 }
             }
-            
+
             // Collection name
             OutlinedTextField(
                 value = collectionName,
@@ -1011,7 +1018,7 @@ fun CollectionCreatorScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp)
             )
-            
+
             // Collection icon
             Row(
                 modifier = Modifier
@@ -1033,7 +1040,7 @@ fun CollectionCreatorScreen(
                     Text("Change Icon")
                 }
             }
-            
+
             // Collapse collection on click
             Row(
                 modifier = Modifier
@@ -1046,9 +1053,9 @@ fun CollectionCreatorScreen(
                 Text("Collapse collection on click")
                 Switch(checked = collapseCollectionOnClick, onCheckedChange = { collapseCollectionOnClick = it })
             }
-            
+
             Divider()
-            
+
             // Bottom section - all tile type buttons except Collections
             Text("Add Tiles to Collection", fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
             LazyVerticalGrid(
@@ -1060,30 +1067,306 @@ fun CollectionCreatorScreen(
                     .padding(8.dp)
             ) {
                 item {
-                    TileTypeButton(title = "Apps", subtitle = "Select any app", icon = Icons.Default.Apps, isSelected = false, onClick = { showAddDialog = true })
+                    TileTypeButton(title = "Apps", subtitle = "Select any app", icon = Icons.Default.Apps, isSelected = false, onClick = {
+                        addType = TileType.APPS
+                        showAddDialog = true
+                    })
                 }
                 item {
-                    TileTypeButton(title = "Website", subtitle = "Add URL", icon = Icons.Default.Language, isSelected = false, onClick = { showAddDialog = true })
+                    TileTypeButton(title = "Website", subtitle = "Add URL", icon = Icons.Default.Language, isSelected = false, onClick = {
+                        addType = TileType.WEBSITE
+                        showAddDialog = true
+                    })
                 }
                 item {
-                    TileTypeButton(title = "Shortcut", subtitle = "App shortcut", icon = Icons.Default.OpenInNew, isSelected = false, onClick = { showAddDialog = true })
+                    TileTypeButton(title = "Shortcut", subtitle = "App shortcut", icon = Icons.Default.OpenInNew, isSelected = false, onClick = {
+                        addType = TileType.SHORTCUT
+                        showAddDialog = true
+                    })
                 }
                 item {
-                    TileTypeButton(title = "Activity", subtitle = "App activity", icon = Icons.Default.Extension, isSelected = false, onClick = { showAddDialog = true })
+                    TileTypeButton(title = "Activity", subtitle = "App activity", icon = Icons.Default.Extension, isSelected = false, onClick = {
+                        addType = TileType.ACTIVITY
+                        showAddDialog = true
+                    })
                 }
                 item {
-                    TileTypeButton(title = "Intent", subtitle = "Custom intent", icon = Icons.Default.Send, isSelected = false, onClick = { showAddDialog = true })
+                    TileTypeButton(title = "Intent", subtitle = "Custom intent", icon = Icons.Default.Send, isSelected = false, onClick = {
+                        addType = TileType.INTENT
+                        showAddDialog = true
+                    })
                 }
                 item {
-                    TileTypeButton(title = "Shell", subtitle = "Run command", icon = Icons.Default.Terminal, isSelected = false, onClick = { showAddDialog = true })
+                    TileTypeButton(title = "Shell", subtitle = "Run command", icon = Icons.Default.Terminal, isSelected = false, onClick = {
+                        addType = TileType.SHELL
+                        showAddDialog = true
+                    })
                 }
                 item {
-                    TileTypeButton(title = "Files", subtitle = "Select a file", icon = Icons.Default.InsertDriveFile, isSelected = false, onClick = { showAddDialog = true })
+                    TileTypeButton(title = "Files", subtitle = "Select a file", icon = Icons.Default.InsertDriveFile, isSelected = false, onClick = {
+                        addType = TileType.FILES
+                        showAddDialog = true
+                    })
                 }
                 item {
-                    TileTypeButton(title = "Folders", subtitle = "Open directory", icon = Icons.Default.Folder, isSelected = false, onClick = { showAddDialog = true })
+                    TileTypeButton(title = "Folders", subtitle = "Open directory", icon = Icons.Default.Folder, isSelected = false, onClick = {
+                        addType = TileType.FOLDERS
+                        showAddDialog = true
+                    })
+                }
+            }
+
+            // Edit bottom sheet for selected item
+            if (selectedItemForEdit != null) {
+                val item = selectedItemForEdit!!
+                var itemName by remember { mutableStateOf(item.name) }
+                var itemIconConfig by remember { mutableStateOf(item.iconConfig) }
+                var itemVisualState by remember { mutableStateOf(item.visualState) }
+                var itemOnCommand by remember { mutableStateOf(item.onCommand) }
+                var itemOffCommand by remember { mutableStateOf(item.offCommand) }
+
+                ModalBottomSheet(
+                    onDismissRequest = { selectedItemForEdit = null },
+                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Text("Edit Tile", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Tile Name
+                        OutlinedTextField(
+                            value = itemName,
+                            onValueChange = { itemName = it },
+                            label = { Text("Tile Name") },
+                            placeholder = { Text("e.g. My App") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Icon category
+                        Text("Icon", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                            val bmp = remember(itemIconConfig, isDark) {
+                                IconProcessor.processIconBitmap(context, itemIconConfig, targetPixelSize = 48, isDarkTheme = isDark)
+                            }
+                            Image(
+                                bitmap = bmp.asImageBitmap(),
+                                contentDescription = "Preview",
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text("Preset: ${itemIconConfig.sourceData}", fontSize = 11.sp)
+                                TextButton(onClick = { showPresetsDialog = true }) {
+                                    Text("Pick File / Presets")
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Apps behavior category
+                        Text("Behavior", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FilterChip(
+                                selected = itemVisualState == TileVisualState.ENABLED,
+                                onClick = { itemVisualState = TileVisualState.ENABLED },
+                                label = { Text("Enabled", fontSize = 11.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = itemVisualState == TileVisualState.DISABLED,
+                                onClick = { itemVisualState = TileVisualState.DISABLED },
+                                label = { Text("Disabled", fontSize = 11.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = itemVisualState == TileVisualState.TOGGLE,
+                                onClick = { itemVisualState = TileVisualState.TOGGLE },
+                                label = { Text("Both", fontSize = 11.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Commands for shell type
+                        if (addType == null || item.type == TileType.SHELL) {
+                            OutlinedTextField(
+                                value = itemOnCommand,
+                                onValueChange = { itemOnCommand = it },
+                                label = { Text("Command (Enabled)") },
+                                placeholder = { Text("e.g. svc wifi enable") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            OutlinedTextField(
+                                value = itemOffCommand,
+                                onValueChange = { itemOffCommand = it },
+                                label = { Text("Command (Disabled)") },
+                                placeholder = { Text("e.g. svc wifi disable") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Collapse option
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { /* handled below */ },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Collapse collection on click")
+                            Switch(checked = item.collapseCollectionOnClick, onCheckedChange = { })
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(onClick = {
+                                val updatedItem = item.copy(
+                                    name = itemName,
+                                    iconConfig = itemIconConfig,
+                                    visualState = itemVisualState,
+                                    onCommand = itemOnCommand,
+                                    offCommand = itemOffCommand,
+                                    collapseCollectionOnClick = item.collapseCollectionOnClick
+                                )
+                                val idx = collectionItems.indexOfFirst { it.id == item.id }
+                                if (idx >= 0) collectionItems[idx] = updatedItem
+                                selectedItemForEdit = null
+                            }) {
+                                Text("Save Tile")
+                            }
+                            TextButton(onClick = { selectedItemForEdit = null }) {
+                                Text("Cancel")
+                            }
+                        }
+                    }
                 }
             }
         }
     }
+
+    // Website dialog
+    if (showAddDialog && addType == TileType.WEBSITE) {
+        WebsiteDialog(
+            initialName = "",
+            initialUrl = "",
+            onDismiss = { showAddDialog = false },
+            onConfirm = { name, url ->
+                showAddDialog = false
+                val item = TileItem(
+                    id = UUID.randomUUID().toString(),
+                    name = name.ifBlank { url },
+                    type = TileType.WEBSITE,
+                    targetData = url,
+                    iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = "language"),
+                    isActive = true,
+                    isAddedToQs = false
+                )
+                collectionItems.add(item)
+            }
+        )
+    }
+
+    // Shell dialog
+    if (showAddDialog && addType == TileType.SHELL) {
+        ShellDialog(
+            initialName = "",
+            initialCommand = "",
+            initialOnCommand = "",
+            initialOffCommand = "",
+            initialVisualState = TileVisualState.ENABLED,
+            initialOnTileName = "",
+            initialOffTileName = "",
+            initialOnIconConfig = null,
+            initialOffIconConfig = null,
+            onDismiss = { showAddDialog = false },
+            onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon ->
+                showAddDialog = false
+                val item = TileItem(
+                    id = UUID.randomUUID().toString(),
+                    name = name.ifBlank { "Shell" },
+                    type = TileType.SHELL,
+                    targetData = cmd,
+                    iconConfig = onIcon ?: IconConfig(sourceType = IconSourceType.PRESET, sourceData = "terminal"),
+                    isActive = true,
+                    isAddedToQs = false,
+                    visualState = vState,
+                    onCommand = onCmd,
+                    offCommand = offCmd,
+                    onTileName = onName,
+                    offTileName = offName,
+                    onIconConfig = onIcon,
+                    offIconConfig = offIcon
+                )
+                collectionItems.add(item)
+            }
+        )
+    }
+
+    // Shortcut dialog
+    if (showAddDialog && addType == TileType.SHORTCUT) {
+        ShortcutDialog(
+            onDismiss = { showAddDialog = false },
+            onSelect = { name, intentUri, pkg, iconBitmap ->
+                showAddDialog = false
+                val item = TileItem(
+                    id = UUID.randomUUID().toString(),
+                    name = name,
+                    type = TileType.SHORTCUT,
+                    targetData = intentUri,
+                    iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = pkg),
+                    isActive = true,
+                    isAddedToQs = false
+                )
+                collectionItems.add(item)
+            }
+        )
+    }
+
+    // Intent dialog
+    if (showAddDialog && addType == TileType.INTENT) {
+        IntentDialog(
+            initialName = "",
+            initialAction = "",
+            initialPackage = "",
+            onDismiss = { showAddDialog = false },
+            onConfirm = { name, action, pkg ->
+                showAddDialog = false
+                val item = TileItem(
+                    id = UUID.randomUUID().toString(),
+                    name = name.ifBlank { "Intent" },
+                    type = TileType.INTENT,
+                    targetData = if (pkg.isNotBlank()) "intent:#Intent;action=$action;package=$pkg;end" else action,
+                    iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = "send"),
+                    isActive = true,
+                    isAddedToQs = false
+                )
+                collectionItems.add(item)
+            }
+        )
+    }
 }
+
