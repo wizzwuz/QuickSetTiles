@@ -147,9 +147,10 @@ class TileRepository(private val context: Context) {
             requestTileUpdate(context, oldSlot)
         }
 
-        // Do NOT auto-enable/add to Quick Settings - user must manually tap "Add" button
-        if (finalTile.isActive && finalTile.slotNumber in 1..MAX_SLOTS) {
-            setComponentEnabled(context, finalTile.slotNumber, false)
+        // Only enable if tile is active and added to QS; don't disable on normal updates
+        if (finalTile.isActive && finalTile.slotNumber in 1..MAX_SLOTS && finalTile.isAddedToQs) {
+            setComponentEnabled(context, finalTile.slotNumber, true)
+            requestTileUpdate(context, finalTile.slotNumber)
         }
     }
 
@@ -250,7 +251,7 @@ class TileRepository(private val context: Context) {
 
     private fun findNextAvailableSlot(existingTiles: List<TileItem>): Int {
         val usedSlots = existingTiles.filter { it.isActive }.map { it.slotNumber }.toSet()
-        for (slot in 1..MAX_SLOTS) {
+        for (slot in MAX_SLOTS downTo 1) {
             if (!usedSlots.contains(slot)) {
                 return slot
             }

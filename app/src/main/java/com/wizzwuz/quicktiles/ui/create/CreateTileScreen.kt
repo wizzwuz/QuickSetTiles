@@ -199,10 +199,24 @@ fun CreateTileScreen(
                     offCommand = offCommand.trim(),
                     currentToggleOn = currentToggleOn,
                     collapseOnTap = collapseOnTap,
-                    onTileName = if (visualState == TileVisualState.TOGGLE && onTileName.isNotBlank() && onTileName != initialTile?.name) onTileName.trim() else finalName,
-                    offTileName = if (visualState == TileVisualState.TOGGLE && offTileName.isNotBlank() && offTileName != initialTile?.name) offTileName.trim() else finalName,
-                    onIconConfig = if (visualState == TileVisualState.TOGGLE) (onIconConfig ?: iconConfig) else iconConfig,
-                    offIconConfig = if (visualState == TileVisualState.TOGGLE) (offIconConfig ?: iconConfig) else null
+                    onTileName = when (visualState) {
+                        TileVisualState.TOGGLE -> if (onTileName.isNotBlank() && onTileName != initialTile?.name) onTileName.trim() else finalName
+                        else -> finalName
+                    },
+                    offTileName = when (visualState) {
+                        TileVisualState.TOGGLE -> if (offTileName.isNotBlank() && offTileName != initialTile?.name) offTileName.trim() else finalName
+                        else -> finalName
+                    },
+                    onIconConfig = when (visualState) {
+                        TileVisualState.TOGGLE -> (onIconConfig ?: iconConfig)
+                        TileVisualState.ENABLED -> (onIconConfig ?: iconConfig)
+                        TileVisualState.DISABLED -> iconConfig
+                    },
+                    offIconConfig = when (visualState) {
+                        TileVisualState.TOGGLE -> offIconConfig
+                        TileVisualState.DISABLED -> (offIconConfig ?: iconConfig)
+                        TileVisualState.ENABLED -> null
+                    }
                 )
                 onSaveTile(tile)
             }
@@ -730,7 +744,17 @@ fun CreateTileScreen(
                 onIconConfig = onIcon
                 offIconConfig = offIcon
                 if (tileName.isBlank()) tileName = name
-                onIcon?.let { iconConfig = it }
+                when (vState) {
+                    TileVisualState.DISABLED -> {
+                        offIcon?.let { iconConfig = it }
+                    }
+                    TileVisualState.TOGGLE -> {
+                        onIcon?.let { iconConfig = it }
+                    }
+                    TileVisualState.ENABLED -> {
+                        onIcon?.let { iconConfig = it }
+                    }
+                }
             }
         )
     }

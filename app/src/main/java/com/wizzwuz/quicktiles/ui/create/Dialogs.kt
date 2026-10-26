@@ -867,8 +867,8 @@ fun ShellDialog(
     var offTileName by remember { mutableStateOf(initialOffTileName.ifBlank { initialName }) }
     var onIconConfig by remember { mutableStateOf(initialOnIconConfig ?: IconConfig(sourceType = IconSourceType.PRESET, sourceData = "terminal")) }
     var offIconConfig by remember { mutableStateOf(initialOffIconConfig ?: IconConfig(sourceType = IconSourceType.PRESET, sourceData = "power")) }
-    var onCommand by remember { mutableStateOf(initialOnCommand.ifBlank { initialCommand }) }
-    var offCommand by remember { mutableStateOf(initialOffCommand) }
+    var onCommand by remember { mutableStateOf(initialOnCommand.ifBlank { initialCommand.ifBlank { initialOffCommand } }) }
+    var offCommand by remember { mutableStateOf(initialOffCommand.ifBlank { initialOnCommand.ifBlank { initialCommand } }) }
     var selectedMode by remember { mutableStateOf(ShellMode.AUTO) }
     val shizukuStatus by ShizukuHelper.statusFlow.collectAsState()
     var isRootGranted by remember { mutableStateOf(false) }
@@ -1212,17 +1212,23 @@ fun ShellDialog(
                     )
                 } else if (visualState == TileVisualState.ENABLED) {
                     ShellCommandInputField(
-                        label = "Shell Command (Enabled state)",
+                        label = "Shell Command",
                         command = onCommand,
-                        onCommandChange = { onCommand = it },
+                        onCommandChange = { 
+                            onCommand = it
+                            offCommand = it
+                        },
                         selectedMode = selectedMode,
                         placeholder = "e.g. echo 'Tile active'"
                     )
                 } else {
                     ShellCommandInputField(
-                        label = "Shell Command (Disabled state)",
-                        command = offCommand,
-                        onCommandChange = { offCommand = it },
+                        label = "Shell Command",
+                        command = onCommand,
+                        onCommandChange = { 
+                            onCommand = it
+                            offCommand = it
+                        },
                         selectedMode = selectedMode,
                         placeholder = "e.g. echo 'Tile inactive'"
                     )
