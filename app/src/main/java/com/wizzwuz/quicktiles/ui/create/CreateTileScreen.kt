@@ -908,20 +908,77 @@ fun CollectionCreatorScreen(
     val context = LocalContext.current
     var collectionName by remember { mutableStateOf("My Collection") }
     val collectionItems = remember { mutableStateListOf<TileItem>() }
-    var showAddDialog by remember { mutableStateOf(false) }
     var selectedItemForEdit by remember { mutableStateOf<TileItem?>(null) }
     var collapseCollectionOnClick by remember { mutableStateOf(false) }
-    var addType by remember { mutableStateOf<TileType?>(null) }
 
     // Icon config for collection itself
     var collectionIconConfig by remember { mutableStateOf(IconConfig(sourceType = IconSourceType.PRESET, sourceData = "collections")) }
 
     // Dialog states
+    var showAppPicker by remember { mutableStateOf(false) }
     var showWebsiteDialog by remember { mutableStateOf(false) }
     var showShellDialog by remember { mutableStateOf(false) }
     var showShortcutDialog by remember { mutableStateOf(false) }
     var showIntentDialog by remember { mutableStateOf(false) }
     var showPresetsDialog by remember { mutableStateOf(false) }
+    var showActivityPicker by remember { mutableStateOf(false) }
+    var showPresetsEditDialog by remember { mutableStateOf(false) }
+
+    // File pickers - same as CreateTileScreen
+    val customImagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val savedPath = IconProcessor.saveCustomImage(context, it)
+            if (savedPath != null) {
+                collectionIconConfig = collectionIconConfig.copy(
+                    sourceType = IconSourceType.CUSTOM_FILE,
+                    sourceData = savedPath
+                )
+            }
+        }
+    }
+
+    val filePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            val savedPath = uri.toString()
+            val item = TileItem(
+                id = UUID.randomUUID().toString(),
+                name = it.lastPathSegment?.substringAfterLast('/') ?: "File Tile",
+                type = TileType.FILES,
+                targetData = savedPath,
+                iconConfig = IconConfig(sourceType = IconSourceType.CUSTOM_FILE, sourceData = savedPath),
+                isActive = true,
+                isAddedToQs = false
+            )
+            collectionItems.add(item)
+        }
+    }
+
+    val folderPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        uri?.let {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Throwable) { /* Ignore */ }
+            val item = TileItem(
+                id = UUID.randomUUID().toString(),
+                name = it.lastPathSegment?.substringAfterLast(':') ?: "Folder Tile",
+                type = TileType.FOLDERS,
+                targetData = it.toString(),
+                iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = "folder"),
+                isActive = true,
+                isAddedToQs = false
+            )
+            collectionItems.add(item)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -1036,8 +1093,13 @@ fun CollectionCreatorScreen(
                     contentDescription = "Collection Icon",
                     modifier = Modifier.size(48.dp)
                 )
-                TextButton(onClick = { /* TODO: open icon picker */ }) {
-                    Text("Change Icon")
+                Column {
+                    TextButton(onClick = { customImagePicker.launch(arrayOf("image/*")) }) {
+                        Text("Pick Image")
+                    }
+                    TextButton(onClick = { showPresetsEditDialog = true }) {
+                        Text("Presets")
+                    }
                 }
             }
 
@@ -1068,50 +1130,42 @@ fun CollectionCreatorScreen(
             ) {
                 item {
                     TileTypeButton(title = "Apps", subtitle = "Select any app", icon = Icons.Default.Apps, isSelected = false, onClick = {
-                        addType = TileType.APPS
-                        showAddDialog = true
+                        showAppPicker = true
                     })
                 }
                 item {
                     TileTypeButton(title = "Website", subtitle = "Add URL", icon = Icons.Default.Language, isSelected = false, onClick = {
-                        addType = TileType.WEBSITE
-                        showAddDialog = true
+                        showWebsiteDialog = true
                     })
                 }
                 item {
                     TileTypeButton(title = "Shortcut", subtitle = "App shortcut", icon = Icons.Default.OpenInNew, isSelected = false, onClick = {
-                        addType = TileType.SHORTCUT
-                        showAddDialog = true
+                        showShortcutDialog = true
                     })
                 }
                 item {
                     TileTypeButton(title = "Activity", subtitle = "App activity", icon = Icons.Default.Extension, isSelected = false, onClick = {
-                        addType = TileType.ACTIVITY
-                        showAddDialog = true
+                        showActivityPicker = true
                     })
                 }
                 item {
                     TileTypeButton(title = "Intent", subtitle = "Custom intent", icon = Icons.Default.Send, isSelected = false, onClick = {
-                        addType = TileType.INTENT
-                        showAddDialog = true
+                        showIntentDialog = true
                     })
                 }
                 item {
                     TileTypeButton(title = "Shell", subtitle = "Run command", icon = Icons.Default.Terminal, isSelected = false, onClick = {
-                        addType = TileType.SHELL
-                        showAddDialog = true
+                        showShellDialog = true
                     })
                 }
                 item {
                     TileTypeButton(title = "Files", subtitle = "Select a file", icon = Icons.Default.InsertDriveFile, isSelected = false, onClick = {
-                        addType = TileType.FILES
-                        showAddDialog = true
+                        filePicker.launch(arrayOf("*/*"))
                     })
                 }
                 item {
                     TileTypeButton(title = "Folders", subtitle = "Open directory", icon = Icons.Default.Folder, isSelected = false, onClick = {
-                        addType = TileType.FOLDERS
-                        showAddDialog = true
+                        folderPicker.launch(null)
                     })
                 }
             }
@@ -1171,7 +1225,7 @@ fun CollectionCreatorScreen(
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text("Preset: ${itemIconConfig.sourceData}", fontSize = 11.sp)
-                                TextButton(onClick = { showPresetsDialog = true }) {
+                                TextButton(onClick = { showPresetsEditDialog = true }) {
                                     Text("Pick File / Presets")
                                 }
                             }
@@ -1206,7 +1260,7 @@ fun CollectionCreatorScreen(
                         Spacer(modifier = Modifier.height(12.dp))
 
                         // Commands for shell type
-                        if (addType == null || item.type == TileType.SHELL) {
+                        if (item.type == TileType.SHELL) {
                             OutlinedTextField(
                                 value = itemOnCommand,
                                 onValueChange = { itemOnCommand = it },
@@ -1229,7 +1283,7 @@ fun CollectionCreatorScreen(
 
                         // Collapse option
                         Row(
-                            modifier = Modifier.fillMaxWidth().clickable { /* handled below */ },
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -1268,14 +1322,41 @@ fun CollectionCreatorScreen(
         }
     }
 
+    // Apps picker sheet (like CreateTileScreen)
+    if (showAppPicker) {
+        AppPickerSheet(
+            onDismiss = { showAppPicker = false },
+            onAppSelected = { app ->
+                showAppPicker = false
+                val item = TileItem(
+                    id = UUID.randomUUID().toString(),
+                    name = app.label,
+                    type = TileType.APPS,
+                    targetData = app.packageName,
+                    iconConfig = IconConfig(
+                        sourceType = IconSourceType.APP_ICON,
+                        sourceData = app.packageName,
+                        outlineThickness = 2.5f,
+                        outlineThreshold = 0.4f,
+                        iconSize = 32f,
+                        outlineStyle = "OUTLINE"
+                    ),
+                    isActive = true,
+                    isAddedToQs = false
+                )
+                collectionItems.add(item)
+            }
+        )
+    }
+
     // Website dialog
-    if (showAddDialog && addType == TileType.WEBSITE) {
+    if (showWebsiteDialog) {
         WebsiteDialog(
             initialName = "",
             initialUrl = "",
-            onDismiss = { showAddDialog = false },
+            onDismiss = { showWebsiteDialog = false },
             onConfirm = { name, url ->
-                showAddDialog = false
+                showWebsiteDialog = false
                 val item = TileItem(
                     id = UUID.randomUUID().toString(),
                     name = name.ifBlank { url },
@@ -1291,7 +1372,7 @@ fun CollectionCreatorScreen(
     }
 
     // Shell dialog
-    if (showAddDialog && addType == TileType.SHELL) {
+    if (showShellDialog) {
         ShellDialog(
             initialName = "",
             initialCommand = "",
@@ -1302,9 +1383,9 @@ fun CollectionCreatorScreen(
             initialOffTileName = "",
             initialOnIconConfig = null,
             initialOffIconConfig = null,
-            onDismiss = { showAddDialog = false },
+            onDismiss = { showShellDialog = false },
             onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon ->
-                showAddDialog = false
+                showShellDialog = false
                 val item = TileItem(
                     id = UUID.randomUUID().toString(),
                     name = name.ifBlank { "Shell" },
@@ -1327,11 +1408,12 @@ fun CollectionCreatorScreen(
     }
 
     // Shortcut dialog
-    if (showAddDialog && addType == TileType.SHORTCUT) {
+    if (showShortcutDialog) {
+        val coroutineScope = rememberCoroutineScope()
         ShortcutDialog(
-            onDismiss = { showAddDialog = false },
+            onDismiss = { showShortcutDialog = false },
             onSelect = { name, intentUri, pkg, iconBitmap ->
-                showAddDialog = false
+                showShortcutDialog = false
                 val item = TileItem(
                     id = UUID.randomUUID().toString(),
                     name = name,
@@ -1346,15 +1428,35 @@ fun CollectionCreatorScreen(
         )
     }
 
+    // Activity picker screen
+    if (showActivityPicker) {
+        ActivityPickerScreen(
+            onBack = { showActivityPicker = false },
+            onActivitySelected = { app, activity ->
+                showActivityPicker = false
+                val item = TileItem(
+                    id = UUID.randomUUID().toString(),
+                    name = activity.name ?: app.label,
+                    type = TileType.ACTIVITY,
+                    targetData = activity.component.flattenToString(),
+                    iconConfig = IconConfig(sourceType = IconSourceType.APP_ICON, sourceData = app.packageName),
+                    isActive = true,
+                    isAddedToQs = false
+                )
+                collectionItems.add(item)
+            }
+        )
+    }
+
     // Intent dialog
-    if (showAddDialog && addType == TileType.INTENT) {
+    if (showIntentDialog) {
         IntentDialog(
             initialName = "",
             initialAction = "",
             initialPackage = "",
-            onDismiss = { showAddDialog = false },
+            onDismiss = { showIntentDialog = false },
             onConfirm = { name, action, pkg ->
-                showAddDialog = false
+                showIntentDialog = false
                 val item = TileItem(
                     id = UUID.randomUUID().toString(),
                     name = name.ifBlank { "Intent" },
@@ -1365,6 +1467,26 @@ fun CollectionCreatorScreen(
                     isAddedToQs = false
                 )
                 collectionItems.add(item)
+            }
+        )
+    }
+
+    // Icon presets dialog for collection icon
+    if (showPresetsEditDialog) {
+        IconPresetsDialog(
+            currentKey = collectionIconConfig.sourceData,
+            onDismiss = { showPresetsEditDialog = false },
+            onSelectPreset = { key ->
+                showPresetsEditDialog = false
+                collectionIconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = key)
+            },
+            onSelectCustomFile = { path ->
+                showPresetsEditDialog = false
+                collectionIconConfig = IconConfig(sourceType = IconSourceType.CUSTOM_FILE, sourceData = path)
+            },
+            onSelectAppIcon = { pkg ->
+                showPresetsEditDialog = false
+                collectionIconConfig = IconConfig(sourceType = IconSourceType.APP_ICON, sourceData = pkg)
             }
         )
     }
