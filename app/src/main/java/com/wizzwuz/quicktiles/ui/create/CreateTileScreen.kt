@@ -180,7 +180,7 @@ fun CreateTileScreen(
                 targetData
             }
 
-            if (effectiveTargetData.isBlank()) {
+            if (selectedType != TileType.COLLECTION && effectiveTargetData.isBlank()) {
                 Toast.makeText(context, "Please configure tile command or target data", Toast.LENGTH_SHORT).show()
             } else {
                 val finalName = tileName.trim()
