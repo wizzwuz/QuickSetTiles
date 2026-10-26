@@ -251,7 +251,7 @@ class TileRepository(private val context: Context) {
 
     private fun findNextAvailableSlot(existingTiles: List<TileItem>): Int {
         val usedSlots = existingTiles.filter { it.isActive }.map { it.slotNumber }.toSet()
-        for (slot in 1..MAX_SLOTS) {
+        for (slot in MAX_SLOTS downTo 1) {
             if (!usedSlots.contains(slot)) {
                 return slot
             }
