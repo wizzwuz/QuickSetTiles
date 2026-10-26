@@ -1094,7 +1094,7 @@ fun CollectionCreatorScreen(
                     modifier = Modifier.size(48.dp)
                 )
                 Column {
-                    TextButton(onClick = { customImagePicker.launch(arrayOf("image/*")) }) {
+                    TextButton(onClick = { customImagePicker.launch("image/*") }) {
                         Text("Pick Image")
                     }
                     TextButton(onClick = { showPresetsEditDialog = true }) {
@@ -1436,9 +1436,9 @@ fun CollectionCreatorScreen(
                 showActivityPicker = false
                 val item = TileItem(
                     id = UUID.randomUUID().toString(),
-                    name = activity.name ?: app.label,
+                    name = activity.fullName,
                     type = TileType.ACTIVITY,
-                    targetData = activity.component.flattenToString(),
+                    targetData = activity.fullName,
                     iconConfig = IconConfig(sourceType = IconSourceType.APP_ICON, sourceData = app.packageName),
                     isActive = true,
                     isAddedToQs = false
