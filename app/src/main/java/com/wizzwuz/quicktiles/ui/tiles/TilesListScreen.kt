@@ -443,6 +443,7 @@ fun CategoriesPanel(
                 TileType.SHELL -> Icons.Default.Terminal
                 TileType.FILES -> Icons.Default.InsertDriveFile
                 TileType.FOLDERS -> Icons.Default.Folder
+                TileType.COLLECTION -> Icons.Default.Collections
             }
 
             FilterChip(
