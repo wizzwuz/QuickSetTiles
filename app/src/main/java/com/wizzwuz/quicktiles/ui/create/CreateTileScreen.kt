@@ -1033,8 +1033,8 @@ fun CollectionCreatorScreen(
                     ) {
                         items(collectionItems, key = { it.id }) { item ->
                             val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-                            val previewBitmap = remember(item.iconConfig, isDark) {
-                                IconProcessor.processIconBitmap(context, item.iconConfig, targetPixelSize = 48, isDarkTheme = isDark)
+                            val previewBitmap = remember(item.id, isDark) {
+                                IconProcessor.loadRawBitmap(context, item.iconConfig, isDarkTheme = isDark)
                             }
                             Card(
                                 modifier = Modifier
