@@ -11,7 +11,8 @@ enum class TileType(val displayName: String) {
     INTENT("Intent"),
     SHELL("Shell"),
     FILES("Files"),
-    FOLDERS("Folders")
+    FOLDERS("Folders"),
+    COLLECTION("Collection")
 }
 
 enum class TileSortOrder(val title: String) {
@@ -83,7 +84,9 @@ data class TileItem(
     val onTileName: String = "",
     val offTileName: String = "",
     val onIconConfig: IconConfig? = null,
-    val offIconConfig: IconConfig? = null
+    val offIconConfig: IconConfig? = null,
+    val collectionItemIds: List<String> = emptyList(),
+    val collapseCollectionOnClick: Boolean = false
 ) {
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -105,11 +108,22 @@ data class TileItem(
             put("offTileName", offTileName)
             if (onIconConfig != null) put("onIconConfig", onIconConfig.toJson())
             if (offIconConfig != null) put("offIconConfig", offIconConfig.toJson())
+            val collectionArray = org.json.JSONArray()
+            collectionItemIds.forEach { collectionArray.put(it) }
+            put("collectionItemIds", collectionArray)
+            put("collapseCollectionOnClick", collapseCollectionOnClick)
         }
     }
 
     companion object {
         fun fromJson(json: JSONObject): TileItem {
+            val collectionList = mutableListOf<String>()
+            if (json.has("collectionItemIds")) {
+                val arr = json.getJSONArray("collectionItemIds")
+                for (i in 0 until arr.length()) {
+                    collectionList.add(arr.optString(i))
+                }
+            }
             return TileItem(
                 id = json.optString("id", UUID.randomUUID().toString()),
                 name = json.optString("name", "Tile"),
@@ -128,7 +142,9 @@ data class TileItem(
                 onTileName = json.optString("onTileName", ""),
                 offTileName = json.optString("offTileName", ""),
                 onIconConfig = if (json.has("onIconConfig")) IconConfig.fromJson(json.getJSONObject("onIconConfig")) else null,
-                offIconConfig = if (json.has("offIconConfig")) IconConfig.fromJson(json.getJSONObject("offIconConfig")) else null
+                offIconConfig = if (json.has("offIconConfig")) IconConfig.fromJson(json.getJSONObject("offIconConfig")) else null,
+                collectionItemIds = collectionList,
+                collapseCollectionOnClick = json.optBoolean("collapseCollectionOnClick", false)
             )
         }
     }

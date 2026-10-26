@@ -280,6 +280,20 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                     }
                 }
             }
+            TileType.COLLECTION -> {
+                try {
+                    if (item.collapseCollectionOnClick) {
+                        mainHandler.post { collapseShade() }
+                    }
+                    val intent = Intent(this, com.wizzwuz.quicktiles.ui.CollectionPopupActivity::class.java).apply {
+                        putExtra("collectionId", item.id)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    }
+                    launchIntent(intent)
+                } catch (e: Throwable) {
+                    showToast("Failed to open collection: ${e.message}")
+                }
+            }
         }
     }
 

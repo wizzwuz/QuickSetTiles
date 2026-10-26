@@ -58,6 +58,13 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ui.CollectionPopupActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:taskAffinity="" />
+
         <!-- Official Shizuku Provider: authority MUST be ${applicationId}.shizuku -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
