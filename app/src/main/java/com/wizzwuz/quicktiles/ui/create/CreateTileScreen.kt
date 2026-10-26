@@ -786,15 +786,10 @@ fun CreateTileScreen(
     if (showCollectionCreator) {
         CollectionCreatorScreen(
             onBack = { showCollectionCreator = false },
-            onSaveCollection = { collectionTile ->
+            onSaveCollection = { collectionTile, memberTiles ->
                 showCollectionCreator = false
                 // Save all collection member tiles first
-                collectionTile.collectionItemIds.forEach { id ->
-                    val member = collectionItems.find { it.id == id }
-                    if (member != null) {
-                        onSaveTile(member)
-                    }
-                }
+                memberTiles.forEach { onSaveTile(it) }
                 selectedType = TileType.COLLECTION
                 onSaveTile(collectionTile)
             }
@@ -910,7 +905,7 @@ fun TileTypeButton(
 @Composable
 fun CollectionCreatorScreen(
     onBack: () -> Unit,
-    onSaveCollection: (TileItem) -> Unit
+    onSaveCollection: (collectionTile: TileItem, memberTiles: List<TileItem>) -> Unit
 ) {
     val context = LocalContext.current
     var collectionName by remember { mutableStateOf("My Collection") }
@@ -1009,7 +1004,7 @@ fun CollectionCreatorScreen(
                             collectionItemIds = collectionItems.map { it.id },
                             collapseCollectionOnClick = collapseCollectionOnClick
                         )
-                        onSaveCollection(collectionTile)
+                        onSaveCollection(collectionTile, collectionItems.toList())
                     }) {
                         Text("Save")
                     }
