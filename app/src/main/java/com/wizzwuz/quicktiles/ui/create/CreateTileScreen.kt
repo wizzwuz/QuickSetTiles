@@ -788,6 +788,13 @@ fun CreateTileScreen(
             onBack = { showCollectionCreator = false },
             onSaveCollection = { collectionTile ->
                 showCollectionCreator = false
+                // Save all collection member tiles first
+                collectionTile.collectionItemIds.forEach { id ->
+                    val member = collectionItems.find { it.id == id }
+                    if (member != null) {
+                        onSaveTile(member)
+                    }
+                }
                 selectedType = TileType.COLLECTION
                 onSaveTile(collectionTile)
             }
