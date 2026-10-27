@@ -33,7 +33,13 @@ import com.wizzwuz.quicktiles.model.TileItem
 import com.wizzwuz.quicktiles.model.TileType
 import com.wizzwuz.quicktiles.util.IconProcessor
 import com.wizzwuz.quicktiles.util.AppHelper
+import com.wizzwuz.quicktiles.util.ShizukuHelper
+import com.wizzwuz.quicktiles.util.LogManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class CollectionPopupActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -138,6 +144,8 @@ fun CollectionPopupScreen(
     }
 }
 
+private val collectionScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
 private fun executeCollectionItem(context: android.content.Context, item: TileItem) {
     try {
         when (item.type) {
@@ -165,7 +173,9 @@ private fun executeCollectionItem(context: android.content.Context, item: TileIt
             TileType.ACTIVITY -> {
                 val comp = ComponentName.unflattenFromString(item.targetData)
                 if (comp != null) {
-                    AppHelper.launchActivityPrivileged(context, comp.packageName, comp.className)
+                    collectionScope.launch {
+                        AppHelper.launchActivityPrivileged(context, comp.packageName, comp.className)
+                    }
                 }
             }
             TileType.INTENT -> {
@@ -179,7 +189,15 @@ private fun executeCollectionItem(context: android.content.Context, item: TileIt
             }
             TileType.SHELL -> {
                 val cmd = if (item.currentToggleOn) item.onCommand.ifBlank { item.targetData } else item.offCommand.ifBlank { item.targetData }
-                com.wizzwuz.quicktiles.util.ShizukuHelper.executeCommand(cmd)
+                collectionScope.launch {
+                    val result = ShizukuHelper.executeCommand(cmd)
+                    if (result.exitCode != 0) {
+                        LogManager.logError(
+                            "CollectionShell",
+                            "Shell tile '${item.name}' failed: exit ${result.exitCode}: ${result.output}"
+                        )
+                    }
+                }
             }
             TileType.FILES -> {
                 val fileIntent = Intent(Intent.ACTION_VIEW).apply {
