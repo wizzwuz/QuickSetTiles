@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wizzwuz.quicktiles.model.IconConfig
+import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.model.IconSourceType
 import com.wizzwuz.quicktiles.model.TileItem
 import com.wizzwuz.quicktiles.model.TileType
@@ -232,6 +233,8 @@ fun CreateTileScreen(
                 onSaveTile(tile)
             }
         }
+    }
+
     if (showCollectionCreator) {
         CollectionCreatorScreen(
             initialTile = if (initialTile?.type == TileType.COLLECTION) initialTile else null,
@@ -242,7 +245,7 @@ fun CreateTileScreen(
                     showCollectionCreator = false
                 }
             },
-            onSaveCollection = { collectionTile, memberTiles ->
+            onSaveCollection = { collectionTile: TileItem, memberTiles: List<TileItem> ->
                 val repo = TileRepository.getInstance(context)
                 memberTiles.forEach { member ->
                     repo.saveTile(member.copy(isActive = false, slotNumber = -1, isAddedToQs = false))
@@ -250,10 +253,8 @@ fun CreateTileScreen(
                 onSaveTile(collectionTile)
             }
         )
-        return
-    }
-
-    Scaffold(
+    } else {
+        Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (initialTile == null) "Create Quick Tile" else "Edit Quick Tile") },
@@ -862,6 +863,7 @@ fun CreateTileScreen(
                 )
             }
         )
+    }
     }
 }
 
