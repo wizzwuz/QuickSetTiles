@@ -28,6 +28,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.model.TileItem
 import com.wizzwuz.quicktiles.model.TileType
@@ -55,7 +61,6 @@ class CollectionPopupActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CollectionPopupScreen(
     collectionId: String,
@@ -63,84 +68,203 @@ fun CollectionPopupScreen(
 ) {
     val context = LocalContext.current
     val repo = remember { TileRepository.getInstance(context) }
-    val tiles = repo.tilesFlow.collectAsState()
-    val collection = tiles.value.find { it.id == collectionId }
-    val collectionItems = collection?.collectionItemIds?.mapNotNull { id -> tiles.value.find { it.id == id } } ?: emptyList()
+    val tiles by repo.tilesFlow.collectAsState()
+    val collection = tiles.find { it.id == collectionId }
+    val collectionItems = remember(tiles, collection) {
+        collection?.collectionItemIds?.mapNotNull { id -> tiles.find { it.id == id } } ?: emptyList()
+    }
 
     var visible by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
     LaunchedEffect(Unit) {
-        delay(50)
+        delay(40)
         visible = true
+    }
+
+    fun dismissAnimated() {
+        visible = false
+        coroutineScope.launch {
+            delay(200)
+            onDismiss()
+        }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f))
-            .clickable { visible = false; onDismiss() },
+            .background(Color.Black.copy(alpha = 0.45f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { dismissAnimated() },
         contentAlignment = Alignment.BottomCenter
     ) {
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(animationSpec = tween(250), initialOffsetY = { it }),
-            exit = slideOutVertically(animationSpec = tween(200), targetOffsetY = { it })
+            enter = slideInVertically(
+                animationSpec = tween(280),
+                initialOffsetY = { it }
+            ) + fadeIn(animationSpec = tween(240)),
+            exit = slideOutVertically(
+                animationSpec = tween(200),
+                targetOffsetY = { it }
+            ) + fadeOut(animationSpec = tween(180))
         ) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
-                    .clickable(enabled = false) {},
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .padding(horizontal = 20.dp, vertical = 28.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        enabled = false
+                    ) {},
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    // Collection Title
                     Text(
-                        collection?.name ?: "Collection",
-                        fontSize = 18.sp,
+                        text = collection?.name ?: "Collection",
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        collectionItems.forEach { item ->
-                            val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-                            val previewBitmap = remember(item.id, isDark) {
-                                IconProcessor.loadRawBitmap(context, item.iconConfig, isDarkTheme = isDark)
-                            }
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .clickable {
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        thickness = 1.dp
+                    )
+
+                    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+                    if (collectionItems.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "No tiles in this collection",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else if (collectionItems.size <= 3) {
+                        // Horizontally arranged, not scrollable
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            collectionItems.forEach { item ->
+                                CollectionTileItemView(
+                                    item = item,
+                                    context = context,
+                                    isDark = isDark,
+                                    onClick = {
                                         executeCollectionItem(context, item)
-                                        visible = false
-                                        onDismiss()
+                                        if (item.collapseCollectionOnClick) {
+                                            dismissAnimated()
+                                        }
                                     }
-                                    .padding(8.dp)
-                            ) {
-                                Image(
-                                    bitmap = previewBitmap.asImageBitmap(),
-                                    contentDescription = item.name,
-                                    modifier = Modifier.size(56.dp)
                                 )
-                                Text(
-                                    item.name,
-                                    fontSize = 11.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.widthIn(max = 80.dp)
-                                )
+                            }
+                        }
+                    } else {
+                        // Exceeds 3 items: Grid layout (non-scrollable)
+                        val columns = if (collectionItems.size == 4) 2 else 3
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            collectionItems.chunked(columns).forEach { rowItems ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    rowItems.forEach { item ->
+                                        CollectionTileItemView(
+                                            item = item,
+                                            context = context,
+                                            isDark = isDark,
+                                            onClick = {
+                                                executeCollectionItem(context, item)
+                                                if (item.collapseCollectionOnClick) {
+                                                    dismissAnimated()
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CollectionTileItemView(
+    item: TileItem,
+    context: android.content.Context,
+    isDark: Boolean,
+    onClick: () -> Unit
+) {
+    val previewBitmap = remember(item.id, item.iconConfig, isDark) {
+        if (item.iconConfig.outlineThickness > 0.5f) {
+            IconProcessor.processIconBitmap(context, item.iconConfig, targetPixelSize = 128, isDarkTheme = isDark)
+        } else {
+            IconProcessor.loadRawBitmap(context, item.iconConfig, isDarkTheme = isDark)
+        }
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 6.dp, vertical = 6.dp)
+            .widthIn(min = 68.dp, max = 88.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(54.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                bitmap = previewBitmap.asImageBitmap(),
+                contentDescription = item.name,
+                modifier = Modifier.size(36.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = item.name,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 

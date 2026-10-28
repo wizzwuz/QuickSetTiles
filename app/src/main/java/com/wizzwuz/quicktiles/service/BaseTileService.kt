@@ -282,7 +282,7 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
             }
             TileType.COLLECTION -> {
                 try {
-                    if (item.collapseCollectionOnClick) {
+                    if (item.collapseOnTap) {
                         mainHandler.post { collapseShade() }
                     }
                     val intent = Intent(this, com.wizzwuz.quicktiles.ui.CollectionPopupActivity::class.java).apply {

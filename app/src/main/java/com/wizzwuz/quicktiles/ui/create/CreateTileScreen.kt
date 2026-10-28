@@ -99,7 +99,7 @@ fun CreateTileScreen(
     var showIntentDialog by remember { mutableStateOf(false) }
     var showShellDialog by remember { mutableStateOf(false) }
     var showPresetsDialog by remember { mutableStateOf(false) }
-    var showCollectionCreator by remember { mutableStateOf(false) }
+    var showCollectionCreator by remember { mutableStateOf(initialTile?.type == TileType.COLLECTION) }
 
     // File Pickers - support all image formats including SVG, PNG, WebP, JPG, GIF
     val customImagePicker = rememberLauncherForActivityResult(
@@ -232,6 +232,25 @@ fun CreateTileScreen(
                 onSaveTile(tile)
             }
         }
+    if (showCollectionCreator) {
+        CollectionCreatorScreen(
+            initialTile = if (initialTile?.type == TileType.COLLECTION) initialTile else null,
+            onBack = {
+                if (initialTile?.type == TileType.COLLECTION) {
+                    onBack()
+                } else {
+                    showCollectionCreator = false
+                }
+            },
+            onSaveCollection = { collectionTile, memberTiles ->
+                val repo = TileRepository.getInstance(context)
+                memberTiles.forEach { member ->
+                    repo.saveTile(member.copy(isActive = false, slotNumber = -1, isAddedToQs = false))
+                }
+                onSaveTile(collectionTile)
+            }
+        )
+        return
     }
 
     Scaffold(
@@ -901,20 +920,406 @@ fun TileTypeButton(
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditTileSheet(
+    item: TileItem,
+    onDismiss: () -> Unit,
+    onSave: (TileItem) -> Unit,
+    onDelete: (TileItem) -> Unit
+) {
+    val context = LocalContext.current
+    var itemName by remember(item.id) { mutableStateOf(item.name) }
+    var itemIconConfig by remember(item.id) { mutableStateOf(item.iconConfig) }
+    var itemVisualState by remember(item.id) { mutableStateOf(item.visualState) }
+    var itemCollapseCollectionOnClick by remember(item.id) { mutableStateOf(item.collapseCollectionOnClick) }
+    var isCustomizeExpanded by remember(item.id) { mutableStateOf(false) }
+    var showPresetsDialog by remember { mutableStateOf(false) }
+
+    val customImagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val savedPath = IconProcessor.saveCustomImage(context, it)
+            if (savedPath != null) {
+                itemIconConfig = itemIconConfig.copy(
+                    sourceType = IconSourceType.CUSTOM_FILE,
+                    sourceData = savedPath
+                )
+            }
+        }
+    }
+
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val previewBitmap = remember(itemIconConfig, isDark) {
+        IconProcessor.processIconBitmap(context, itemIconConfig, targetPixelSize = 120, isDarkTheme = isDark)
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Edit Tile",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(onClick = { onDelete(item) }) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete Tile",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+
+            // a. Icon category: With existing Icon preview, Pick File, Presets and Customise sliders
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Icon Category",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Live Icon Preview Box
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                                .border(1.5.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                bitmap = previewBitmap.asImageBitmap(),
+                                contentDescription = "Tile Icon Preview",
+                                modifier = Modifier.size(54.dp)
+                            )
+                        }
+
+                        // Icon Pickers Buttons
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                FilledTonalButton(
+                                    onClick = { customImagePicker.launch("*/*") },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("Pick File", fontSize = 11.sp)
+                                }
+
+                                FilledTonalButton(
+                                    onClick = { showPresetsDialog = true },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.Widgets, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("Presets", fontSize = 11.sp)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = { isCustomizeExpanded = !isCustomizeExpanded },
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(if (isCustomizeExpanded) "Hide Sliders" else "Customize Sliders", fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    // Expandable Sliders for Customization: outline thickness, outline threshold, icon size
+                    AnimatedVisibility(visible = isCustomizeExpanded) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text("Icon Customization Controls", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+
+                            // Outline Style Selector
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Outline Style", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    listOf(
+                                        "OUTLINE" to "Outline",
+                                        "GLOW" to "Glow",
+                                        "FROSTED" to "Frosted",
+                                        "SOLID" to "Solid"
+                                    ).forEach { (styleKey, label) ->
+                                        FilterChip(
+                                            selected = itemIconConfig.outlineStyle.equals(styleKey, ignoreCase = true),
+                                            onClick = { itemIconConfig = itemIconConfig.copy(outlineStyle = styleKey) },
+                                            label = { Text(label, fontSize = 11.sp) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Outline Thickness Slider
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Outline Thickness", fontSize = 12.sp)
+                                    Text("${String.format("%.1f", itemIconConfig.outlineThickness)} dp", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Slider(
+                                    value = itemIconConfig.outlineThickness,
+                                    onValueChange = { itemIconConfig = itemIconConfig.copy(outlineThickness = it) },
+                                    valueRange = 0f..10f
+                                )
+                            }
+
+                            // Outline Threshold Slider
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Outline Threshold", fontSize = 12.sp)
+                                    Text("${(itemIconConfig.outlineThreshold * 100).toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Slider(
+                                    value = itemIconConfig.outlineThreshold,
+                                    onValueChange = { itemIconConfig = itemIconConfig.copy(outlineThreshold = it) },
+                                    valueRange = 0.05f..1.0f
+                                )
+                            }
+
+                            // Icon Size Slider
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Icon Size", fontSize = 12.sp)
+                                    Text("${itemIconConfig.iconSize.toInt()} dp", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Slider(
+                                    value = itemIconConfig.iconSize,
+                                    onValueChange = { itemIconConfig = itemIconConfig.copy(iconSize = it) },
+                                    valueRange = 16f..64f
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // b. Tile Name text field: to change current tile name
+            OutlinedTextField(
+                value = itemName,
+                onValueChange = { itemName = it },
+                label = { Text("Tile Name") },
+                placeholder = { Text("Enter tile name") },
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            // c. Apps behavior category: with existing Enabled, Disabled and Both buttons
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Apps Behavior Category",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = itemVisualState == TileVisualState.ENABLED,
+                            onClick = { itemVisualState = TileVisualState.ENABLED },
+                            label = { Text("Enabled", fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = itemVisualState == TileVisualState.DISABLED,
+                            onClick = { itemVisualState = TileVisualState.DISABLED },
+                            label = { Text("Disabled", fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = itemVisualState == TileVisualState.TOGGLE,
+                            onClick = { itemVisualState = TileVisualState.TOGGLE },
+                            label = { Text("Both", fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            // d. Collaspe collection on click options: this new option for individual tiles, if option is enabled upon clicking the tile, collections will collaspe
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { itemCollapseCollectionOnClick = !itemCollapseCollectionOnClick },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Collapse collection on click",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Dismiss collection popup when this tile is clicked",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Switch(
+                        checked = itemCollapseCollectionOnClick,
+                        onCheckedChange = { itemCollapseCollectionOnClick = it }
+                    )
+                }
+            }
+
+            // Save Tile Button
+            Button(
+                onClick = {
+                    onSave(
+                        item.copy(
+                            name = itemName.ifBlank { item.name },
+                            iconConfig = itemIconConfig,
+                            visualState = itemVisualState,
+                            collapseCollectionOnClick = itemCollapseCollectionOnClick
+                        )
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Save Changes", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+
+    if (showPresetsDialog) {
+        IconPresetsDialog(
+            currentKey = itemIconConfig.sourceData,
+            onDismiss = { showPresetsDialog = false },
+            onSelectPreset = { key ->
+                showPresetsDialog = false
+                itemIconConfig = itemIconConfig.copy(
+                    sourceType = IconSourceType.PRESET,
+                    sourceData = key
+                )
+            },
+            onSelectCustomFile = { path ->
+                showPresetsDialog = false
+                itemIconConfig = itemIconConfig.copy(
+                    sourceType = IconSourceType.CUSTOM_FILE,
+                    sourceData = path
+                )
+            },
+            onSelectAppIcon = { pkg ->
+                showPresetsDialog = false
+                itemIconConfig = IconConfig(
+                    sourceType = IconSourceType.APP_ICON,
+                    sourceData = pkg,
+                    outlineThickness = 2.5f,
+                    outlineThreshold = 0.4f,
+                    iconSize = 32f,
+                    outlineStyle = "OUTLINE"
+                )
+            }
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CollectionCreatorScreen(
+    initialTile: TileItem? = null,
     onBack: () -> Unit,
     onSaveCollection: (collectionTile: TileItem, memberTiles: List<TileItem>) -> Unit
 ) {
     val context = LocalContext.current
-    var collectionName by remember { mutableStateOf("My Collection") }
-    val collectionItems = remember { mutableStateListOf<TileItem>() }
-    var selectedItemForEdit by remember { mutableStateOf<TileItem?>(null) }
-    var collapseCollectionOnClick by remember { mutableStateOf(false) }
+    var collectionName by remember { mutableStateOf(initialTile?.name ?: "My Collection") }
+    var collapseOnTap by remember { mutableStateOf(initialTile?.collapseOnTap ?: true) }
+    var collectionIconConfig by remember {
+        mutableStateOf(initialTile?.iconConfig ?: IconConfig(sourceType = IconSourceType.PRESET, sourceData = "collections"))
+    }
 
-    // Icon config for collection itself
-    var collectionIconConfig by remember { mutableStateOf(IconConfig(sourceType = IconSourceType.PRESET, sourceData = "collections")) }
+    val collectionItems = remember {
+        val list = mutableStateListOf<TileItem>()
+        if (initialTile != null && initialTile.type == TileType.COLLECTION) {
+            val repo = TileRepository.getInstance(context)
+            val all = repo.tilesFlow.value
+            initialTile.collectionItemIds.forEach { id ->
+                all.find { it.id == id }?.let { list.add(it) }
+            }
+        }
+        list
+    }
+
+    var selectedItemForEdit by remember { mutableStateOf<TileItem?>(null) }
 
     // Dialog states
     var showAppPicker by remember { mutableStateOf(false) }
@@ -922,11 +1327,10 @@ fun CollectionCreatorScreen(
     var showShellDialog by remember { mutableStateOf(false) }
     var showShortcutDialog by remember { mutableStateOf(false) }
     var showIntentDialog by remember { mutableStateOf(false) }
-    var showPresetsDialog by remember { mutableStateOf(false) }
     var showActivityPicker by remember { mutableStateOf(false) }
-    var showPresetsEditDialog by remember { mutableStateOf(false) }
+    var showCollectionPresetsDialog by remember { mutableStateOf(false) }
 
-    // File pickers - same as CreateTileScreen
+    // File pickers
     val customImagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -945,15 +1349,21 @@ fun CollectionCreatorScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
-            val savedPath = uri.toString()
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Throwable) { /* Ignore */ }
             val item = TileItem(
                 id = UUID.randomUUID().toString(),
                 name = it.lastPathSegment?.substringAfterLast('/') ?: "File Tile",
                 type = TileType.FILES,
-                targetData = savedPath,
-                iconConfig = IconConfig(sourceType = IconSourceType.CUSTOM_FILE, sourceData = savedPath),
-                isActive = true,
-                isAddedToQs = false
+                targetData = it.toString(),
+                iconConfig = IconConfig(sourceType = IconSourceType.CUSTOM_FILE, sourceData = it.toString()),
+                isActive = false,
+                slotNumber = -1,
+                collapseCollectionOnClick = false
             )
             collectionItems.add(item)
         }
@@ -975,356 +1385,398 @@ fun CollectionCreatorScreen(
                 type = TileType.FOLDERS,
                 targetData = it.toString(),
                 iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = "folder"),
-                isActive = true,
-                isAddedToQs = false
+                isActive = false,
+                slotNumber = -1,
+                collapseCollectionOnClick = false
             )
             collectionItems.add(item)
+        }
+    }
+
+    if (showActivityPicker) {
+        ActivityPickerScreen(
+            onBack = { showActivityPicker = false },
+            onActivitySelected = { app, activity ->
+                showActivityPicker = false
+                val item = TileItem(
+                    id = UUID.randomUUID().toString(),
+                    name = activity.simpleName,
+                    type = TileType.ACTIVITY,
+                    targetData = "${app.packageName}/${activity.fullName}",
+                    iconConfig = IconConfig(
+                        sourceType = IconSourceType.APP_ICON,
+                        sourceData = app.packageName,
+                        outlineThickness = 2.5f,
+                        outlineThreshold = 0.4f,
+                        iconSize = 32f,
+                        outlineStyle = "OUTLINE"
+                    ),
+                    isActive = false,
+                    slotNumber = -1,
+                    collapseCollectionOnClick = false
+                )
+                collectionItems.add(item)
+            }
+        )
+        return
+    }
+
+    val saveCollectionAction = {
+        if (collectionItems.isEmpty()) {
+            Toast.makeText(context, "Please add at least one tile to the collection", Toast.LENGTH_SHORT).show()
+        } else {
+            val collectionTile = (initialTile ?: TileItem(
+                name = collectionName.ifBlank { "My Collection" },
+                type = TileType.COLLECTION,
+                targetData = "",
+                iconConfig = collectionIconConfig,
+                isActive = true,
+                isAddedToQs = false,
+                collectionItemIds = collectionItems.map { it.id },
+                collapseOnTap = collapseOnTap
+            )).copy(
+                name = collectionName.ifBlank { "My Collection" },
+                type = TileType.COLLECTION,
+                targetData = "",
+                iconConfig = collectionIconConfig,
+                collectionItemIds = collectionItems.map { it.id },
+                collapseOnTap = collapseOnTap
+            )
+            onSaveCollection(collectionTile, collectionItems.toList())
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Create Collection") },
+                title = { Text(if (initialTile == null) "Create Collection" else "Edit Collection") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    TextButton(onClick = {
-                        val collectionTile = TileItem(
-                            id = UUID.randomUUID().toString(),
-                            name = collectionName.ifBlank { "My Collection" },
-                            type = TileType.COLLECTION,
-                            targetData = "",
-                            iconConfig = collectionIconConfig,
-                            isActive = true,
-                            isAddedToQs = false,
-                            collectionItemIds = collectionItems.map { it.id },
-                            collapseCollectionOnClick = collapseCollectionOnClick
-                        )
-                        onSaveCollection(collectionTile, collectionItems.toList())
-                    }) {
-                        Text("Save")
+                    TextButton(onClick = saveCollectionAction) {
+                        Text("Save", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 }
             )
         }
-    ) { padding ->
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Top section - horizontally scrollable tiles preview
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
-                    .padding(8.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(modifier = Modifier.padding(8.dp)) {
-                    Text("Preview", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(collectionItems, key = { it.id }) { item ->
-                            val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-                            val previewBitmap = remember(item.id, isDark) {
-                                IconProcessor.loadRawBitmap(context, item.iconConfig, isDarkTheme = isDark)
-                            }
-                            Card(
-                                modifier = Modifier
-                                    .size(80.dp)
-                                    .combinedClickable(
-                                        onClick = { selectedItemForEdit = item },
-                                        onLongClick = { selectedItemForEdit = item }
-                                    ),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize(),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Image(
-                                        bitmap = previewBitmap.asImageBitmap(),
-                                        contentDescription = item.name,
-                                        modifier = Modifier.size(40.dp)
-                                    )
-                                    Text(
-                                        item.name,
-                                        fontSize = 10.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Collection name
+            // Collection Name field
             OutlinedTextField(
                 value = collectionName,
                 onValueChange = { collectionName = it },
                 label = { Text("Collection Name") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp)
+                placeholder = { Text("Enter collection name") },
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth()
             )
 
-            // Collection icon
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Collection Tile Icon
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             ) {
-                val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-                val colBitmap = remember(collectionIconConfig, isDark) {
-                    IconProcessor.processIconBitmap(context, collectionIconConfig, targetPixelSize = 48, isDarkTheme = isDark)
-                }
-                Image(
-                    bitmap = colBitmap.asImageBitmap(),
-                    contentDescription = "Collection Icon",
-                    modifier = Modifier.size(48.dp)
-                )
-                Column {
-                    TextButton(onClick = { customImagePicker.launch("image/*") }) {
-                        Text("Pick Image")
-                    }
-                    TextButton(onClick = { showPresetsEditDialog = true }) {
-                        Text("Presets")
-                    }
-                }
-            }
-
-            // Collapse collection on click
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { collapseCollectionOnClick = !collapseCollectionOnClick }
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Collapse collection on click")
-                Switch(checked = collapseCollectionOnClick, onCheckedChange = { collapseCollectionOnClick = it })
-            }
-
-            Divider()
-
-            // Bottom section - all tile type buttons except Collections
-            Text("Add Tiles to Collection", fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp)
-            ) {
-                item {
-                    TileTypeButton(title = "Apps", subtitle = "Select any app", icon = Icons.Default.Apps, isSelected = false, onClick = {
-                        showAppPicker = true
-                    })
-                }
-                item {
-                    TileTypeButton(title = "Website", subtitle = "Add URL", icon = Icons.Default.Language, isSelected = false, onClick = {
-                        showWebsiteDialog = true
-                    })
-                }
-                item {
-                    TileTypeButton(title = "Shortcut", subtitle = "App shortcut", icon = Icons.Default.OpenInNew, isSelected = false, onClick = {
-                        showShortcutDialog = true
-                    })
-                }
-                item {
-                    TileTypeButton(title = "Activity", subtitle = "App activity", icon = Icons.Default.Extension, isSelected = false, onClick = {
-                        showActivityPicker = true
-                    })
-                }
-                item {
-                    TileTypeButton(title = "Intent", subtitle = "Custom intent", icon = Icons.Default.Send, isSelected = false, onClick = {
-                        showIntentDialog = true
-                    })
-                }
-                item {
-                    TileTypeButton(title = "Shell", subtitle = "Run command", icon = Icons.Default.Terminal, isSelected = false, onClick = {
-                        showShellDialog = true
-                    })
-                }
-                item {
-                    TileTypeButton(title = "Files", subtitle = "Select a file", icon = Icons.Default.InsertDriveFile, isSelected = false, onClick = {
-                        filePicker.launch(arrayOf("*/*"))
-                    })
-                }
-                item {
-                    TileTypeButton(title = "Folders", subtitle = "Open directory", icon = Icons.Default.Folder, isSelected = false, onClick = {
-                        folderPicker.launch(null)
-                    })
-                }
-            }
-
-            // Edit bottom sheet for selected item
-            if (selectedItemForEdit != null) {
-                val item = selectedItemForEdit!!
-                var itemName by remember { mutableStateOf(item.name) }
-                var itemIconConfig by remember { mutableStateOf(item.iconConfig) }
-                var itemVisualState by remember { mutableStateOf(item.visualState) }
-                var itemOnCommand by remember { mutableStateOf(item.onCommand) }
-                var itemOffCommand by remember { mutableStateOf(item.offCommand) }
-
-                ModalBottomSheet(
-                    onDismissRequest = { selectedItemForEdit = null },
-                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-                    contentColor = MaterialTheme.colorScheme.onSurface
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Column(
+                    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                    val colBitmap = remember(collectionIconConfig, isDark) {
+                        IconProcessor.processIconBitmap(context, collectionIconConfig, targetPixelSize = 64, isDarkTheme = isDark)
+                    }
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                            .verticalScroll(rememberScrollState())
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text("Edit Tile", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Tile Name
-                        OutlinedTextField(
-                            value = itemName,
-                            onValueChange = { itemName = it },
-                            label = { Text("Tile Name") },
-                            placeholder = { Text("e.g. My App") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+                        Image(
+                            bitmap = colBitmap.asImageBitmap(),
+                            contentDescription = "Collection Icon",
+                            modifier = Modifier.size(38.dp)
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Collection Icon", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text("Icon shown in Quick Settings panel", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    FilledTonalButton(
+                        onClick = { showCollectionPresetsDialog = true },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Presets", fontSize = 11.sp)
+                    }
+                    FilledTonalButton(
+                        onClick = { customImagePicker.launch("*/*") },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Pick File", fontSize = 11.sp)
+                    }
+                }
+            }
 
-                        // Icon category
-                        Text("Icon", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // TOP SECTION: Horizontally scrollable tiles preview
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Tiles Preview (${collectionItems.size})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Tap a tile to edit",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (collectionItems.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(90.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surface),
+                            contentAlignment = Alignment.Center
                         ) {
-                            val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-                            val bmp = remember(itemIconConfig, isDark) {
-                                IconProcessor.processIconBitmap(context, itemIconConfig, targetPixelSize = 48, isDarkTheme = isDark)
-                            }
-                            Image(
-                                bitmap = bmp.asImageBitmap(),
-                                contentDescription = "Preview",
-                                modifier = Modifier.size(48.dp)
+                            Text(
+                                text = "No tiles added yet. Tap a button below to add tiles.",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text("Preset: ${itemIconConfig.sourceData}", fontSize = 11.sp)
-                                TextButton(onClick = { showPresetsEditDialog = true }) {
-                                    Text("Pick File / Presets")
+                        }
+                    } else {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(collectionItems, key = { it.id }) { item ->
+                                val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                                val previewBitmap = remember(item.id, item.iconConfig, isDark) {
+                                    IconProcessor.processIconBitmap(context, item.iconConfig, targetPixelSize = 96, isDarkTheme = isDark)
+                                }
+                                Card(
+                                    modifier = Modifier
+                                        .width(84.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .clickable { selectedItemForEdit = item },
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(8.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(MaterialTheme.colorScheme.primaryContainer),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Image(
+                                                bitmap = previewBitmap.asImageBitmap(),
+                                                contentDescription = item.name,
+                                                modifier = Modifier.size(36.dp)
+                                            )
+                                        }
+                                        Text(
+                                            text = item.name,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Apps behavior category
-                        Text("Behavior", fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            FilterChip(
-                                selected = itemVisualState == TileVisualState.ENABLED,
-                                onClick = { itemVisualState = TileVisualState.ENABLED },
-                                label = { Text("Enabled", fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            FilterChip(
-                                selected = itemVisualState == TileVisualState.DISABLED,
-                                onClick = { itemVisualState = TileVisualState.DISABLED },
-                                label = { Text("Disabled", fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            FilterChip(
-                                selected = itemVisualState == TileVisualState.TOGGLE,
-                                onClick = { itemVisualState = TileVisualState.TOGGLE },
-                                label = { Text("Both", fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Commands for shell type
-                        if (item.type == TileType.SHELL) {
-                            OutlinedTextField(
-                                value = itemOnCommand,
-                                onValueChange = { itemOnCommand = it },
-                                label = { Text("Command (Enabled)") },
-                                placeholder = { Text("e.g. svc wifi enable") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            OutlinedTextField(
-                                value = itemOffCommand,
-                                onValueChange = { itemOffCommand = it },
-                                label = { Text("Command (Disabled)") },
-                                placeholder = { Text("e.g. svc wifi disable") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Collapse option
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Collapse collection on click")
-                            Switch(checked = item.collapseCollectionOnClick, onCheckedChange = { })
-                        }
-
-                        Spacer(modifier = Modifier.height(20.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(onClick = {
-                                val updatedItem = item.copy(
-                                    name = itemName,
-                                    iconConfig = itemIconConfig,
-                                    visualState = itemVisualState,
-                                    onCommand = itemOnCommand,
-                                    offCommand = itemOffCommand,
-                                    collapseCollectionOnClick = item.collapseCollectionOnClick
-                                )
-                                val idx = collectionItems.indexOfFirst { it.id == item.id }
-                                if (idx >= 0) collectionItems[idx] = updatedItem
-                                selectedItemForEdit = null
-                            }) {
-                                Text("Save Tile")
-                            }
-                            TextButton(onClick = { selectedItemForEdit = null }) {
-                                Text("Cancel")
-                            }
-                        }
                     }
+                }
+            }
+
+            // BOTTOM SECTION: All existing buttons except Collections
+            Text(
+                text = "Add Tile to Collection",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TileTypeButton(
+                    modifier = Modifier.weight(1f),
+                    title = "Apps",
+                    subtitle = "Launch any app",
+                    icon = Icons.Default.Apps,
+                    isSelected = false,
+                    onClick = { showAppPicker = true }
+                )
+                TileTypeButton(
+                    modifier = Modifier.weight(1f),
+                    title = "Website",
+                    subtitle = "Open a URL",
+                    icon = Icons.Default.Language,
+                    isSelected = false,
+                    onClick = { showWebsiteDialog = true }
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TileTypeButton(
+                    modifier = Modifier.weight(1f),
+                    title = "Shortcut",
+                    subtitle = "App shortcut",
+                    icon = Icons.Default.OpenInNew,
+                    isSelected = false,
+                    onClick = { showShortcutDialog = true }
+                )
+                TileTypeButton(
+                    modifier = Modifier.weight(1f),
+                    title = "Activity",
+                    subtitle = "Pick specific activity",
+                    icon = Icons.Default.Extension,
+                    isSelected = false,
+                    onClick = { showActivityPicker = true }
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TileTypeButton(
+                    modifier = Modifier.weight(1f),
+                    title = "Intent",
+                    subtitle = "Custom action/intent",
+                    icon = Icons.Default.Send,
+                    isSelected = false,
+                    onClick = { showIntentDialog = true }
+                )
+                TileTypeButton(
+                    modifier = Modifier.weight(1f),
+                    title = "Shell",
+                    subtitle = "Shizuku & root script",
+                    icon = Icons.Default.Terminal,
+                    isSelected = false,
+                    onClick = { showShellDialog = true }
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TileTypeButton(
+                    modifier = Modifier.weight(1f),
+                    title = "Files",
+                    subtitle = "Open selected file",
+                    icon = Icons.Default.InsertDriveFile,
+                    isSelected = false,
+                    onClick = { filePicker.launch(arrayOf("*/*")) }
+                )
+                TileTypeButton(
+                    modifier = Modifier.weight(1f),
+                    title = "Folders",
+                    subtitle = "Open directory",
+                    icon = Icons.Default.Folder,
+                    isSelected = false,
+                    onClick = { folderPicker.launch(null) }
+                )
+            }
+
+            // Bottom-most choice in bottom section: "Collapse panel on click"
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { collapseOnTap = !collapseOnTap },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Collapse panel on click",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Collapse quick settings notification shade when collection tile is tapped",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Switch(
+                        checked = collapseOnTap,
+                        onCheckedChange = { collapseOnTap = it }
+                    )
                 }
             }
         }
     }
 
-    // Apps picker sheet (like CreateTileScreen)
+    // Edit sheet for selected tile
+    if (selectedItemForEdit != null) {
+        EditTileSheet(
+            item = selectedItemForEdit!!,
+            onDismiss = { selectedItemForEdit = null },
+            onSave = { updated ->
+                val idx = collectionItems.indexOfFirst { it.id == updated.id }
+                if (idx >= 0) {
+                    collectionItems[idx] = updated
+                }
+                selectedItemForEdit = null
+            },
+            onDelete = { deleted ->
+                collectionItems.removeAll { it.id == deleted.id }
+                selectedItemForEdit = null
+            }
+        )
+    }
+
+    // App Picker
     if (showAppPicker) {
         AppPickerSheet(
             onDismiss = { showAppPicker = false },
@@ -1343,15 +1795,16 @@ fun CollectionCreatorScreen(
                         iconSize = 32f,
                         outlineStyle = "OUTLINE"
                     ),
-                    isActive = true,
-                    isAddedToQs = false
+                    isActive = false,
+                    slotNumber = -1,
+                    collapseCollectionOnClick = false
                 )
                 collectionItems.add(item)
             }
         )
     }
 
-    // Website dialog
+    // Website Dialog
     if (showWebsiteDialog) {
         WebsiteDialog(
             initialName = "",
@@ -1365,15 +1818,61 @@ fun CollectionCreatorScreen(
                     type = TileType.WEBSITE,
                     targetData = url,
                     iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = "language"),
-                    isActive = true,
-                    isAddedToQs = false
+                    isActive = false,
+                    slotNumber = -1,
+                    collapseCollectionOnClick = false
                 )
                 collectionItems.add(item)
             }
         )
     }
 
-    // Shell dialog
+    // Shortcut Dialog
+    if (showShortcutDialog) {
+        ShortcutDialog(
+            onDismiss = { showShortcutDialog = false },
+            onSelect = { name, intentUri, pkg, iconBitmap ->
+                showShortcutDialog = false
+                val item = TileItem(
+                    id = UUID.randomUUID().toString(),
+                    name = name,
+                    type = TileType.SHORTCUT,
+                    targetData = intentUri,
+                    iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = pkg),
+                    isActive = false,
+                    slotNumber = -1,
+                    collapseCollectionOnClick = false
+                )
+                collectionItems.add(item)
+            }
+        )
+    }
+
+    // Intent Dialog
+    if (showIntentDialog) {
+        IntentDialog(
+            initialName = "",
+            initialAction = "",
+            initialPackage = "",
+            onDismiss = { showIntentDialog = false },
+            onConfirm = { name, action, pkg ->
+                showIntentDialog = false
+                val item = TileItem(
+                    id = UUID.randomUUID().toString(),
+                    name = name.ifBlank { "Intent" },
+                    type = TileType.INTENT,
+                    targetData = if (pkg.isNotBlank()) "intent:#Intent;action=$action;package=$pkg;end" else action,
+                    iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = "send"),
+                    isActive = false,
+                    slotNumber = -1,
+                    collapseCollectionOnClick = false
+                )
+                collectionItems.add(item)
+            }
+        )
+    }
+
+    // Shell Dialog
     if (showShellDialog) {
         ShellDialog(
             initialName = "",
@@ -1394,100 +1893,37 @@ fun CollectionCreatorScreen(
                     type = TileType.SHELL,
                     targetData = cmd,
                     iconConfig = onIcon ?: IconConfig(sourceType = IconSourceType.PRESET, sourceData = "terminal"),
-                    isActive = true,
-                    isAddedToQs = false,
+                    isActive = false,
+                    slotNumber = -1,
                     visualState = vState,
                     onCommand = onCmd,
                     offCommand = offCmd,
                     onTileName = onName,
                     offTileName = offName,
                     onIconConfig = onIcon,
-                    offIconConfig = offIcon
+                    offIconConfig = offIcon,
+                    collapseCollectionOnClick = false
                 )
                 collectionItems.add(item)
             }
         )
     }
 
-    // Shortcut dialog
-    if (showShortcutDialog) {
-        val coroutineScope = rememberCoroutineScope()
-        ShortcutDialog(
-            onDismiss = { showShortcutDialog = false },
-            onSelect = { name, intentUri, pkg, iconBitmap ->
-                showShortcutDialog = false
-                val item = TileItem(
-                    id = UUID.randomUUID().toString(),
-                    name = name,
-                    type = TileType.SHORTCUT,
-                    targetData = intentUri,
-                    iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = pkg),
-                    isActive = true,
-                    isAddedToQs = false
-                )
-                collectionItems.add(item)
-            }
-        )
-    }
-
-    // Activity picker screen
-    if (showActivityPicker) {
-        ActivityPickerScreen(
-            onBack = { showActivityPicker = false },
-            onActivitySelected = { app, activity ->
-                showActivityPicker = false
-                val item = TileItem(
-                    id = UUID.randomUUID().toString(),
-                    name = activity.fullName,
-                    type = TileType.ACTIVITY,
-                    targetData = activity.fullName,
-                    iconConfig = IconConfig(sourceType = IconSourceType.APP_ICON, sourceData = app.packageName),
-                    isActive = true,
-                    isAddedToQs = false
-                )
-                collectionItems.add(item)
-            }
-        )
-    }
-
-    // Intent dialog
-    if (showIntentDialog) {
-        IntentDialog(
-            initialName = "",
-            initialAction = "",
-            initialPackage = "",
-            onDismiss = { showIntentDialog = false },
-            onConfirm = { name, action, pkg ->
-                showIntentDialog = false
-                val item = TileItem(
-                    id = UUID.randomUUID().toString(),
-                    name = name.ifBlank { "Intent" },
-                    type = TileType.INTENT,
-                    targetData = if (pkg.isNotBlank()) "intent:#Intent;action=$action;package=$pkg;end" else action,
-                    iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = "send"),
-                    isActive = true,
-                    isAddedToQs = false
-                )
-                collectionItems.add(item)
-            }
-        )
-    }
-
-    // Icon presets dialog for collection icon
-    if (showPresetsEditDialog) {
+    // Presets Dialog for Collection Tile Icon
+    if (showCollectionPresetsDialog) {
         IconPresetsDialog(
             currentKey = collectionIconConfig.sourceData,
-            onDismiss = { showPresetsEditDialog = false },
+            onDismiss = { showCollectionPresetsDialog = false },
             onSelectPreset = { key ->
-                showPresetsEditDialog = false
-                collectionIconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = key)
+                showCollectionPresetsDialog = false
+                collectionIconConfig = collectionIconConfig.copy(sourceType = IconSourceType.PRESET, sourceData = key)
             },
             onSelectCustomFile = { path ->
-                showPresetsEditDialog = false
-                collectionIconConfig = IconConfig(sourceType = IconSourceType.CUSTOM_FILE, sourceData = path)
+                showCollectionPresetsDialog = false
+                collectionIconConfig = collectionIconConfig.copy(sourceType = IconSourceType.CUSTOM_FILE, sourceData = path)
             },
             onSelectAppIcon = { pkg ->
-                showPresetsEditDialog = false
+                showCollectionPresetsDialog = false
                 collectionIconConfig = IconConfig(sourceType = IconSourceType.APP_ICON, sourceData = pkg)
             }
         )
