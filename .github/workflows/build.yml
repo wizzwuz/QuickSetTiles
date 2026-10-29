@@ -19,7 +19,7 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0
+        fetch-depth: 1
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Setup Java 17
@@ -27,7 +27,12 @@ jobs:
       with:
         distribution: 'temurin'
         java-version: '17'
-        cache: 'gradle'
+
+    - name: Setup Gradle Cache
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        cache-read-only: false
+
 
     - name: Ensure Persistent Release Keystore
       run: |
@@ -100,7 +105,7 @@ jobs:
         "
 
     - name: Build Release & Debug APKs
-      run: ./gradlew assembleRelease assembleDebug --stacktrace
+      run: ./gradlew assembleRelease assembleDebug --no-daemon --parallel --build-cache --stacktrace
 
     - name: Upload Release APK Artifact
       uses: actions/upload-artifact@v4

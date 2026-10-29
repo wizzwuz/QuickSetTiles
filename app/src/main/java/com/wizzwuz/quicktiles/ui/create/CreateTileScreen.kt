@@ -937,7 +937,16 @@ fun EditTileSheet(
     var itemIconConfig by remember(item.id) { mutableStateOf(item.iconConfig) }
     var itemVisualState by remember(item.id) { mutableStateOf(item.visualState) }
     var itemCollapseCollectionOnClick by remember(item.id) { mutableStateOf(item.collapseCollectionOnClick) }
+    var itemTargetData by remember(item.id) { mutableStateOf(item.targetData) }
+    var itemOnCommand by remember(item.id) { mutableStateOf(item.onCommand) }
+    var itemOffCommand by remember(item.id) { mutableStateOf(item.offCommand) }
+    var itemOnTileName by remember(item.id) { mutableStateOf(item.onTileName) }
+    var itemOffTileName by remember(item.id) { mutableStateOf(item.offTileName) }
+    var itemOnIconConfig by remember(item.id) { mutableStateOf(item.onIconConfig) }
+    var itemOffIconConfig by remember(item.id) { mutableStateOf(item.offIconConfig) }
+    var showShellDialog by remember { mutableStateOf(false) }
     var showPresetsDialog by remember { mutableStateOf(false) }
+
 
     val customImagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -1156,14 +1165,70 @@ fun EditTileSheet(
                 }
             }
 
+            // Configure Shell Tile panel (only for shell tiles in collections)
+            if (item.type == TileType.SHELL) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showShellDialog = true },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Configure Shell Tile",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            val summary = if (itemVisualState == TileVisualState.TOGGLE) {
+                                "Toggle commands configured"
+                            } else {
+                                val c = if (itemVisualState == TileVisualState.ENABLED) itemOnCommand else itemOffCommand
+                                c.ifBlank { itemTargetData }.take(35).ifBlank { "No command configured" }
+                            }
+                            Text(
+                                text = summary,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        FilledTonalButton(
+                            onClick = { showShellDialog = true },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Terminal, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Configure", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+
             // Save Tile Button
             Button(
                 onClick = {
                     onSave(
                         item.copy(
                             name = itemName.ifBlank { item.name },
+                            targetData = itemTargetData,
                             iconConfig = itemIconConfig,
                             visualState = itemVisualState,
+                            onCommand = itemOnCommand,
+                            offCommand = itemOffCommand,
+                            onTileName = itemOnTileName,
+                            offTileName = itemOffTileName,
+                            onIconConfig = itemOnIconConfig,
+                            offIconConfig = itemOffIconConfig,
                             collapseCollectionOnClick = itemCollapseCollectionOnClick
                         )
                     )
@@ -1173,6 +1238,36 @@ fun EditTileSheet(
                 Text("Save Changes", fontWeight = FontWeight.Bold)
             }
         }
+    }
+
+    if (showShellDialog) {
+        ShellDialog(
+            initialName = itemName,
+            initialCommand = itemTargetData,
+            initialOnCommand = itemOnCommand,
+            initialOffCommand = itemOffCommand,
+            initialVisualState = itemVisualState,
+            initialOnTileName = itemOnTileName,
+            initialOffTileName = itemOffTileName,
+            initialOnIconConfig = itemOnIconConfig,
+            initialOffIconConfig = itemOffIconConfig,
+            onDismiss = { showShellDialog = false },
+            onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon ->
+                showShellDialog = false
+                itemName = name
+                itemTargetData = cmd
+                itemOnCommand = onCmd
+                itemOffCommand = offCmd
+                itemVisualState = vState
+                itemOnTileName = onName
+                itemOffTileName = offName
+                itemOnIconConfig = onIcon
+                itemOffIconConfig = offIcon
+                if (onIcon != null) {
+                    itemIconConfig = onIcon
+                }
+            }
+        )
     }
 
     if (showPresetsDialog) {
@@ -1207,6 +1302,7 @@ fun EditTileSheet(
         )
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -1551,17 +1647,29 @@ fun CollectionCreatorScreen(
             // Tiles Per Row Option Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(14.dp)
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Tiles Per Row", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    Text("Enter number of tiles per row in the collection tray", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Tiles Per Row",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Number of tiles per row in collection tray",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
                     OutlinedTextField(
                         value = tilesPerRowInput,
                         onValueChange = { newVal ->
@@ -1572,14 +1680,14 @@ fun CollectionCreatorScreen(
                                 tilesPerRow = parsed
                             }
                         },
-                        label = { Text("Tiles per row") },
-                        placeholder = { Text("e.g. 3") },
                         singleLine = true,
+                        textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.width(68.dp)
                     )
                 }
             }
+
 
             // TOP SECTION: Horizontally scrollable tiles preview
             Card(

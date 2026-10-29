@@ -153,10 +153,20 @@ object ShizukuHelper {
             "/data/local/xbin/su",
             "/data/local/bin/su",
             "/data/local/su",
-            "/data/adb/magisk/busybox"  // Magisk managed su
+            "/data/adb/magisk/busybox",
+            "/data/adb/magisk/su",
+            "/data/adb/ksu/bin/su",
+            "/data/adb/ap/bin/su"
         )
-        return paths.any { File(it).exists() }
+        if (paths.any { File(it).exists() }) return true
+        return try {
+            val proc = Runtime.getRuntime().exec(arrayOf("which", "su"))
+            proc.waitFor() == 0
+        } catch (_: Throwable) {
+            false
+        }
     }
+
 
     /**
      * Actually tests if root is accessible by running `su -c id` and checking the output
@@ -272,8 +282,9 @@ object ShizukuHelper {
         val trimmed = command.trim()
         if (trimmed.startsWith("launch-private ") || trimmed.startsWith("am-private ")) {
             val targetComp = trimmed.substringAfter(" ").trim()
+            val wm = extractWindowingMode(command)
             if (isShizukuRunning() && hasShizukuPermission()) {
-                val bypassRes = tryAssistantMethodBypass(targetComp)
+                val bypassRes = tryAssistantMethodBypass(targetComp, wm)
                 val totalDuration = System.currentTimeMillis() - startTime
                 val finalResult = bypassRes.copy(durationMs = totalDuration)
                 LogManager.logCommand(finalResult.executionMode, command, finalResult.exitCode, finalResult.output, totalDuration)
@@ -328,8 +339,19 @@ object ShizukuHelper {
         // 3. Automatic Private Activity Permission Denial detection & Assistant Method bypass
         val resolvedResult: CommandResult = if (result.exitCode != 0 && isPermissionDenialForPrivateActivity(result.output)) {
             val comp = extractComponentFromCommand(command) ?: extractComponentFromOutput(result.output)
-            if (comp != null && isShizukuRunning() && hasShizukuPermission()) {
-                val bypassRes = tryAssistantMethodBypass(comp)
+            val wm = extractWindowingMode(command)
+            if (isRootBinaryPresent()) {
+                val rootRes = runRootProcess(command, timeoutMs)
+                if (rootRes.exitCode == 0 && !isRootDenied(rootRes.output, rootRes.exitCode)) {
+                    rootRes
+                } else if (comp != null && isShizukuRunning() && hasShizukuPermission()) {
+                    val bypassRes = tryAssistantMethodBypass(comp, wm)
+                    if (bypassRes.exitCode == 0) bypassRes else result
+                } else {
+                    result
+                }
+            } else if (comp != null && isShizukuRunning() && hasShizukuPermission()) {
+                val bypassRes = tryAssistantMethodBypass(comp, wm)
                 if (bypassRes.exitCode == 0) {
                     bypassRes
                 } else {
@@ -341,6 +363,7 @@ object ShizukuHelper {
         } else {
             result
         }
+
 
         val totalDuration = System.currentTimeMillis() - startTime
         val finalResult = resolvedResult.copy(durationMs = totalDuration)
@@ -399,10 +422,12 @@ object ShizukuHelper {
                 if (amRes.exitCode != 0 && isPermissionDenialForPrivateActivity(amRes.output)) {
                     // Private activity — use assistant bypass
                     val comp = extractComponentFromCommand(line) ?: extractComponentFromOutput(amRes.output)
+                    val wm = extractWindowingMode(line)
                     if (comp != null) {
-                        val bypassRes = tryAssistantMethodBypass(comp)
+                        val bypassRes = tryAssistantMethodBypass(comp, wm)
                         if (bypassRes.output.isNotBlank()) outputParts.add(bypassRes.output)
                         if (bypassRes.exitCode != 0) overallExitCode = bypassRes.exitCode
+
                     } else {
                         if (amRes.output.isNotBlank()) outputParts.add(amRes.output)
                         overallExitCode = amRes.exitCode
@@ -542,7 +567,9 @@ object ShizukuHelper {
 
     private suspend fun runRootProcess(command: String, timeoutMs: Long): CommandResult = withContext(Dispatchers.IO) {
         try {
-            val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            val envCmd = "export PATH=\$PATH:/system/bin:/system/xbin:/data/adb/ksu/bin:/data/adb/ap/bin; $command"
+            val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", envCmd))
+
             val res = readProcessWithTimeout(proc, "Root (su)", timeoutMs)
             if (isRootDenied(res.output, res.exitCode)) {
                 CommandResult(
@@ -675,7 +702,16 @@ object ShizukuHelper {
         return cmpMatch?.groupValues?.get(1)
     }
 
-    suspend fun tryAssistantMethodBypass(componentStr: String): CommandResult {
+    private fun extractWindowingMode(command: String): String? {
+        val match = Regex("""--windowingMode\s+(\d+)""").find(command)
+        return match?.groupValues?.get(1)
+    }
+
+
+    suspend fun tryAssistantMethodBypass(
+        componentStr: String,
+        windowingMode: String? = null
+    ): CommandResult {
         val origRes = runShizukuProcess("settings get secure assistant", 4000L)
         val originalAssistant = origRes.output.trim()
 
@@ -696,13 +732,30 @@ object ShizukuHelper {
                     "Shizuku (Assistant Bypass)"
                 )
             } else {
-                // Trigger assist hardware hook (NO implicit am start -a ASSIST to prevent 'Complete action using' chooser)
+                val wmFlag = if (windowingMode != null) " --windowingMode $windowingMode" else ""
+                
+                // 1. Direct explicit am start with ASSIST intent and windowing mode
+                val amAssistRes = runShizukuProcess("am start -a android.intent.action.ASSIST -n $componentStr$wmFlag", 4000L)
+
+                // 2. Direct cmd activity start as fallback
+                if (amAssistRes.exitCode != 0 || amAssistRes.output.contains("Error")) {
+                    runShizukuProcess("cmd activity start -a android.intent.action.ASSIST -n $componentStr$wmFlag", 4000L)
+                }
+
+                // 3. Assist hardware key event
                 runShizukuProcess("input keyevent 219", 4000L)
-                delay(600)
+
+                // 4. If windowing mode is requested (e.g. 5 for freeform), set task windowing mode
+                if (windowingMode != null) {
+                    delay(300)
+                    runShizukuProcess("am task set-windowing-mode $componentStr $windowingMode 2>/dev/null || cmd activity task set-windowing-mode $componentStr $windowingMode 2>/dev/null", 2000L)
+                }
+
+                delay(800)
 
                 CommandResult(
                     0,
-                    "Starting: Intent { cmp=$componentStr }\n[Success] Private activity started via Assistant Method (bypassing UID 2000 restriction)",
+                    "Starting: Intent { cmp=$componentStr }$wmFlag\n[Success] Private activity started via Assistant Method (bypassing UID 2000 restriction)",
                     "Shizuku (Assistant Bypass)"
                 )
             }
@@ -726,3 +779,4 @@ object ShizukuHelper {
         }
     }
 }
+

@@ -175,11 +175,29 @@ fun CollectionPopupScreen(
                                             isDark = isDark,
                                             onClick = {
                                                 executeCollectionItem(context, repo, item)
-                                                val shouldDismiss = item.collapseCollectionOnClick || item.collapseOnTap || (collection?.collapseOnTap == true)
+                                                val shouldDismiss = if (item.type == TileType.SHELL) {
+                                                    if (item.collapseCollectionOnClick) {
+                                                        true
+                                                    } else {
+                                                        val cmd = when (item.visualState) {
+                                                            TileVisualState.TOGGLE -> if (item.currentToggleOn) {
+                                                                if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                                                            } else {
+                                                                if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                                                            }
+                                                            TileVisualState.ENABLED -> if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                                                            TileVisualState.DISABLED -> if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                                                        }
+                                                        isShellCommandLaunchable(cmd)
+                                                    }
+                                                } else {
+                                                    item.collapseCollectionOnClick || item.collapseOnTap || (collection?.collapseOnTap == true)
+                                                }
                                                 if (shouldDismiss) {
                                                     dismissAnimated()
                                                 }
                                             }
+
                                         )
                                     }
                                 }
@@ -306,7 +324,20 @@ private fun CollectionTileItemView(
 
 private val collectionScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+private fun isShellCommandLaunchable(cmd: String): Boolean {
+    val lower = cmd.trim().lowercase()
+    return lower.startsWith("am start") ||
+            lower.contains("\nam start") ||
+            lower.startsWith("cmd activity start") ||
+            lower.contains("\ncmd activity start") ||
+            lower.startsWith("monkey ") ||
+            lower.contains("\nmonkey ") ||
+            lower.startsWith("launch-private ") ||
+            lower.startsWith("am-private ")
+}
+
 private fun executeCollectionItem(context: android.content.Context, repo: TileRepository, item: TileItem) {
+
     try {
         if (item.visualState == TileVisualState.TOGGLE && item.type != TileType.SHELL) {
             val updated = item.copy(currentToggleOn = !item.currentToggleOn)
