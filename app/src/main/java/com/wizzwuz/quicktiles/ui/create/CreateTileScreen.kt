@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -30,6 +31,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
@@ -1217,6 +1219,7 @@ fun CollectionCreatorScreen(
     var collectionName by remember { mutableStateOf(initialTile?.name ?: "My Collection") }
     var collapseOnTap by remember { mutableStateOf(initialTile?.collapseOnTap ?: true) }
     var tilesPerRow by remember { mutableStateOf(initialTile?.tilesPerRow ?: 3) }
+    var tilesPerRowInput by remember { mutableStateOf((initialTile?.tilesPerRow ?: 3).toString()) }
     var isCollectionCustomizeExpanded by remember { mutableStateOf(false) }
     var collectionIconConfig by remember {
         mutableStateOf(initialTile?.iconConfig ?: IconConfig(sourceType = IconSourceType.PRESET, sourceData = "collections"))
@@ -1278,7 +1281,7 @@ fun CollectionCreatorScreen(
                 iconConfig = IconConfig(sourceType = IconSourceType.CUSTOM_FILE, sourceData = it.toString()),
                 isActive = false,
                 slotNumber = -1,
-                collapseCollectionOnClick = false
+                collapseCollectionOnClick = collapseOnTap
             )
             collectionItems.add(item)
         }
@@ -1302,7 +1305,7 @@ fun CollectionCreatorScreen(
                 iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = "folder"),
                 isActive = false,
                 slotNumber = -1,
-                collapseCollectionOnClick = false
+                collapseCollectionOnClick = collapseOnTap
             )
             collectionItems.add(item)
         }
@@ -1328,7 +1331,7 @@ fun CollectionCreatorScreen(
                     ),
                     isActive = false,
                     slotNumber = -1,
-                    collapseCollectionOnClick = false
+                    collapseCollectionOnClick = collapseOnTap
                 )
                 collectionItems.add(item)
             }
@@ -1556,30 +1559,25 @@ fun CollectionCreatorScreen(
                         .padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("Tiles Per Row", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                            Text("Number of tiles per row in the collection popup", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Text("$tilesPerRow tiles", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(2, 3, 4, 5).forEach { count ->
-                            FilterChip(
-                                selected = (tilesPerRow == count),
-                                onClick = { tilesPerRow = count },
-                                label = { Text("$count", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
+                    Text("Tiles Per Row", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text("Enter number of tiles per row in the collection tray", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                    OutlinedTextField(
+                        value = tilesPerRowInput,
+                        onValueChange = { newVal ->
+                            val digitsOnly = newVal.filter { it.isDigit() }
+                            tilesPerRowInput = digitsOnly
+                            val parsed = digitsOnly.toIntOrNull()
+                            if (parsed != null && parsed > 0) {
+                                tilesPerRow = parsed
+                            }
+                        },
+                        label = { Text("Tiles per row") },
+                        placeholder = { Text("e.g. 3") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
@@ -1856,7 +1854,7 @@ fun CollectionCreatorScreen(
                     ),
                     isActive = false,
                     slotNumber = -1,
-                    collapseCollectionOnClick = false
+                    collapseCollectionOnClick = collapseOnTap
                 )
                 collectionItems.add(item)
             }
@@ -1879,7 +1877,7 @@ fun CollectionCreatorScreen(
                     iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = "language"),
                     isActive = false,
                     slotNumber = -1,
-                    collapseCollectionOnClick = false
+                    collapseCollectionOnClick = collapseOnTap
                 )
                 collectionItems.add(item)
             }
@@ -1900,7 +1898,7 @@ fun CollectionCreatorScreen(
                     iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = pkg, outlineThickness = 0f, outlineStyle = "ORIGINAL"),
                     isActive = false,
                     slotNumber = -1,
-                    collapseCollectionOnClick = false
+                    collapseCollectionOnClick = collapseOnTap
                 )
                 collectionItems.add(item)
             }
@@ -1924,7 +1922,7 @@ fun CollectionCreatorScreen(
                     iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = "send"),
                     isActive = false,
                     slotNumber = -1,
-                    collapseCollectionOnClick = false
+                    collapseCollectionOnClick = collapseOnTap
                 )
                 collectionItems.add(item)
             }
@@ -1961,7 +1959,7 @@ fun CollectionCreatorScreen(
                     offTileName = offName,
                     onIconConfig = onIcon,
                     offIconConfig = offIcon,
-                    collapseCollectionOnClick = false
+                    collapseCollectionOnClick = collapseOnTap
                 )
                 collectionItems.add(item)
             }

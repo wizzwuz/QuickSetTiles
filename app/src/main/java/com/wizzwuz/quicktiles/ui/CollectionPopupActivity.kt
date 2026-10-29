@@ -16,6 +16,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -43,6 +44,8 @@ import com.wizzwuz.quicktiles.model.IconSourceType
 import com.wizzwuz.quicktiles.model.TileItem
 import com.wizzwuz.quicktiles.model.TileType
 import com.wizzwuz.quicktiles.model.TileVisualState
+import com.wizzwuz.quicktiles.ui.theme.QuickTilesTheme
+import com.wizzwuz.quicktiles.ui.theme.ThemeManager
 import com.wizzwuz.quicktiles.util.AppHelper
 import com.wizzwuz.quicktiles.util.IconProcessor
 import com.wizzwuz.quicktiles.util.LogManager
@@ -56,11 +59,16 @@ import kotlinx.coroutines.launch
 class CollectionPopupActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.init(this)
         setContent {
-            MaterialTheme {
+            val themeMode by ThemeManager.themeFlow.collectAsState()
+            QuickTilesTheme(themeMode = themeMode) {
                 CollectionPopupScreen(
                     collectionId = intent?.extras?.getString("collectionId") ?: "",
-                    onDismiss = { finish() }
+                    onDismiss = {
+                        finish()
+                        overridePendingTransition(0, android.R.anim.fade_out)
+                    }
                 )
             }
         }
@@ -89,9 +97,10 @@ fun CollectionPopupScreen(
     }
 
     fun dismissAnimated() {
+        if (!visible) return
         visible = false
         coroutineScope.launch {
-            delay(200)
+            delay(160)
             onDismiss()
         }
     }
@@ -109,73 +118,53 @@ fun CollectionPopupScreen(
         AnimatedVisibility(
             visible = visible,
             enter = slideInVertically(
-                animationSpec = tween(280),
+                animationSpec = tween(260),
                 initialOffsetY = { it }
-            ) + fadeIn(animationSpec = tween(240)),
+            ) + fadeIn(animationSpec = tween(220)),
             exit = slideOutVertically(
-                animationSpec = tween(200),
+                animationSpec = tween(180),
                 targetOffsetY = { it }
-            ) + fadeOut(animationSpec = tween(180))
+            ) + fadeOut(animationSpec = tween(160))
         ) {
             Card(
                 modifier = Modifier
-                    .wrapContentWidth()
-                    .padding(horizontal = 16.dp, vertical = 24.dp)
+                    .wrapContentSize()
+                    .padding(horizontal = 12.dp, vertical = 24.dp)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         enabled = false
                     ) {},
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
-                Column(
+                Box(
                     modifier = Modifier
-                        .wrapContentWidth()
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .wrapContentSize()
+                        .padding(2.dp)
                 ) {
-                    // Collection Title
-                    Text(
-                        text = collection?.name ?: "Collection",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        textAlign = TextAlign.Center
-                    )
-
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                        thickness = 1.dp
-                    )
-
                     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
                     if (collectionItems.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .padding(vertical = 12.dp, horizontal = 20.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "No tiles in this collection",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Text(
+                            "No tiles in collection",
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(8.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     } else {
-                        val perRow = (collection?.tilesPerRow ?: 3).coerceIn(2, 5)
+                        val perRow = (collection?.tilesPerRow ?: 3).coerceAtLeast(1)
                         val chunkedRows = collectionItems.chunked(perRow)
                         Column(
-                            modifier = Modifier.wrapContentWidth(),
+                            modifier = Modifier.wrapContentSize(),
                             verticalArrangement = Arrangement.spacedBy(5.4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             chunkedRows.forEach { rowItems ->
                                 Row(
-                                    modifier = Modifier.wrapContentWidth(),
+                                    modifier = Modifier.wrapContentSize(),
                                     horizontalArrangement = Arrangement.spacedBy(5.4.dp, Alignment.CenterHorizontally),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -186,7 +175,8 @@ fun CollectionPopupScreen(
                                             isDark = isDark,
                                             onClick = {
                                                 executeCollectionItem(context, repo, item)
-                                                if (item.collapseCollectionOnClick) {
+                                                val shouldDismiss = item.collapseCollectionOnClick || item.collapseOnTap || (collection?.collapseOnTap == true)
+                                                if (shouldDismiss) {
                                                     dismissAnimated()
                                                 }
                                             }
@@ -281,31 +271,30 @@ private fun CollectionTileItemView(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
+            .width(54.dp)
             .clip(RoundedCornerShape(12.dp))
             .clickable { onClick() }
-            .padding(vertical = 4.dp, horizontal = 2.dp)
-            .width(62.dp)
     ) {
         Box(
             modifier = Modifier
                 .size(54.dp)
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(animatedContainerColor)
-                .border(1.5.dp, animatedBorderColor, RoundedCornerShape(16.dp)),
+                .border(1.5.dp, animatedBorderColor, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
             Image(
                 bitmap = previewBitmap.asImageBitmap(),
                 contentDescription = displayName,
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(34.dp)
                     .graphicsLayer(alpha = animatedIconAlpha)
             )
         }
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(3.dp))
         Text(
             text = displayName,
-            fontSize = 11.sp,
+            fontSize = 10.5.sp,
             fontWeight = if (isTileEnabled) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
