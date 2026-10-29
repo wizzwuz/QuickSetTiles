@@ -330,17 +330,22 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
     }
 
     private fun collapseShade() {
-        try {
-            if (ShizukuHelper.isShizukuRunning() && ShizukuHelper.hasShizukuPermission()) {
-                val res = ShizukuHelper.runShizukuProcess("cmd statusbar collapse", 1000)
-                if (res.exitCode == 0) return
-            } else if (ShizukuHelper.isRootBinaryPresent()) {
-                val res = ShizukuHelper.runRootProcess("cmd statusbar collapse", 1000)
-                if (res.exitCode == 0) return
+        serviceScope.launch {
+            try {
+                if (ShizukuHelper.isShizukuRunning() || ShizukuHelper.isRootBinaryPresent()) {
+                    val res = ShizukuHelper.executeCommand("cmd statusbar collapse")
+                    if (res.exitCode == 0) return@launch
+                }
+            } catch (e: Throwable) {
+                // fallback
             }
-        } catch (e: Throwable) {
-            // fallback
+            mainHandler.post {
+                fallbackCollapseShade()
+            }
         }
+    }
+
+    private fun fallbackCollapseShade() {
         try {
             val intent = Intent(this, com.wizzwuz.quicktiles.ui.InternalPluginActivity::class.java).apply {
                 action = "collapse_panel"
