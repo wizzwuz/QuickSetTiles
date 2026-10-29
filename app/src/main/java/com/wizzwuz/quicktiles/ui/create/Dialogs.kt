@@ -44,6 +44,7 @@ import com.wizzwuz.quicktiles.model.TileVisualState
 import com.wizzwuz.quicktiles.util.AppHelper
 import com.wizzwuz.quicktiles.util.CommandResult
 import com.wizzwuz.quicktiles.util.IconProcessor
+import com.wizzwuz.quicktiles.util.PopupToastHelper
 import com.wizzwuz.quicktiles.util.ShellMode
 import com.wizzwuz.quicktiles.util.ShortcutProviderItem
 import com.wizzwuz.quicktiles.util.ShizukuHelper
@@ -513,6 +514,7 @@ fun FullscreenScriptEditorDialog(
     var script by remember { mutableStateOf(initialScript) }
     var currentMode by remember { mutableStateOf(selectedMode) }
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     var isTesting by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<CommandResult?>(null) }
 
@@ -578,6 +580,15 @@ fun FullscreenScriptEditorDialog(
                                     val res = ShizukuHelper.executeCommand(script.trim(), currentMode)
                                     testResult = res
                                     isTesting = false
+                                    if (res.output.isNotBlank()) {
+                                        val lines = res.output.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                                        for (line in lines) {
+                                            PopupToastHelper.showToast(context, line)
+                                            if (lines.size > 1) {
+                                                kotlinx.coroutines.delay(1200)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         },
@@ -684,6 +695,7 @@ fun ShellCommandInputField(
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     var isTesting by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<CommandResult?>(null) }
     var showFullscreenEditor by remember { mutableStateOf(false) }
@@ -752,6 +764,15 @@ fun ShellCommandInputField(
                             )
                             testResult = res
                             isTesting = false
+                            if (res.output.isNotBlank()) {
+                                val lines = res.output.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                                for (line in lines) {
+                                    PopupToastHelper.showToast(context, line)
+                                    if (lines.size > 1) {
+                                        kotlinx.coroutines.delay(1200)
+                                    }
+                                }
+                            }
                         }
                     }
                 },
@@ -844,6 +865,7 @@ fun MultipleShellDialog(
     initialSteps: List<ShellStep> = emptyList(),
     initialShowPopups: Boolean = false,
     onDismiss: () -> Unit,
+    onBackToSingleShell: (() -> Unit)? = null,
     onConfirm: (steps: List<ShellStep>, showPopups: Boolean) -> Unit
 ) {
     val context = LocalContext.current
@@ -920,7 +942,25 @@ fun MultipleShellDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("Multiple Shells", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Multiple Shells", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                if (onBackToSingleShell != null) {
+                    OutlinedButton(
+                        onClick = onBackToSingleShell,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(28.dp),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Single shell", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
         },
         text = {
             Column(
@@ -1162,6 +1202,43 @@ fun MultipleShellDialog(
                         selectedMode = currentMode,
                         placeholder = "e.g. echo 'Running step ${safeIndex + 1}'"
                     )
+
+                    // Collapse panel toggle for this shell
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val updated = steps.toMutableList()
+                                updated[safeIndex] = updated[safeIndex].copy(collapsePanel = !currentStep.collapsePanel)
+                                steps = updated
+                            },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Collapse panel", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Collapse notification shade / tray after executing this shell",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = currentStep.collapsePanel,
+                                onCheckedChange = { checked ->
+                                    val updated = steps.toMutableList()
+                                    updated[safeIndex] = updated[safeIndex].copy(collapsePanel = checked)
+                                    steps = updated
+                                }
+                            )
+                        }
+                    }
                 }
 
                 // Advance option dropdown menu
@@ -1284,6 +1361,7 @@ fun ShellDialog(
             initialSteps = initialMultiShellSteps,
             initialShowPopups = showPopups,
             onDismiss = { showMultipleShellDialog = false },
+            onBackToSingleShell = { showMultipleShellDialog = false },
             onConfirm = { steps, popups ->
                 showMultipleShellDialog = false
                 val firstStep = steps.firstOrNull()

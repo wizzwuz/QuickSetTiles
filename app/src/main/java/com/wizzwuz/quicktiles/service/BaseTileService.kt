@@ -15,9 +15,9 @@ import com.wizzwuz.quicktiles.R
 import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.model.TileItem
 import com.wizzwuz.quicktiles.model.TileType
-import com.wizzwuz.quicktiles.ui.MainActivity
 import com.wizzwuz.quicktiles.util.AppHelper
 import com.wizzwuz.quicktiles.util.IconProcessor
+import com.wizzwuz.quicktiles.util.PopupToastHelper
 import com.wizzwuz.quicktiles.util.ShizukuHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -214,17 +214,18 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
             TileType.SHELL -> {
                 serviceScope.launch {
                     val repo = TileRepository.getInstance(this@BaseTileService)
-                    val cmdToRun: String
-
+                    val shouldCollapse: Boolean
                     if (item.multiShellSteps.isNotEmpty()) {
                         val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
                         val step = item.multiShellSteps[stepIndex]
                         cmdToRun = step.command
+                        shouldCollapse = step.collapsePanel
                         val nextIndex = (stepIndex + 1) % item.multiShellSteps.size
                         val updatedItem = item.copy(currentMultiShellIndex = nextIndex)
                         repo.saveTile(updatedItem)
                         mainHandler.post { updateTileState() }
                     } else {
+                        shouldCollapse = item.collapseOnTap
                         val nextToggleState: Boolean
                         when (item.visualState) {
                             com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> {
@@ -252,7 +253,7 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                         }
                     }
 
-                    if (item.collapseOnTap) {
+                    if (shouldCollapse) {
                         mainHandler.post { collapseShade() }
                     }
 
@@ -261,9 +262,7 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                     if (item.showPopups && result.output.isNotBlank()) {
                         val lines = result.output.lines().map { it.trim() }.filter { it.isNotEmpty() }
                         for (line in lines) {
-                            mainHandler.post {
-                                Toast.makeText(applicationContext, line, Toast.LENGTH_SHORT).show()
-                            }
+                            PopupToastHelper.showToast(applicationContext, line)
                             if (lines.size > 1) {
                                 kotlinx.coroutines.delay(1200)
                             }

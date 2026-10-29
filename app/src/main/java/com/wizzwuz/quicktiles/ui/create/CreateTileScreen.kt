@@ -105,6 +105,7 @@ fun CreateTileScreen(
     var showShortcutDialog by remember { mutableStateOf(false) }
     var showIntentDialog by remember { mutableStateOf(false) }
     var showShellDialog by remember { mutableStateOf(false) }
+    var showMultipleShellDialog by remember { mutableStateOf(false) }
     var showPresetsDialog by remember { mutableStateOf(false) }
     var showCollectionCreator by remember { mutableStateOf(initialTile?.type == TileType.COLLECTION) }
 
@@ -580,7 +581,13 @@ fun CreateTileScreen(
                         subtitle = "Shizuku & root script",
                         icon = Icons.Default.Terminal,
                         isSelected = selectedType == TileType.SHELL,
-                        onClick = { showShellDialog = true }
+                        onClick = {
+                            if (multiShellSteps.isNotEmpty()) {
+                                showMultipleShellDialog = true
+                            } else {
+                                showShellDialog = true
+                            }
+                        }
                     )
                 }
 
@@ -852,6 +859,31 @@ fun CreateTileScreen(
         )
     }
 
+    if (showMultipleShellDialog) {
+        MultipleShellDialog(
+            initialSteps = multiShellSteps,
+            initialShowPopups = showPopups,
+            onDismiss = { showMultipleShellDialog = false },
+            onBackToSingleShell = {
+                showMultipleShellDialog = false
+                showShellDialog = true
+            },
+            onConfirm = { steps, popups ->
+                showMultipleShellDialog = false
+                selectedType = TileType.SHELL
+                multiShellSteps = steps
+                showPopups = popups
+                val first = steps.firstOrNull()
+                if (first != null) {
+                    if (tileName.isBlank() || tileName == "Shell") tileName = first.name
+                    targetData = first.command
+                    visualState = first.visualState
+                    iconConfig = first.iconConfig
+                }
+            }
+        )
+    }
+
     if (showCollectionCreator) {
         CollectionCreatorScreen(
             onBack = { showCollectionCreator = false },
@@ -994,6 +1026,7 @@ fun EditTileSheet(
     var itemShowPopups by remember(item.id) { mutableStateOf(item.showPopups) }
     var itemMultiShellSteps by remember(item.id) { mutableStateOf(item.multiShellSteps) }
     var showShellDialog by remember { mutableStateOf(false) }
+    var showMultipleShellDialog by remember { mutableStateOf(false) }
     var showPresetsDialog by remember { mutableStateOf(false) }
 
 
@@ -1252,7 +1285,13 @@ fun EditTileSheet(
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         FilledTonalButton(
-                            onClick = { showShellDialog = true },
+                            onClick = {
+                                if (itemMultiShellSteps.isNotEmpty()) {
+                                    showMultipleShellDialog = true
+                                } else {
+                                    showShellDialog = true
+                                }
+                            },
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Icon(Icons.Default.Terminal, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -1325,6 +1364,31 @@ fun EditTileSheet(
         )
     }
 
+    if (showMultipleShellDialog) {
+        MultipleShellDialog(
+            initialSteps = itemMultiShellSteps,
+            initialShowPopups = itemShowPopups,
+            onDismiss = { showMultipleShellDialog = false },
+            onBackToSingleShell = {
+                showMultipleShellDialog = false
+                showShellDialog = true
+            },
+            onConfirm = { steps, popups ->
+                showMultipleShellDialog = false
+                val first = steps.firstOrNull()
+                if (first != null) {
+                    itemName = first.name.ifBlank { itemName }
+                    itemTargetData = first.command
+                    itemOnCommand = first.command
+                    itemVisualState = first.visualState
+                    itemIconConfig = first.iconConfig
+                }
+                itemShowPopups = popups
+                itemMultiShellSteps = steps
+            }
+        )
+    }
+
     if (showPresetsDialog) {
         IconPresetsDialog(
             currentKey = itemIconConfig.sourceData,
@@ -1390,6 +1454,7 @@ fun CollectionCreatorScreen(
     }
 
     var selectedItemForEdit by remember { mutableStateOf<TileItem?>(null) }
+    var selectedMultiShellItemForEdit by remember { mutableStateOf<TileItem?>(null) }
 
     // Dialog states
     var showAppPicker by remember { mutableStateOf(false) }
@@ -1841,7 +1906,13 @@ fun CollectionCreatorScreen(
                                     modifier = Modifier
                                         .width(84.dp)
                                         .clip(RoundedCornerShape(14.dp))
-                                        .clickable { selectedItemForEdit = item },
+                                        .clickable {
+                                            if (item.type == TileType.SHELL && item.multiShellSteps.isNotEmpty()) {
+                                                selectedMultiShellItemForEdit = item
+                                            } else {
+                                                selectedItemForEdit = item
+                                            }
+                                        },
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                                 ) {
@@ -2028,6 +2099,37 @@ fun CollectionCreatorScreen(
             onDelete = { deleted ->
                 collectionItems.removeAll { it.id == deleted.id }
                 selectedItemForEdit = null
+            }
+        )
+    }
+
+    if (selectedMultiShellItemForEdit != null) {
+        val editingItem = selectedMultiShellItemForEdit!!
+        MultipleShellDialog(
+            initialSteps = editingItem.multiShellSteps,
+            initialShowPopups = editingItem.showPopups,
+            onDismiss = { selectedMultiShellItemForEdit = null },
+            onBackToSingleShell = {
+                val target = editingItem.copy(multiShellSteps = emptyList())
+                selectedMultiShellItemForEdit = null
+                selectedItemForEdit = target
+            },
+            onConfirm = { steps, popups ->
+                val first = steps.firstOrNull()
+                val updated = editingItem.copy(
+                    name = first?.name?.ifBlank { editingItem.name } ?: editingItem.name,
+                    targetData = first?.command ?: editingItem.targetData,
+                    onCommand = first?.command ?: editingItem.onCommand,
+                    visualState = first?.visualState ?: editingItem.visualState,
+                    iconConfig = first?.iconConfig ?: editingItem.iconConfig,
+                    showPopups = popups,
+                    multiShellSteps = steps
+                )
+                val idx = collectionItems.indexOfFirst { it.id == updated.id }
+                if (idx >= 0) {
+                    collectionItems[idx] = updated
+                }
+                selectedMultiShellItemForEdit = null
             }
         )
     }

@@ -8,9 +8,14 @@ import com.wizzwuz.quicktiles.util.LogManager
 import com.wizzwuz.quicktiles.util.ShizukuHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 class QuickTilesApp : Application() {
+    companion object {
+        val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    }
+
     override fun onCreate() {
         super.onCreate()
         // Initialize theme preference eagerly

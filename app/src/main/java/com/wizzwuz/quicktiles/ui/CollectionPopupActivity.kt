@@ -46,9 +46,11 @@ import com.wizzwuz.quicktiles.model.TileType
 import com.wizzwuz.quicktiles.model.TileVisualState
 import com.wizzwuz.quicktiles.ui.theme.QuickTilesTheme
 import com.wizzwuz.quicktiles.ui.theme.ThemeManager
+import com.wizzwuz.quicktiles.QuickTilesApp
 import com.wizzwuz.quicktiles.util.AppHelper
 import com.wizzwuz.quicktiles.util.IconProcessor
 import com.wizzwuz.quicktiles.util.LogManager
+import com.wizzwuz.quicktiles.util.PopupToastHelper
 import com.wizzwuz.quicktiles.util.ShizukuHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -179,26 +181,38 @@ fun CollectionPopupScreen(
                                             context = context,
                                             isDark = isDark,
                                             onClick = {
+                                                val shouldCollapse = if (item.type == TileType.SHELL && item.multiShellSteps.isNotEmpty()) {
+                                                    val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
+                                                    item.multiShellSteps[stepIndex].collapsePanel
+                                                } else {
+                                                    item.collapseCollectionOnClick
+                                                }
+
                                                 executeCollectionItem(context, repo, item)
                                                 val isLaunchable = when (item.type) {
                                                     TileType.APPS, TileType.WEBSITE, TileType.SHORTCUT,
                                                     TileType.ACTIVITY, TileType.INTENT, TileType.FILES, TileType.FOLDERS -> true
                                                     TileType.SHELL -> {
-                                                        val cmd = when (item.visualState) {
-                                                            TileVisualState.TOGGLE -> if (item.currentToggleOn) {
-                                                                if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
-                                                            } else {
-                                                                if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                                                        val cmd = if (item.multiShellSteps.isNotEmpty()) {
+                                                            val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
+                                                            item.multiShellSteps[stepIndex].command
+                                                        } else {
+                                                            when (item.visualState) {
+                                                                TileVisualState.TOGGLE -> if (item.currentToggleOn) {
+                                                                    if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                                                                } else {
+                                                                    if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                                                                }
+                                                                TileVisualState.ENABLED -> if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                                                                TileVisualState.DISABLED -> if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
                                                             }
-                                                            TileVisualState.ENABLED -> if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
-                                                            TileVisualState.DISABLED -> if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
                                                         }
                                                         isShellCommandLaunchable(cmd)
                                                     }
                                                     TileType.COLLECTION -> false
                                                 }
 
-                                                if (item.collapseCollectionOnClick) {
+                                                if (shouldCollapse) {
                                                     dismissAnimated()
                                                 } else if (isLaunchable) {
                                                     collectionScope.launch {
@@ -412,7 +426,7 @@ private fun executeCollectionItem(context: android.content.Context, repo: TileRe
                 context.startActivity(intent)
             }
             TileType.SHELL -> {
-                collectionScope.launch {
+                QuickTilesApp.applicationScope.launch(Dispatchers.Main) {
                     val cmdToRun: String
 
                     if (item.multiShellSteps.isNotEmpty()) {
@@ -443,12 +457,14 @@ private fun executeCollectionItem(context: android.content.Context, repo: TileRe
                         }
                     }
 
-                    val result = ShizukuHelper.executeCommand(cmdToRun)
+                    val result = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                        ShizukuHelper.executeCommand(cmdToRun)
+                    }
 
                     if (item.showPopups && result.output.isNotBlank()) {
                         val lines = result.output.lines().map { it.trim() }.filter { it.isNotEmpty() }
                         for (line in lines) {
-                            Toast.makeText(context, line, Toast.LENGTH_SHORT).show()
+                            PopupToastHelper.showToast(context.applicationContext, line)
                             if (lines.size > 1) {
                                 delay(1200)
                             }

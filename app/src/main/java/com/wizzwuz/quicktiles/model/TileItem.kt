@@ -71,7 +71,8 @@ data class ShellStep(
     val command: String = "",
     val visualState: TileVisualState = TileVisualState.ENABLED,
     val iconConfig: IconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = "terminal"),
-    val executionMode: String = "AUTO"
+    val executionMode: String = "AUTO",
+    val collapsePanel: Boolean = true
 ) {
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -80,6 +81,7 @@ data class ShellStep(
             put("visualState", visualState.name)
             put("iconConfig", iconConfig.toJson())
             put("executionMode", executionMode)
+            put("collapsePanel", collapsePanel)
         }
     }
 
@@ -90,7 +92,8 @@ data class ShellStep(
                 command = json.optString("command", ""),
                 visualState = try { TileVisualState.valueOf(json.optString("visualState", "ENABLED")) } catch (e: Exception) { TileVisualState.ENABLED },
                 iconConfig = if (json.has("iconConfig")) IconConfig.fromJson(json.getJSONObject("iconConfig")) else IconConfig(sourceType = IconSourceType.PRESET, sourceData = "terminal"),
-                executionMode = json.optString("executionMode", "AUTO")
+                executionMode = json.optString("executionMode", "AUTO"),
+                collapsePanel = json.optBoolean("collapsePanel", true)
             )
         }
     }
