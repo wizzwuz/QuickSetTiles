@@ -15,6 +15,7 @@ import com.wizzwuz.quicktiles.R
 import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.model.TileItem
 import com.wizzwuz.quicktiles.model.TileType
+import com.wizzwuz.quicktiles.ui.MainActivity
 import com.wizzwuz.quicktiles.util.AppHelper
 import com.wizzwuz.quicktiles.util.IconProcessor
 import com.wizzwuz.quicktiles.util.PopupToastHelper
