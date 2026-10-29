@@ -66,6 +66,36 @@ enum class TileVisualState(val label: String) {
     TOGGLE("Toggle (Both)")
 }
 
+data class ShellStep(
+    val name: String = "",
+    val command: String = "",
+    val visualState: TileVisualState = TileVisualState.ENABLED,
+    val iconConfig: IconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = "terminal"),
+    val executionMode: String = "AUTO"
+) {
+    fun toJson(): JSONObject {
+        return JSONObject().apply {
+            put("name", name)
+            put("command", command)
+            put("visualState", visualState.name)
+            put("iconConfig", iconConfig.toJson())
+            put("executionMode", executionMode)
+        }
+    }
+
+    companion object {
+        fun fromJson(json: JSONObject): ShellStep {
+            return ShellStep(
+                name = json.optString("name", ""),
+                command = json.optString("command", ""),
+                visualState = try { TileVisualState.valueOf(json.optString("visualState", "ENABLED")) } catch (e: Exception) { TileVisualState.ENABLED },
+                iconConfig = if (json.has("iconConfig")) IconConfig.fromJson(json.getJSONObject("iconConfig")) else IconConfig(sourceType = IconSourceType.PRESET, sourceData = "terminal"),
+                executionMode = json.optString("executionMode", "AUTO")
+            )
+        }
+    }
+}
+
 data class TileItem(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
@@ -87,7 +117,10 @@ data class TileItem(
     val offIconConfig: IconConfig? = null,
     val collectionItemIds: List<String> = emptyList(),
     val collapseCollectionOnClick: Boolean = false,
-    val tilesPerRow: Int = 3
+    val tilesPerRow: Int = 3,
+    val showPopups: Boolean = false,
+    val multiShellSteps: List<ShellStep> = emptyList(),
+    val currentMultiShellIndex: Int = 0
 ) {
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -114,6 +147,11 @@ data class TileItem(
             put("collectionItemIds", collectionArray)
             put("collapseCollectionOnClick", collapseCollectionOnClick)
             put("tilesPerRow", tilesPerRow)
+            put("showPopups", showPopups)
+            val stepsArray = org.json.JSONArray()
+            multiShellSteps.forEach { stepsArray.put(it.toJson()) }
+            put("multiShellSteps", stepsArray)
+            put("currentMultiShellIndex", currentMultiShellIndex)
         }
     }
 
@@ -124,6 +162,13 @@ data class TileItem(
                 val arr = json.getJSONArray("collectionItemIds")
                 for (i in 0 until arr.length()) {
                     collectionList.add(arr.optString(i))
+                }
+            }
+            val stepsList = mutableListOf<ShellStep>()
+            if (json.has("multiShellSteps")) {
+                val sArr = json.getJSONArray("multiShellSteps")
+                for (i in 0 until sArr.length()) {
+                    stepsList.add(ShellStep.fromJson(sArr.getJSONObject(i)))
                 }
             }
             return TileItem(
@@ -147,7 +192,10 @@ data class TileItem(
                 offIconConfig = if (json.has("offIconConfig")) IconConfig.fromJson(json.getJSONObject("offIconConfig")) else null,
                 collectionItemIds = collectionList,
                 collapseCollectionOnClick = json.optBoolean("collapseCollectionOnClick", false),
-                tilesPerRow = json.optInt("tilesPerRow", 3)
+                tilesPerRow = json.optInt("tilesPerRow", 3),
+                showPopups = json.optBoolean("showPopups", false),
+                multiShellSteps = stepsList,
+                currentMultiShellIndex = json.optInt("currentMultiShellIndex", 0)
             )
         }
     }

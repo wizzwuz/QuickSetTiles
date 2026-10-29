@@ -42,6 +42,7 @@ fun TilesListScreen(
     isActiveTab: Boolean,
     showCategories: Boolean = true,
     selectedTileIds: Set<String> = emptySet(),
+    listState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
     onTileClick: (TileItem) -> Unit,
     onTileLongClick: (TileItem) -> Unit = {},
     onTileSelectToggle: (TileItem) -> Unit = {},
@@ -182,6 +183,7 @@ fun TilesListScreen(
             }
         } else {
             LazyColumn(
+                state = listState,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(bottom = 100.dp),
                 modifier = Modifier.fillMaxSize()

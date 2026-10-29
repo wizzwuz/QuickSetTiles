@@ -14,6 +14,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.model.IconConfig
 import com.wizzwuz.quicktiles.model.IconSourceType
@@ -42,11 +44,14 @@ fun MainScreen() {
     val sortOrder by repository.sortOrderFlow.collectAsState()
     val showCategories by repository.showCategoriesFlow.collectAsState()
 
-    var currentDestination by remember { mutableStateOf(MainDestination.LIST) }
-    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Active Tiles, 1 = Inactive Tiles
+    var currentDestination by rememberSaveable { mutableStateOf(MainDestination.LIST) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0 = Active Tiles, 1 = Inactive Tiles
     var editingTile by remember { mutableStateOf<TileItem?>(null) }
     var selectedTileIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
+
+    val activeListState = rememberLazyListState()
+    val inactiveListState = rememberLazyListState()
 
     val collectionMemberIds = remember(allTiles) {
         allTiles.filter { it.type == TileType.COLLECTION }.flatMap { it.collectionItemIds }.toSet()
@@ -319,6 +324,7 @@ fun MainScreen() {
                             TilesListScreen(
                                 tiles = activeTiles,
                                 isActiveTab = true,
+                                listState = activeListState,
                                 showCategories = showCategories,
                                 selectedTileIds = selectedTileIds,
                                 onTileClick = { tile ->
@@ -358,6 +364,7 @@ fun MainScreen() {
                             TilesListScreen(
                                 tiles = inactiveTiles,
                                 isActiveTab = false,
+                                listState = inactiveListState,
                                 showCategories = showCategories,
                                 selectedTileIds = selectedTileIds,
                                 onTileClick = { tile ->

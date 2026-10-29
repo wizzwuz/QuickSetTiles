@@ -28,6 +28,13 @@ class InternalPluginActivity : Activity() {
         const val EXTRA_INTENT_ALT = "extra_intent"
     }
 
+    private fun cleanFinish() {
+        if (!isFinishing && !isDestroyed) {
+            finishAndRemoveTask()
+            overridePendingTransition(0, 0)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -35,7 +42,7 @@ class InternalPluginActivity : Activity() {
         if (action == ACTION_LAUNCH_ACTIVITY) {
             handleLaunchIntent()
         } else {
-            finish()
+            cleanFinish()
         }
     }
 
@@ -45,7 +52,7 @@ class InternalPluginActivity : Activity() {
 
         if (intentUri.isNullOrBlank()) {
             Toast.makeText(this, "QuickSetTiles: No target intent specified", Toast.LENGTH_SHORT).show()
-            finish()
+            cleanFinish()
             return
         }
 
@@ -71,7 +78,7 @@ class InternalPluginActivity : Activity() {
                             ShizukuHelper.requestShizukuPermission()
                         }
                     }
-                    finish()
+                    cleanFinish()
                 }
             } else {
                 // Try direct startActivity if no component
@@ -81,11 +88,11 @@ class InternalPluginActivity : Activity() {
                 } catch (e: Throwable) {
                     Toast.makeText(this, "QuickSetTiles Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
-                finish()
+                cleanFinish()
             }
         } catch (e: Throwable) {
             Toast.makeText(this, "QuickSetTiles Parse Error: ${e.message}", Toast.LENGTH_SHORT).show()
-            finish()
+            cleanFinish()
         }
     }
 

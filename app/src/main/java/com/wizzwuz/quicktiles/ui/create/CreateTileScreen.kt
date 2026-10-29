@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.wizzwuz.quicktiles.model.IconConfig
 import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.model.IconSourceType
+import com.wizzwuz.quicktiles.model.ShellStep
 import com.wizzwuz.quicktiles.model.TileItem
 import com.wizzwuz.quicktiles.model.TileType
 import com.wizzwuz.quicktiles.model.TileVisualState
@@ -89,6 +90,9 @@ fun CreateTileScreen(
     var offTileName by remember { mutableStateOf(initialTile?.offTileName ?: "") }
     var onIconConfig by remember { mutableStateOf(initialTile?.onIconConfig) }
     var offIconConfig by remember { mutableStateOf(initialTile?.offIconConfig) }
+    var showPopups by remember { mutableStateOf(initialTile?.showPopups ?: false) }
+    var multiShellSteps by remember { mutableStateOf(initialTile?.multiShellSteps ?: emptyList()) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     // Icon state
     var iconConfig by remember { mutableStateOf(initialTile?.iconConfig ?: IconConfig()) }
@@ -202,7 +206,9 @@ fun CreateTileScreen(
                     onTileName = finalName,
                     offTileName = finalName,
                     onIconConfig = onIconConfig,
-                    offIconConfig = offIconConfig
+                    offIconConfig = offIconConfig,
+                    showPopups = showPopups,
+                    multiShellSteps = multiShellSteps
                 )).copy(
                     name = finalName,
                     type = selectedType!!,
@@ -213,6 +219,8 @@ fun CreateTileScreen(
                     offCommand = offCommand.trim(),
                     currentToggleOn = currentToggleOn,
                     collapseOnTap = collapseOnTap,
+                    showPopups = showPopups,
+                    multiShellSteps = multiShellSteps,
                     onTileName = when (visualState) {
                         TileVisualState.TOGGLE -> if (onTileName.isNotBlank() && onTileName != initialTile?.name) onTileName.trim() else finalName
                         else -> finalName
@@ -235,6 +243,32 @@ fun CreateTileScreen(
                 onSaveTile(tile)
             }
         }
+    }
+
+    if (showDeleteConfirmation && initialTile != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete Tile") },
+            text = { Text("Are you sure you want to delete '${initialTile.name}'?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val repo = TileRepository.getInstance(context)
+                        repo.deleteTile(initialTile.id)
+                        showDeleteConfirmation = false
+                        onBack()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showCollectionCreator) {
@@ -266,6 +300,15 @@ fun CreateTileScreen(
                     }
                 },
                 actions = {
+                    if (initialTile != null) {
+                        IconButton(onClick = { showDeleteConfirmation = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Tile",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                     TextButton(onClick = saveTileAction) {
                         Text("Save", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
@@ -777,8 +820,10 @@ fun CreateTileScreen(
             initialOffTileName = offTileName,
             initialOnIconConfig = onIconConfig,
             initialOffIconConfig = offIconConfig,
+            initialShowPopups = showPopups,
+            initialMultiShellSteps = multiShellSteps,
             onDismiss = { showShellDialog = false },
-            onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon ->
+            onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon, popups, steps ->
                 showShellDialog = false
                 selectedType = TileType.SHELL
                 targetData = cmd
@@ -789,6 +834,8 @@ fun CreateTileScreen(
                 offTileName = offName
                 onIconConfig = onIcon
                 offIconConfig = offIcon
+                showPopups = popups
+                multiShellSteps = steps
                 if (tileName.isBlank()) tileName = name
                 when (vState) {
                     TileVisualState.DISABLED -> {
@@ -944,6 +991,8 @@ fun EditTileSheet(
     var itemOffTileName by remember(item.id) { mutableStateOf(item.offTileName) }
     var itemOnIconConfig by remember(item.id) { mutableStateOf(item.onIconConfig) }
     var itemOffIconConfig by remember(item.id) { mutableStateOf(item.offIconConfig) }
+    var itemShowPopups by remember(item.id) { mutableStateOf(item.showPopups) }
+    var itemMultiShellSteps by remember(item.id) { mutableStateOf(item.multiShellSteps) }
     var showShellDialog by remember { mutableStateOf(false) }
     var showPresetsDialog by remember { mutableStateOf(false) }
 
@@ -1229,7 +1278,9 @@ fun EditTileSheet(
                             offTileName = itemOffTileName,
                             onIconConfig = itemOnIconConfig,
                             offIconConfig = itemOffIconConfig,
-                            collapseCollectionOnClick = itemCollapseCollectionOnClick
+                            collapseCollectionOnClick = itemCollapseCollectionOnClick,
+                            showPopups = itemShowPopups,
+                            multiShellSteps = itemMultiShellSteps
                         )
                     )
                 },
@@ -1251,8 +1302,10 @@ fun EditTileSheet(
             initialOffTileName = itemOffTileName,
             initialOnIconConfig = itemOnIconConfig,
             initialOffIconConfig = itemOffIconConfig,
+            initialShowPopups = itemShowPopups,
+            initialMultiShellSteps = itemMultiShellSteps,
             onDismiss = { showShellDialog = false },
-            onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon ->
+            onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon, popups, steps ->
                 showShellDialog = false
                 itemName = name
                 itemTargetData = cmd
@@ -1263,6 +1316,8 @@ fun EditTileSheet(
                 itemOffTileName = offName
                 itemOnIconConfig = onIcon
                 itemOffIconConfig = offIcon
+                itemShowPopups = popups
+                itemMultiShellSteps = steps
                 if (onIcon != null) {
                     itemIconConfig = onIcon
                 }
@@ -1317,6 +1372,7 @@ fun CollectionCreatorScreen(
     var tilesPerRow by remember { mutableStateOf(initialTile?.tilesPerRow ?: 3) }
     var tilesPerRowInput by remember { mutableStateOf((initialTile?.tilesPerRow ?: 3).toString()) }
     var isCollectionCustomizeExpanded by remember { mutableStateOf(false) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
     var collectionIconConfig by remember {
         mutableStateOf(initialTile?.iconConfig ?: IconConfig(sourceType = IconSourceType.PRESET, sourceData = "collections"))
     }
@@ -1462,6 +1518,32 @@ fun CollectionCreatorScreen(
         }
     }
 
+    if (showDeleteConfirmation && initialTile != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete Collection") },
+            text = { Text("Are you sure you want to delete '${initialTile.name}' and all its tiles?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val repo = TileRepository.getInstance(context)
+                        repo.deleteTile(initialTile.id)
+                        showDeleteConfirmation = false
+                        onBack()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -1472,6 +1554,15 @@ fun CollectionCreatorScreen(
                     }
                 },
                 actions = {
+                    if (initialTile != null) {
+                        IconButton(onClick = { showDeleteConfirmation = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Collection",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                     TextButton(onClick = saveCollectionAction) {
                         Text("Save", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
@@ -2049,8 +2140,10 @@ fun CollectionCreatorScreen(
             initialOffTileName = "",
             initialOnIconConfig = null,
             initialOffIconConfig = null,
+            initialShowPopups = false,
+            initialMultiShellSteps = emptyList(),
             onDismiss = { showShellDialog = false },
-            onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon ->
+            onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon, popups, steps ->
                 showShellDialog = false
                 val item = TileItem(
                     id = UUID.randomUUID().toString(),
@@ -2067,7 +2160,9 @@ fun CollectionCreatorScreen(
                     offTileName = offName,
                     onIconConfig = onIcon,
                     offIconConfig = offIcon,
-                    collapseCollectionOnClick = collapseOnTap
+                    collapseCollectionOnClick = collapseOnTap,
+                    showPopups = popups,
+                    multiShellSteps = steps
                 )
                 collectionItems.add(item)
             }

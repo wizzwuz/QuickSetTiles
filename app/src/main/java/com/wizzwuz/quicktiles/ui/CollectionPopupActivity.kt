@@ -66,7 +66,7 @@ class CollectionPopupActivity : ComponentActivity() {
                 CollectionPopupScreen(
                     collectionId = intent?.extras?.getString("collectionId") ?: "",
                     onDismiss = {
-                        finish()
+                        finishAndRemoveTask()
                         overridePendingTransition(0, android.R.anim.fade_out)
                     }
                 )
@@ -237,22 +237,37 @@ private fun CollectionTileItemView(
     isDark: Boolean,
     onClick: () -> Unit
 ) {
-    val isTileEnabled = when (item.visualState) {
-        TileVisualState.ENABLED -> true
-        TileVisualState.DISABLED -> false
-        TileVisualState.TOGGLE -> item.currentToggleOn
+    val isTileEnabled = if (item.multiShellSteps.isNotEmpty()) {
+        val step = item.multiShellSteps[item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size]
+        step.visualState == TileVisualState.ENABLED
+    } else {
+        when (item.visualState) {
+            TileVisualState.ENABLED -> true
+            TileVisualState.DISABLED -> false
+            TileVisualState.TOGGLE -> item.currentToggleOn
+        }
     }
 
-    val displayName = when (item.visualState) {
-        TileVisualState.TOGGLE -> if (item.currentToggleOn) item.onTileName.ifBlank { item.name } else item.offTileName.ifBlank { item.name }
-        TileVisualState.ENABLED -> item.name
-        TileVisualState.DISABLED -> item.offTileName.ifBlank { item.name }
+    val displayName = if (item.multiShellSteps.isNotEmpty()) {
+        val step = item.multiShellSteps[item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size]
+        step.name.ifBlank { item.name }
+    } else {
+        when (item.visualState) {
+            TileVisualState.TOGGLE -> if (item.currentToggleOn) item.onTileName.ifBlank { item.name } else item.offTileName.ifBlank { item.name }
+            TileVisualState.ENABLED -> item.name
+            TileVisualState.DISABLED -> item.offTileName.ifBlank { item.name }
+        }
     }
 
-    val effectiveIcon = when (item.visualState) {
-        TileVisualState.TOGGLE -> if (item.currentToggleOn) (item.onIconConfig ?: item.iconConfig) else (item.offIconConfig ?: item.iconConfig)
-        TileVisualState.ENABLED -> item.iconConfig
-        TileVisualState.DISABLED -> item.offIconConfig ?: item.iconConfig
+    val effectiveIcon = if (item.multiShellSteps.isNotEmpty()) {
+        val step = item.multiShellSteps[item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size]
+        step.iconConfig
+    } else {
+        when (item.visualState) {
+            TileVisualState.TOGGLE -> if (item.currentToggleOn) (item.onIconConfig ?: item.iconConfig) else (item.offIconConfig ?: item.iconConfig)
+            TileVisualState.ENABLED -> item.iconConfig
+            TileVisualState.DISABLED -> item.offIconConfig ?: item.iconConfig
+        }
     }
 
     val previewBitmap = remember(item.id, effectiveIcon, isDark) {
@@ -399,26 +414,47 @@ private fun executeCollectionItem(context: android.content.Context, repo: TileRe
             TileType.SHELL -> {
                 collectionScope.launch {
                     val cmdToRun: String
-                    when (item.visualState) {
-                        TileVisualState.TOGGLE -> {
-                            val nextToggleState = !item.currentToggleOn
-                            cmdToRun = if (item.currentToggleOn) {
-                                if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
-                            } else {
-                                if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+
+                    if (item.multiShellSteps.isNotEmpty()) {
+                        val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
+                        val step = item.multiShellSteps[stepIndex]
+                        cmdToRun = step.command
+                        val nextIndex = (stepIndex + 1) % item.multiShellSteps.size
+                        val updatedItem = item.copy(currentMultiShellIndex = nextIndex)
+                        repo.saveTile(updatedItem)
+                    } else {
+                        when (item.visualState) {
+                            TileVisualState.TOGGLE -> {
+                                val nextToggleState = !item.currentToggleOn
+                                cmdToRun = if (item.currentToggleOn) {
+                                    if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                                } else {
+                                    if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                                }
+                                val updatedItem = item.copy(currentToggleOn = nextToggleState)
+                                repo.saveTile(updatedItem)
                             }
-                            val updatedItem = item.copy(currentToggleOn = nextToggleState)
-                            repo.saveTile(updatedItem)
-                        }
-                        TileVisualState.ENABLED -> {
-                            cmdToRun = if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
-                        }
-                        TileVisualState.DISABLED -> {
-                            cmdToRun = if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                            TileVisualState.ENABLED -> {
+                                cmdToRun = if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                            }
+                            TileVisualState.DISABLED -> {
+                                cmdToRun = if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                            }
                         }
                     }
 
                     val result = ShizukuHelper.executeCommand(cmdToRun)
+
+                    if (item.showPopups && result.output.isNotBlank()) {
+                        val lines = result.output.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                        for (line in lines) {
+                            Toast.makeText(context, line, Toast.LENGTH_SHORT).show()
+                            if (lines.size > 1) {
+                                delay(1200)
+                            }
+                        }
+                    }
+
                     if (result.exitCode != 0) {
                         LogManager.logError(
                             "CollectionShell",
