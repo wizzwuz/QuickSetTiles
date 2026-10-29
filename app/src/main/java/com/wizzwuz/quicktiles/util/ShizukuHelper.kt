@@ -278,11 +278,14 @@ object ShizukuHelper {
     ): CommandResult = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
 
+        // Normalize --windowingmode (case-insensitive) to canonical --windowingMode so Android am recognizes it
+        val normalizedCommand = command.replace(Regex("""--windowingmode\b""", RegexOption.IGNORE_CASE), "--windowingMode")
+
         // 1. Check for explicit private launch alias
-        val trimmed = command.trim()
+        val trimmed = normalizedCommand.trim()
         if (trimmed.startsWith("launch-private ") || trimmed.startsWith("am-private ")) {
             val targetComp = trimmed.substringAfter(" ").trim()
-            val wm = extractWindowingMode(command)
+            val wm = extractWindowingMode(normalizedCommand)
             if (isShizukuRunning() && hasShizukuPermission()) {
                 val bypassRes = tryAssistantMethodBypass(targetComp, wm)
                 val totalDuration = System.currentTimeMillis() - startTime
@@ -304,44 +307,44 @@ object ShizukuHelper {
         }
 
         val result: CommandResult = when (mode) {
-            ShellMode.SHIZUKU -> runShizukuProcess(command, timeoutMs)
-            ShellMode.ROOT -> runRootProcess(command, timeoutMs)
-            ShellMode.STANDARD -> runStandardProcess(command, timeoutMs)
+            ShellMode.SHIZUKU -> runShizukuProcess(normalizedCommand, timeoutMs)
+            ShellMode.ROOT -> runRootProcess(normalizedCommand, timeoutMs)
+            ShellMode.STANDARD -> runStandardProcess(normalizedCommand, timeoutMs)
             ShellMode.AUTO -> {
                 // Prefer Root if granted, then Shizuku, then standard
                 if (isRootBinaryPresent()) {
-                    val rootRes = runRootProcess(command, timeoutMs)
+                    val rootRes = runRootProcess(normalizedCommand, timeoutMs)
                     if (rootRes.exitCode == 0 && !isRootDenied(rootRes.output, rootRes.exitCode)) {
                         rootRes
                     } else if (isShizukuRunning() && hasShizukuPermission()) {
-                        val shizukuRes = runShizukuProcess(command, timeoutMs)
+                        val shizukuRes = runShizukuProcess(normalizedCommand, timeoutMs)
                         if (shizukuRes.exitCode == 0 || !isFatalShellError(shizukuRes.output)) {
                             shizukuRes
                         } else {
-                            runStandardProcess(command, timeoutMs)
+                            runStandardProcess(normalizedCommand, timeoutMs)
                         }
                     } else {
-                        runStandardProcess(command, timeoutMs)
+                        runStandardProcess(normalizedCommand, timeoutMs)
                     }
                 } else if (isShizukuRunning() && hasShizukuPermission()) {
-                    val shizukuRes = runShizukuProcess(command, timeoutMs)
+                    val shizukuRes = runShizukuProcess(normalizedCommand, timeoutMs)
                     if (shizukuRes.exitCode == 0 || !isFatalShellError(shizukuRes.output)) {
                         shizukuRes
                     } else {
-                        tryFallbackAfterShizuku(command, timeoutMs, shizukuRes)
+                        tryFallbackAfterShizuku(normalizedCommand, timeoutMs, shizukuRes)
                     }
                 } else {
-                    runStandardProcess(command, timeoutMs)
+                    runStandardProcess(normalizedCommand, timeoutMs)
                 }
             }
         }
 
         // 3. Automatic Private Activity Permission Denial detection & Assistant Method bypass
         val resolvedResult: CommandResult = if (result.exitCode != 0 && isPermissionDenialForPrivateActivity(result.output)) {
-            val comp = extractComponentFromCommand(command) ?: extractComponentFromOutput(result.output)
-            val wm = extractWindowingMode(command)
+            val comp = extractComponentFromCommand(normalizedCommand) ?: extractComponentFromOutput(result.output)
+            val wm = extractWindowingMode(normalizedCommand)
             if (isRootBinaryPresent()) {
-                val rootRes = runRootProcess(command, timeoutMs)
+                val rootRes = runRootProcess(normalizedCommand, timeoutMs)
                 if (rootRes.exitCode == 0 && !isRootDenied(rootRes.output, rootRes.exitCode)) {
                     rootRes
                 } else if (comp != null && isShizukuRunning() && hasShizukuPermission()) {
@@ -364,18 +367,13 @@ object ShizukuHelper {
             result
         }
 
-        val wm = extractWindowingMode(command)
+        val wm = extractWindowingMode(normalizedCommand)
         if (resolvedResult.exitCode == 0 && wm != null) {
-            val comp = extractComponentFromCommand(command)
+            val comp = extractComponentFromCommand(normalizedCommand)
             if (comp != null) {
                 val cleanComp = comp.trim('\'', '"').replace("\\$", "$")
                 val pkg = cleanComp.substringBefore("/")
-                val taskCmd = "for i in 1 2 3; do sleep 0.2; tid=\$(dumpsys activity activities | grep -B 2 -F '$cleanComp' | grep -oE 'Task\\{[a-f0-9]+ #[0-9]+' | head -n 1 | grep -oE '[0-9]+\$'); if [ -z \"\$tid\" ]; then tid=\$(dumpsys activity activities | grep -B 2 -F '$pkg' | grep -oE 'Task\\{[a-f0-9]+ #[0-9]+' | head -n 1 | grep -oE '[0-9]+\$'); fi; if [ -n \"\$tid\" ]; then am task set-windowing-mode \"\$tid\" $wm 2>/dev/null || cmd activity task set-windowing-mode \"\$tid\" $wm 2>/dev/null; break; fi; done"
-                if (isShizukuRunning() && hasShizukuPermission()) {
-                    runShizukuProcess(taskCmd, 2500L)
-                } else if (isRootBinaryPresent()) {
-                    runRootProcess(taskCmd, 2500L)
-                }
+                applyWindowingModeForPackage(pkg, cleanComp, wm)
             }
         }
 
@@ -707,8 +705,12 @@ object ShizukuHelper {
 
     private fun isPermissionDenialForPrivateActivity(output: String): Boolean {
         val lower = output.lowercase()
-        return (lower.contains("securityexception") || lower.contains("permission denial")) &&
-                (lower.contains("not exported") || lower.contains("uid 2000") || lower.contains("exported=false"))
+        return lower.contains("securityexception") ||
+                lower.contains("permission denial") ||
+                lower.contains("not exported") ||
+                lower.contains("exported=false") ||
+                lower.contains("requires permission") ||
+                (lower.contains("error: activity not started") && !lower.contains("does not exist"))
     }
 
     private fun extractComponentFromCommand(command: String): String? {
@@ -724,16 +726,65 @@ object ShizukuHelper {
     }
 
     private fun extractWindowingMode(command: String): String? {
-        val match = Regex("""--windowingMode\s+(\d+)""").find(command)
+        val match = Regex("""--windowingmode[\s=]+(\d+)""", RegexOption.IGNORE_CASE).find(command)
         return match?.groupValues?.get(1)
     }
 
+    private suspend fun findTaskIdForPackage(pkg: String, cleanComp: String): String? {
+        // 1. Dumpsys activity top (shows current top activity/task on screen)
+        val topRes = runShizukuProcess("dumpsys activity top", 2000L)
+        if (topRes.exitCode == 0 && topRes.output.isNotBlank()) {
+            val lines = topRes.output.lines()
+            for (line in lines.take(35)) {
+                if (line.contains("TASK", ignoreCase = true) || line.contains("Task{") || line.contains("Hist #")) {
+                    val match = Regex("""#(\d+)""").find(line)
+                    if (match != null) {
+                        return match.groupValues[1]
+                    }
+                }
+            }
+        }
+
+        // 2. Dumpsys activity activities looking for the component or package
+        val escapedComp = cleanComp.replace("$", "\\$")
+        val actRes = runShizukuProcess("dumpsys activity activities | grep -E 'Task.*($pkg|$escapedComp)' | head -n 3", 2000L)
+        if (actRes.exitCode == 0 && actRes.output.isNotBlank()) {
+            val match = Regex("""#(\d+)""").find(actRes.output)
+            if (match != null) {
+                return match.groupValues[1]
+            }
+        }
+
+        // 3. cmd activity task list
+        val listRes = runShizukuProcess("cmd activity task list 2>/dev/null | grep -F '$pkg' | head -n 1", 2000L)
+        if (listRes.exitCode == 0 && listRes.output.isNotBlank()) {
+            val match = Regex("""#(\d+)""").find(listRes.output) ?: Regex("""taskId=(\d+)""").find(listRes.output)
+            if (match != null) {
+                return match.groupValues.drop(1).firstOrNull { it.isNotBlank() }
+            }
+        }
+
+        return null
+    }
+
+    private suspend fun applyWindowingModeForPackage(pkg: String, cleanComp: String, windowingMode: String) {
+        for (attempt in 1..4) {
+            delay(250)
+            val tid = findTaskIdForPackage(pkg, cleanComp)
+            if (tid != null) {
+                runShizukuProcess("am task set-windowing-mode $tid $windowingMode 2>/dev/null", 2000L)
+                runShizukuProcess("cmd activity task set-windowing-mode $tid $windowingMode 2>/dev/null", 2000L)
+                break
+            }
+        }
+    }
 
     suspend fun tryAssistantMethodBypass(
         componentStr: String,
         windowingMode: String? = null
     ): CommandResult {
         val cleanComp = componentStr.trim('\'', '"').replace("\\$", "$")
+        val escapedComp = cleanComp.replace("$", "\\$")
         val origRes = runShizukuProcess("settings get secure assistant", 4000L)
         val originalAssistant = origRes.output.trim()
 
@@ -746,7 +797,7 @@ object ShizukuHelper {
                 runShizukuProcess("settings put secure voice_interaction_service \"\"", 4000L)
             }
 
-            val setRes = runShizukuProcess("settings put secure assistant '$cleanComp'", 4000L)
+            val setRes = runShizukuProcess("settings put secure assistant $escapedComp", 4000L)
             if (setRes.exitCode != 0) {
                 CommandResult(
                     setRes.exitCode,
@@ -757,46 +808,26 @@ object ShizukuHelper {
                 val wmFlag = if (windowingMode != null) " --windowingMode $windowingMode" else ""
                 val miuiFlags = if (windowingMode == "5") " --ez miui.intent.extra.FLOATING_WINDOW true --ez miui.intent.extra.IS_FLOATING_WINDOW true" else ""
 
-                // 1. Direct explicit am start with windowing mode & MIUI floating window extras (without ASSIST action so floating window is preserved)
-                var startRes = runShizukuProcess("am start$wmFlag$miuiFlags -n '$cleanComp'", 4000L)
+                // 1. Direct explicit am start with ASSIST intent and windowing flags
+                runShizukuProcess("am start -a android.intent.action.ASSIST -n $escapedComp$wmFlag$miuiFlags", 4000L)
 
-                // 2. If direct launch failed, try with MAIN/LAUNCHER action
-                if (startRes.exitCode != 0 || startRes.output.contains("Error:") || startRes.output.contains("SecurityException")) {
-                    startRes = runShizukuProcess("am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER$wmFlag$miuiFlags -n '$cleanComp'", 4000L)
-                }
+                // 2. Direct cmd activity start as fallback
+                runShizukuProcess("cmd activity start -a android.intent.action.ASSIST -n $escapedComp$wmFlag$miuiFlags 2>/dev/null", 4000L)
 
-                // 3. Fallback to ASSIST action ONLY if direct launch failed
-                if (startRes.exitCode != 0 || startRes.output.contains("Error:") || startRes.output.contains("SecurityException")) {
-                    startRes = runShizukuProcess("am start -a android.intent.action.ASSIST$wmFlag$miuiFlags -n '$cleanComp'", 4000L)
-                    if (startRes.exitCode != 0) {
-                        startRes = runShizukuProcess("cmd activity start -a android.intent.action.ASSIST$wmFlag$miuiFlags -n '$cleanComp'", 4000L)
-                    }
-                }
+                // 3. Assist hardware key event (system UID triggers assistant launch)
+                runShizukuProcess("input keyevent 219", 4000L)
 
                 // 4. If windowing mode is requested (e.g. 5 for freeform / floating window), set task windowing mode using integer task ID
                 if (windowingMode != null) {
                     val pkg = cleanComp.substringBefore("/")
-                    val taskScript = """
-                        for i in 1 2 3; do
-                            sleep 0.2
-                            tid=${'$'}(dumpsys activity activities | grep -B 2 -F '$cleanComp' | grep -oE "Task\{[a-f0-9]+ #[0-9]+" | head -n 1 | grep -oE "[0-9]+${'$'}")
-                            if [ -z "${'$'}tid" ]; then
-                                tid=${'$'}(dumpsys activity activities | grep -B 2 -F '$pkg' | grep -oE "Task\{[a-f0-9]+ #[0-9]+" | head -n 1 | grep -oE "[0-9]+${'$'}")
-                            fi
-                            if [ -n "${'$'}tid" ]; then
-                                am task set-windowing-mode "${'$'}tid" $windowingMode 2>/dev/null || cmd activity task set-windowing-mode "${'$'}tid" $windowingMode 2>/dev/null
-                                break
-                            fi
-                        done
-                    """.trimIndent()
-                    runShizukuProcess(taskScript, 3000L)
+                    applyWindowingModeForPackage(pkg, cleanComp, windowingMode)
+                } else {
+                    delay(800)
                 }
-
-                delay(600)
 
                 CommandResult(
                     0,
-                    "Starting: Intent { cmp=$cleanComp }$wmFlag\n[Success] Private activity started as floating window via Assistant Method",
+                    "Starting: Intent { cmp=$cleanComp }$wmFlag\n[Success] Private activity started via Assistant Method",
                     "Shizuku (Assistant Bypass)"
                 )
             }
