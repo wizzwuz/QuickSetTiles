@@ -110,7 +110,7 @@ jobs:
         "
 
     - name: Build APK
-      run: ./gradlew ${{ matrix.task }} -x lint -x lintVitalRelease -x test --parallel --build-cache
+      run: ./gradlew ${{ matrix.task }} -x test --parallel --build-cache
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
