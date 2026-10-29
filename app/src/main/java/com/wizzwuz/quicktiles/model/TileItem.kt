@@ -86,7 +86,8 @@ data class TileItem(
     val onIconConfig: IconConfig? = null,
     val offIconConfig: IconConfig? = null,
     val collectionItemIds: List<String> = emptyList(),
-    val collapseCollectionOnClick: Boolean = false
+    val collapseCollectionOnClick: Boolean = false,
+    val tilesPerRow: Int = 3
 ) {
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -112,6 +113,7 @@ data class TileItem(
             collectionItemIds.forEach { collectionArray.put(it) }
             put("collectionItemIds", collectionArray)
             put("collapseCollectionOnClick", collapseCollectionOnClick)
+            put("tilesPerRow", tilesPerRow)
         }
     }
 
@@ -144,7 +146,8 @@ data class TileItem(
                 onIconConfig = if (json.has("onIconConfig")) IconConfig.fromJson(json.getJSONObject("onIconConfig")) else null,
                 offIconConfig = if (json.has("offIconConfig")) IconConfig.fromJson(json.getJSONObject("offIconConfig")) else null,
                 collectionItemIds = collectionList,
-                collapseCollectionOnClick = json.optBoolean("collapseCollectionOnClick", false)
+                collapseCollectionOnClick = json.optBoolean("collapseCollectionOnClick", false),
+                tilesPerRow = json.optInt("tilesPerRow", 3)
             )
         }
     }

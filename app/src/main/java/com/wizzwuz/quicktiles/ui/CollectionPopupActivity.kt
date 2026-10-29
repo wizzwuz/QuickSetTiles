@@ -9,38 +9,44 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextAlign
 import com.wizzwuz.quicktiles.data.TileRepository
+import com.wizzwuz.quicktiles.model.IconSourceType
 import com.wizzwuz.quicktiles.model.TileItem
 import com.wizzwuz.quicktiles.model.TileType
-import com.wizzwuz.quicktiles.util.IconProcessor
+import com.wizzwuz.quicktiles.model.TileVisualState
 import com.wizzwuz.quicktiles.util.AppHelper
-import com.wizzwuz.quicktiles.util.ShizukuHelper
+import com.wizzwuz.quicktiles.util.IconProcessor
 import com.wizzwuz.quicktiles.util.LogManager
+import com.wizzwuz.quicktiles.util.ShizukuHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -113,33 +119,35 @@ fun CollectionPopupScreen(
         ) {
             Card(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 28.dp)
+                    .wrapContentWidth()
+                    .padding(horizontal = 16.dp, vertical = 24.dp)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         enabled = false
                     ) {},
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // Collection Title
                     Text(
                         text = collection?.name ?: "Collection",
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center
                     )
 
                     HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                         thickness = 1.dp
                     )
 
@@ -148,8 +156,7 @@ fun CollectionPopupScreen(
                     if (collectionItems.isEmpty()) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp),
+                                .padding(vertical = 12.dp, horizontal = 20.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -158,42 +165,18 @@ fun CollectionPopupScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    } else if (collectionItems.size <= 3) {
-                        // Horizontally arranged, not scrollable
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            collectionItems.forEach { item ->
-                                CollectionTileItemView(
-                                    item = item,
-                                    context = context,
-                                    isDark = isDark,
-                                    onClick = {
-                                        executeCollectionItem(context, item)
-                                        if (item.collapseCollectionOnClick) {
-                                            dismissAnimated()
-                                        }
-                                    }
-                                )
-                            }
-                        }
                     } else {
-                        // Exceeds 3 items: Grid layout (non-scrollable)
-                        val columns = if (collectionItems.size == 4) 2 else 3
+                        val perRow = (collection?.tilesPerRow ?: 3).coerceIn(2, 5)
+                        val chunkedRows = collectionItems.chunked(perRow)
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                            modifier = Modifier.wrapContentWidth(),
+                            verticalArrangement = Arrangement.spacedBy(5.4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            collectionItems.chunked(columns).forEach { rowItems ->
+                            chunkedRows.forEach { rowItems ->
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                    modifier = Modifier.wrapContentWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(5.4.dp, Alignment.CenterHorizontally),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     rowItems.forEach { item ->
@@ -202,7 +185,7 @@ fun CollectionPopupScreen(
                                             context = context,
                                             isDark = isDark,
                                             onClick = {
-                                                executeCollectionItem(context, item)
+                                                executeCollectionItem(context, repo, item)
                                                 if (item.collapseCollectionOnClick) {
                                                     dismissAnimated()
                                                 }
@@ -226,52 +209,121 @@ private fun CollectionTileItemView(
     isDark: Boolean,
     onClick: () -> Unit
 ) {
-    val previewBitmap = remember(item.id, item.iconConfig, isDark) {
-        if (item.iconConfig.outlineThickness > 0.5f) {
-            IconProcessor.processIconBitmap(context, item.iconConfig, targetPixelSize = 128, isDarkTheme = isDark)
+    val isTileEnabled = when (item.visualState) {
+        TileVisualState.ENABLED -> true
+        TileVisualState.DISABLED -> false
+        TileVisualState.TOGGLE -> item.currentToggleOn
+    }
+
+    val displayName = when (item.visualState) {
+        TileVisualState.TOGGLE -> if (item.currentToggleOn) item.onTileName.ifBlank { item.name } else item.offTileName.ifBlank { item.name }
+        TileVisualState.ENABLED -> item.name
+        TileVisualState.DISABLED -> item.offTileName.ifBlank { item.name }
+    }
+
+    val effectiveIcon = when (item.visualState) {
+        TileVisualState.TOGGLE -> if (item.currentToggleOn) (item.onIconConfig ?: item.iconConfig) else (item.offIconConfig ?: item.iconConfig)
+        TileVisualState.ENABLED -> item.iconConfig
+        TileVisualState.DISABLED -> item.offIconConfig ?: item.iconConfig
+    }
+
+    val previewBitmap = remember(item.id, effectiveIcon, isDark) {
+        if (effectiveIcon.sourceType == IconSourceType.APP_ICON) {
+            IconProcessor.loadRawBitmap(context, effectiveIcon, targetPixelSize = 128, isDarkTheme = isDark)
+        } else if (effectiveIcon.outlineThickness > 0.5f) {
+            IconProcessor.processIconBitmap(context, effectiveIcon, targetPixelSize = 128, isDarkTheme = isDark)
         } else {
-            IconProcessor.loadRawBitmap(context, item.iconConfig, isDarkTheme = isDark)
+            IconProcessor.loadRawBitmap(context, effectiveIcon, targetPixelSize = 128, isDarkTheme = isDark)
         }
     }
+
+    val animDuration = 220
+    val targetContainerColor = if (isTileEnabled) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    }
+    val animatedContainerColor by animateColorAsState(
+        targetValue = targetContainerColor,
+        animationSpec = tween(durationMillis = animDuration),
+        label = "containerColor"
+    )
+
+    val targetBorderColor = if (isTileEnabled) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    }
+    val animatedBorderColor by animateColorAsState(
+        targetValue = targetBorderColor,
+        animationSpec = tween(durationMillis = animDuration),
+        label = "borderColor"
+    )
+
+    val targetIconAlpha = if (isTileEnabled) 1.0f else 0.42f
+    val animatedIconAlpha by animateFloatAsState(
+        targetValue = targetIconAlpha,
+        animationSpec = tween(durationMillis = animDuration),
+        label = "iconAlpha"
+    )
+
+    val targetTextColor = if (isTileEnabled) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+    }
+    val animatedTextColor by animateColorAsState(
+        targetValue = targetTextColor,
+        animationSpec = tween(durationMillis = animDuration),
+        label = "textColor"
+    )
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
             .clickable { onClick() }
-            .padding(horizontal = 6.dp, vertical = 6.dp)
-            .widthIn(min = 68.dp, max = 88.dp)
+            .padding(vertical = 4.dp, horizontal = 2.dp)
+            .width(62.dp)
     ) {
         Box(
             modifier = Modifier
                 .size(54.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
+                .background(animatedContainerColor)
+                .border(1.5.dp, animatedBorderColor, RoundedCornerShape(16.dp)),
             contentAlignment = Alignment.Center
         ) {
             Image(
                 bitmap = previewBitmap.asImageBitmap(),
-                contentDescription = item.name,
-                modifier = Modifier.size(36.dp)
+                contentDescription = displayName,
+                modifier = Modifier
+                    .size(36.dp)
+                    .graphicsLayer(alpha = animatedIconAlpha)
             )
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = item.name,
+            text = displayName,
             fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
+            fontWeight = if (isTileEnabled) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurface
+            color = animatedTextColor
         )
     }
 }
 
 private val collectionScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-private fun executeCollectionItem(context: android.content.Context, item: TileItem) {
+private fun executeCollectionItem(context: android.content.Context, repo: TileRepository, item: TileItem) {
     try {
+        if (item.visualState == TileVisualState.TOGGLE && item.type != TileType.SHELL) {
+            val updated = item.copy(currentToggleOn = !item.currentToggleOn)
+            repo.saveTile(updated)
+        }
+
         when (item.type) {
             TileType.APPS -> {
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(item.targetData)
@@ -312,9 +364,28 @@ private fun executeCollectionItem(context: android.content.Context, item: TileIt
                 context.startActivity(intent)
             }
             TileType.SHELL -> {
-                val cmd = if (item.currentToggleOn) item.onCommand.ifBlank { item.targetData } else item.offCommand.ifBlank { item.targetData }
                 collectionScope.launch {
-                    val result = ShizukuHelper.executeCommand(cmd)
+                    val cmdToRun: String
+                    when (item.visualState) {
+                        TileVisualState.TOGGLE -> {
+                            val nextToggleState = !item.currentToggleOn
+                            cmdToRun = if (item.currentToggleOn) {
+                                if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                            } else {
+                                if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                            }
+                            val updatedItem = item.copy(currentToggleOn = nextToggleState)
+                            repo.saveTile(updatedItem)
+                        }
+                        TileVisualState.ENABLED -> {
+                            cmdToRun = if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                        }
+                        TileVisualState.DISABLED -> {
+                            cmdToRun = if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                        }
+                    }
+
+                    val result = ShizukuHelper.executeCommand(cmdToRun)
                     if (result.exitCode != 0) {
                         LogManager.logError(
                             "CollectionShell",

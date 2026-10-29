@@ -935,7 +935,6 @@ fun EditTileSheet(
     var itemIconConfig by remember(item.id) { mutableStateOf(item.iconConfig) }
     var itemVisualState by remember(item.id) { mutableStateOf(item.visualState) }
     var itemCollapseCollectionOnClick by remember(item.id) { mutableStateOf(item.collapseCollectionOnClick) }
-    var isCustomizeExpanded by remember(item.id) { mutableStateOf(false) }
     var showPresetsDialog by remember { mutableStateOf(false) }
 
     val customImagePicker = rememberLauncherForActivityResult(
@@ -954,7 +953,13 @@ fun EditTileSheet(
 
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val previewBitmap = remember(itemIconConfig, isDark) {
-        IconProcessor.processIconBitmap(context, itemIconConfig, targetPixelSize = 120, isDarkTheme = isDark)
+        if (itemIconConfig.sourceType == IconSourceType.APP_ICON) {
+            IconProcessor.loadRawBitmap(context, itemIconConfig, targetPixelSize = 120, isDarkTheme = isDark)
+        } else if (itemIconConfig.outlineThickness > 0.5f) {
+            IconProcessor.processIconBitmap(context, itemIconConfig, targetPixelSize = 120, isDarkTheme = isDark)
+        } else {
+            IconProcessor.loadRawBitmap(context, itemIconConfig, targetPixelSize = 120, isDarkTheme = isDark)
+        }
     }
 
     ModalBottomSheet(
@@ -1054,100 +1059,6 @@ fun EditTileSheet(
                                     Spacer(modifier = Modifier.width(3.dp))
                                     Text("Presets", fontSize = 11.sp)
                                 }
-                            }
-
-                            OutlinedButton(
-                                onClick = { isCustomizeExpanded = !isCustomizeExpanded },
-                                modifier = Modifier.fillMaxWidth(),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(if (isCustomizeExpanded) "Hide Sliders" else "Customize Sliders", fontSize = 12.sp)
-                            }
-                        }
-                    }
-
-                    // Expandable Sliders for Customization: outline thickness, outline threshold, icon size
-                    AnimatedVisibility(visible = isCustomizeExpanded) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Text("Icon Customization Controls", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-
-                            // Outline Style Selector
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Outline Style", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    listOf(
-                                        "OUTLINE" to "Outline",
-                                        "GLOW" to "Glow",
-                                        "FROSTED" to "Frosted",
-                                        "SOLID" to "Solid"
-                                    ).forEach { (styleKey, label) ->
-                                        FilterChip(
-                                            selected = itemIconConfig.outlineStyle.equals(styleKey, ignoreCase = true),
-                                            onClick = { itemIconConfig = itemIconConfig.copy(outlineStyle = styleKey) },
-                                            label = { Text(label, fontSize = 11.sp) },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Outline Thickness Slider
-                            Column {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Outline Thickness", fontSize = 12.sp)
-                                    Text("${String.format("%.1f", itemIconConfig.outlineThickness)} dp", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                                Slider(
-                                    value = itemIconConfig.outlineThickness,
-                                    onValueChange = { itemIconConfig = itemIconConfig.copy(outlineThickness = it) },
-                                    valueRange = 0f..10f
-                                )
-                            }
-
-                            // Outline Threshold Slider
-                            Column {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Outline Threshold", fontSize = 12.sp)
-                                    Text("${(itemIconConfig.outlineThreshold * 100).toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                                Slider(
-                                    value = itemIconConfig.outlineThreshold,
-                                    onValueChange = { itemIconConfig = itemIconConfig.copy(outlineThreshold = it) },
-                                    valueRange = 0.05f..1.0f
-                                )
-                            }
-
-                            // Icon Size Slider
-                            Column {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Icon Size", fontSize = 12.sp)
-                                    Text("${itemIconConfig.iconSize.toInt()} dp", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                                Slider(
-                                    value = itemIconConfig.iconSize,
-                                    onValueChange = { itemIconConfig = itemIconConfig.copy(iconSize = it) },
-                                    valueRange = 16f..64f
-                                )
                             }
                         }
                     }
@@ -1305,6 +1216,8 @@ fun CollectionCreatorScreen(
     val context = LocalContext.current
     var collectionName by remember { mutableStateOf(initialTile?.name ?: "My Collection") }
     var collapseOnTap by remember { mutableStateOf(initialTile?.collapseOnTap ?: true) }
+    var tilesPerRow by remember { mutableStateOf(initialTile?.tilesPerRow ?: 3) }
+    var isCollectionCustomizeExpanded by remember { mutableStateOf(false) }
     var collectionIconConfig by remember {
         mutableStateOf(initialTile?.iconConfig ?: IconConfig(sourceType = IconSourceType.PRESET, sourceData = "collections"))
     }
@@ -1408,10 +1321,10 @@ fun CollectionCreatorScreen(
                     iconConfig = IconConfig(
                         sourceType = IconSourceType.APP_ICON,
                         sourceData = app.packageName,
-                        outlineThickness = 2.5f,
-                        outlineThreshold = 0.4f,
+                        outlineThickness = 0f,
+                        outlineThreshold = 0.5f,
                         iconSize = 32f,
-                        outlineStyle = "OUTLINE"
+                        outlineStyle = "ORIGINAL"
                     ),
                     isActive = false,
                     slotNumber = -1,
@@ -1435,14 +1348,16 @@ fun CollectionCreatorScreen(
                 isActive = true,
                 isAddedToQs = false,
                 collectionItemIds = collectionItems.map { it.id },
-                collapseOnTap = collapseOnTap
+                collapseOnTap = collapseOnTap,
+                tilesPerRow = tilesPerRow
             )).copy(
                 name = collectionName.ifBlank { "My Collection" },
                 type = TileType.COLLECTION,
                 targetData = "",
                 iconConfig = collectionIconConfig,
                 collectionItemIds = collectionItems.map { it.id },
-                collapseOnTap = collapseOnTap
+                collapseOnTap = collapseOnTap,
+                tilesPerRow = tilesPerRow
             )
             onSaveCollection(collectionTile, collectionItems.toList())
         }
@@ -1489,45 +1404,181 @@ fun CollectionCreatorScreen(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-                    val colBitmap = remember(collectionIconConfig, isDark) {
-                        IconProcessor.processIconBitmap(context, collectionIconConfig, targetPixelSize = 64, isDarkTheme = isDark)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Image(
-                            bitmap = colBitmap.asImageBitmap(),
-                            contentDescription = "Collection Icon",
-                            modifier = Modifier.size(38.dp)
-                        )
+                        val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                        val colBitmap = remember(collectionIconConfig, isDark) {
+                            IconProcessor.processIconBitmap(context, collectionIconConfig, targetPixelSize = 64, isDarkTheme = isDark)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                bitmap = colBitmap.asImageBitmap(),
+                                contentDescription = "Collection Icon",
+                                modifier = Modifier.size(38.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Collection Icon", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("Icon shown in Quick Settings panel", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        FilledTonalButton(
+                            onClick = { showCollectionPresetsDialog = true },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("Presets", fontSize = 11.sp)
+                        }
+                        FilledTonalButton(
+                            onClick = { customImagePicker.launch("*/*") },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("Pick File", fontSize = 11.sp)
+                        }
                     }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Collection Icon", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        Text("Icon shown in Quick Settings panel", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    FilledTonalButton(
-                        onClick = { showCollectionPresetsDialog = true },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+
+                    OutlinedButton(
+                        onClick = { isCollectionCustomizeExpanded = !isCollectionCustomizeExpanded },
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("Presets", fontSize = 11.sp)
+                        Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isCollectionCustomizeExpanded) "Hide Icon Sliders" else "Customize Icon Sliders", fontSize = 12.sp)
                     }
-                    FilledTonalButton(
-                        onClick = { customImagePicker.launch("*/*") },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+
+                    AnimatedVisibility(visible = isCollectionCustomizeExpanded) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text("Icon Customization Controls", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+
+                            // Outline Style Selector
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Outline Style", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    listOf(
+                                        "OUTLINE" to "Outline",
+                                        "GLOW" to "Glow",
+                                        "FROSTED" to "Frosted",
+                                        "SOLID" to "Solid"
+                                    ).forEach { (styleKey, label) ->
+                                        FilterChip(
+                                            selected = collectionIconConfig.outlineStyle.equals(styleKey, ignoreCase = true),
+                                            onClick = { collectionIconConfig = collectionIconConfig.copy(outlineStyle = styleKey) },
+                                            label = { Text(label, fontSize = 11.sp) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Outline Thickness Slider
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Outline Thickness", fontSize = 12.sp)
+                                    Text("${String.format("%.1f", collectionIconConfig.outlineThickness)} dp", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Slider(
+                                    value = collectionIconConfig.outlineThickness,
+                                    onValueChange = { collectionIconConfig = collectionIconConfig.copy(outlineThickness = it) },
+                                    valueRange = 0f..10f
+                                )
+                            }
+
+                            // Outline Threshold Slider
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Outline Threshold", fontSize = 12.sp)
+                                    Text("${(collectionIconConfig.outlineThreshold * 100).toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Slider(
+                                    value = collectionIconConfig.outlineThreshold,
+                                    onValueChange = { collectionIconConfig = collectionIconConfig.copy(outlineThreshold = it) },
+                                    valueRange = 0.05f..1.0f
+                                )
+                            }
+
+                            // Icon Size Slider
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Icon Size", fontSize = 12.sp)
+                                    Text("${collectionIconConfig.iconSize.toInt()} dp", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Slider(
+                                    value = collectionIconConfig.iconSize,
+                                    onValueChange = { collectionIconConfig = collectionIconConfig.copy(iconSize = it) },
+                                    valueRange = 16f..64f
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Tiles Per Row Option Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Pick File", fontSize = 11.sp)
+                        Column {
+                            Text("Tiles Per Row", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text("Number of tiles per row in the collection popup", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text("$tilesPerRow tiles", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(2, 3, 4, 5).forEach { count ->
+                            FilterChip(
+                                selected = (tilesPerRow == count),
+                                onClick = { tilesPerRow = count },
+                                label = { Text("$count", modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
             }
@@ -1581,7 +1632,13 @@ fun CollectionCreatorScreen(
                             items(collectionItems, key = { it.id }) { item ->
                                 val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
                                 val previewBitmap = remember(item.id, item.iconConfig, isDark) {
-                                    IconProcessor.processIconBitmap(context, item.iconConfig, targetPixelSize = 96, isDarkTheme = isDark)
+                                    if (item.iconConfig.sourceType == IconSourceType.APP_ICON) {
+                                        IconProcessor.loadRawBitmap(context, item.iconConfig, targetPixelSize = 96, isDarkTheme = isDark)
+                                    } else if (item.iconConfig.outlineThickness > 0.5f) {
+                                        IconProcessor.processIconBitmap(context, item.iconConfig, targetPixelSize = 96, isDarkTheme = isDark)
+                                    } else {
+                                        IconProcessor.loadRawBitmap(context, item.iconConfig, targetPixelSize = 96, isDarkTheme = isDark)
+                                    }
                                 }
                                 Card(
                                     modifier = Modifier
@@ -1792,10 +1849,10 @@ fun CollectionCreatorScreen(
                     iconConfig = IconConfig(
                         sourceType = IconSourceType.APP_ICON,
                         sourceData = app.packageName,
-                        outlineThickness = 2.5f,
-                        outlineThreshold = 0.4f,
+                        outlineThickness = 0f,
+                        outlineThreshold = 0.5f,
                         iconSize = 32f,
-                        outlineStyle = "OUTLINE"
+                        outlineStyle = "ORIGINAL"
                     ),
                     isActive = false,
                     slotNumber = -1,
@@ -1840,7 +1897,7 @@ fun CollectionCreatorScreen(
                     name = name,
                     type = TileType.SHORTCUT,
                     targetData = intentUri,
-                    iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = pkg),
+                    iconConfig = IconConfig(sourceType = IconSourceType.PRESET, sourceData = pkg, outlineThickness = 0f, outlineStyle = "ORIGINAL"),
                     isActive = false,
                     slotNumber = -1,
                     collapseCollectionOnClick = false

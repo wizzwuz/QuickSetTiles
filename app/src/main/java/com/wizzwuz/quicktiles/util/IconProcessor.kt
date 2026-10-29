@@ -385,10 +385,22 @@ object IconProcessor {
         return outBmp
     }
 
-    fun loadRawBitmap(context: Context, config: IconConfig, isDarkTheme: Boolean = true): Bitmap {
+    fun loadRawBitmap(
+        context: Context,
+        config: IconConfig,
+        targetPixelSize: Int = 128,
+        isDarkTheme: Boolean = true
+    ): Bitmap {
         return when (config.sourceType) {
             IconSourceType.APP_ICON -> {
-                extractAppIconElement(context, config.sourceData)
+                try {
+                    val pm = context.packageManager
+                    val appInfo = pm.getApplicationInfo(config.sourceData, 0)
+                    val drawable = pm.getApplicationIcon(appInfo)
+                    drawableToBitmap(drawable, targetPixelSize, targetPixelSize)
+                } catch (e: Throwable) {
+                    extractAppIconElement(context, config.sourceData, targetSize = targetPixelSize)
+                }
             }
             IconSourceType.CUSTOM_FILE -> {
                 try {
