@@ -12,8 +12,20 @@ permissions:
 
 jobs:
   build:
-    name: Build & Package APK
+    name: Build ${{ matrix.build_type }} APK
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build_type: Release
+            task: assembleRelease
+            artifact_name: QuickSetTiles-release-apk
+            artifact_path: app/build/outputs/apk/release/*.apk
+          - build_type: Debug
+            task: assembleDebug
+            artifact_name: QuickSetTiles-debug-apk
+            artifact_path: app/build/outputs/apk/debug/*.apk
 
     steps:
     - name: Checkout Code
@@ -33,12 +45,11 @@ jobs:
       with:
         cache-read-only: false
 
-
-    - name: Ensure Persistent Release Keystore
+    - name: Ensure Release Keystore
       run: |
         mkdir -p keystore
         if [ ! -f keystore/release.jks ]; then
-          echo "Generating permanent release keystore..."
+          echo "Generating release keystore..."
           keytool -genkeypair -v \
             -keystore keystore/release.jks \
             -alias quicksettiles \
@@ -48,14 +59,8 @@ jobs:
             -storepass "quicksettiles_keystore_pass" \
             -keypass "quicksettiles_keystore_pass" \
             -dname "CN=QuickSetTiles, OU=Mobile, O=QuickSetTiles, L=World, ST=Global, C=US"
-          
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add keystore/release.jks
-          git commit -m "chore: persist release signing keystore for consistent APK releases [skip ci]" || true
-          git push origin HEAD:${{ github.ref_name }} || true
         else
-          echo "Permanent release keystore already exists. Reusing existing key."
+          echo "Release keystore present."
         fi
 
     - name: Grant Execute Permission to Gradlew
@@ -104,30 +109,20 @@ jobs:
         print('Generated ic_launcher_foreground.png (432x432)')
         "
 
-    - name: Build Release & Debug APKs
-      run: ./gradlew assembleRelease assembleDebug --no-daemon --parallel --build-cache --stacktrace
+    - name: Build APK
+      run: ./gradlew ${{ matrix.task }} -x lint -x lintVitalRelease -x test --parallel --build-cache
 
-    - name: Upload Release APK Artifact
+    - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: QuickSetTiles-release-apk
-        path: app/build/outputs/apk/release/*.apk
-        if-no-files-found: error
-        retention-days: 14
-
-    - name: Upload Debug APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: QuickSetTiles-debug-apk
-        path: app/build/outputs/apk/debug/*.apk
+        name: ${{ matrix.artifact_name }}
+        path: ${{ matrix.artifact_path }}
         if-no-files-found: error
         retention-days: 14
 
     - name: Add Build Summary
       run: |
         echo "### Build Complete! 🚀" >> $GITHUB_STEP_SUMMARY
-        echo "The **QuickSetTiles** APKs were compiled and signed with the permanent release keystore." >> $GITHUB_STEP_SUMMARY
-        echo "- **Release APK Artifact:** \`QuickSetTiles-release-apk\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Debug APK Artifact:** \`QuickSetTiles-debug-apk\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Consistent Signing:** Both APKs use the same release keystore (\`keystore/release.jks\`)." >> $GITHUB_STEP_SUMMARY
+        echo "The **QuickSetTiles** ${{ matrix.build_type }} APK was compiled and signed with the release keystore." >> $GITHUB_STEP_SUMMARY
+        echo "- **Artifact:** \`${{ matrix.artifact_name }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Built on commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

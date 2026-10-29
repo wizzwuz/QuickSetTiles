@@ -62,8 +62,10 @@
             android:name=".ui.CollectionPopupActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:launchMode="singleTop"
             android:excludeFromRecents="true"
             android:taskAffinity="" />
+
 
         <!-- Official Shizuku Provider: authority MUST be ${applicationId}.shizuku -->
         <provider

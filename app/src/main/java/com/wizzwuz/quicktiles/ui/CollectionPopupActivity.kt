@@ -73,6 +73,11 @@ class CollectionPopupActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
 }
 
 @Composable
@@ -175,10 +180,10 @@ fun CollectionPopupScreen(
                                             isDark = isDark,
                                             onClick = {
                                                 executeCollectionItem(context, repo, item)
-                                                val shouldDismiss = if (item.type == TileType.SHELL) {
-                                                    if (item.collapseCollectionOnClick) {
-                                                        true
-                                                    } else {
+                                                val isLaunchable = when (item.type) {
+                                                    TileType.APPS, TileType.WEBSITE, TileType.SHORTCUT,
+                                                    TileType.ACTIVITY, TileType.INTENT, TileType.FILES, TileType.FOLDERS -> true
+                                                    TileType.SHELL -> {
                                                         val cmd = when (item.visualState) {
                                                             TileVisualState.TOGGLE -> if (item.currentToggleOn) {
                                                                 if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
@@ -190,11 +195,26 @@ fun CollectionPopupScreen(
                                                         }
                                                         isShellCommandLaunchable(cmd)
                                                     }
-                                                } else {
-                                                    item.collapseCollectionOnClick || item.collapseOnTap || (collection?.collapseOnTap == true)
+                                                    TileType.COLLECTION -> false
                                                 }
-                                                if (shouldDismiss) {
+
+                                                if (item.collapseCollectionOnClick) {
                                                     dismissAnimated()
+                                                } else if (isLaunchable) {
+                                                    collectionScope.launch {
+                                                        delay(350)
+                                                        val bringToFront = Intent(context, CollectionPopupActivity::class.java).apply {
+                                                            putExtra("collectionId", collectionId)
+                                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                                                        }
+                                                        try {
+                                                            context.startActivity(bringToFront)
+                                                            delay(450)
+                                                            context.startActivity(bringToFront)
+                                                        } catch (e: Throwable) {
+                                                            // ignore
+                                                        }
+                                                    }
                                                 }
                                             }
 
@@ -325,15 +345,8 @@ private fun CollectionTileItemView(
 private val collectionScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
 private fun isShellCommandLaunchable(cmd: String): Boolean {
-    val lower = cmd.trim().lowercase()
-    return lower.startsWith("am start") ||
-            lower.contains("\nam start") ||
-            lower.startsWith("cmd activity start") ||
-            lower.contains("\ncmd activity start") ||
-            lower.startsWith("monkey ") ||
-            lower.contains("\nmonkey ") ||
-            lower.startsWith("launch-private ") ||
-            lower.startsWith("am-private ")
+    val pattern = Regex("""\b(am\s+start|cmd\s+activity\s+start|monkey\b|launch-private|am-private)""", RegexOption.IGNORE_CASE)
+    return pattern.containsMatchIn(cmd)
 }
 
 private fun executeCollectionItem(context: android.content.Context, repo: TileRepository, item: TileItem) {
