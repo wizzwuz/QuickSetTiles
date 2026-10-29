@@ -214,6 +214,7 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
             TileType.SHELL -> {
                 serviceScope.launch {
                     val repo = TileRepository.getInstance(this@BaseTileService)
+                    val cmdToRun: String
                     val shouldCollapse: Boolean
                     if (item.multiShellSteps.isNotEmpty()) {
                         val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
