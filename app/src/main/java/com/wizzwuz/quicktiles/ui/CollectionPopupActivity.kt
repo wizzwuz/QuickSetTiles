@@ -143,7 +143,7 @@ fun CollectionPopupScreen(
                 Box(
                     modifier = Modifier
                         .wrapContentSize()
-                        .padding(2.dp)
+                        .padding(5.dp)
                 ) {
                     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
