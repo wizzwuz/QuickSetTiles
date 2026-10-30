@@ -4,12 +4,13 @@ import android.app.Application
 import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.ui.theme.ThemeManager
 import com.wizzwuz.quicktiles.util.AppHelper
+import com.wizzwuz.quicktiles.util.IconProcessor
 import com.wizzwuz.quicktiles.util.LogManager
+import com.wizzwuz.quicktiles.util.ProcessManager
 import com.wizzwuz.quicktiles.util.ShizukuHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 
 class QuickTilesApp : Application() {
     companion object {
@@ -18,6 +19,8 @@ class QuickTilesApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Initialize process manager to track UI and tile tasks and terminate background linger
+        ProcessManager.init(this)
         // Initialize theme preference eagerly
         ThemeManager.init(this)
         // Initialize log manager for error recording to log.txt
@@ -26,14 +29,11 @@ class QuickTilesApp : Application() {
         TileRepository.getInstance(this)
         // Initialize Shizuku binder and listeners eagerly
         ShizukuHelper.init()
-        // Pre-warm apps and shortcuts cache asynchronously on IO thread for instant UI response
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                AppHelper.getInstalledApps(this@QuickTilesApp)
-                AppHelper.getAppsWithShortcuts(this@QuickTilesApp)
-            } catch (_: Throwable) {
-                // Ignore any startup background cache warmup failure
-            }
-        }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        AppHelper.clearCaches()
+        IconProcessor.clearCache()
     }
 }

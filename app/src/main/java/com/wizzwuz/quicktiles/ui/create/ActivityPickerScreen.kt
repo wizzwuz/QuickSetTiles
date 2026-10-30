@@ -53,6 +53,13 @@ fun ActivityPickerScreen(
     // Intercept hardware/system back button to go back to tile edit page
     BackHandler(onBack = onBack)
 
+    // Reclaim memory when the activity picker screen closes
+    DisposableEffect(Unit) {
+        onDispose {
+            AppHelper.clearCaches()
+        }
+    }
+
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val repository = remember { com.wizzwuz.quicktiles.data.TileRepository.getInstance(context) }

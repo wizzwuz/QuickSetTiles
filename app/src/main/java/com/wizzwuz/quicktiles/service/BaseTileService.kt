@@ -19,6 +19,7 @@ import com.wizzwuz.quicktiles.ui.MainActivity
 import com.wizzwuz.quicktiles.util.AppHelper
 import com.wizzwuz.quicktiles.util.IconProcessor
 import com.wizzwuz.quicktiles.util.PopupToastHelper
+import com.wizzwuz.quicktiles.util.ProcessManager
 import com.wizzwuz.quicktiles.util.ShizukuHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,12 +46,14 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
     override fun onStartListening() {
         super.onStartListening()
         activeInstances[slotNumber] = this
+        ProcessManager.onTileListeningStarted()
         updateTileState()
     }
 
     override fun onStopListening() {
         super.onStopListening()
         activeInstances.remove(slotNumber)
+        ProcessManager.onTileListeningStopped()
     }
 
     override fun onDestroy() {
@@ -139,146 +142,159 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
     }
 
     private fun executeTileAction(item: TileItem) {
-        if (item.visualState == com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE && item.type != TileType.SHELL) {
-            val repo = TileRepository.getInstance(this)
-            val updated = item.copy(currentToggleOn = !item.currentToggleOn)
-            repo.saveTile(updated)
-            mainHandler.post { updateTileState() }
-        }
+        ProcessManager.onTileTaskStarted()
+        var asyncTask = false
+        try {
+            if (item.visualState == com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE && item.type != TileType.SHELL) {
+                val repo = TileRepository.getInstance(this)
+                val updated = item.copy(currentToggleOn = !item.currentToggleOn)
+                repo.saveTile(updated)
+                mainHandler.post { updateTileState() }
+            }
 
-        when (item.type) {
-            TileType.APPS -> {
-                val launchIntent = packageManager.getLaunchIntentForPackage(item.targetData)
-                if (launchIntent != null) {
-                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    launchIntent(launchIntent)
-                } else {
-                    showToast("App not installed: ${item.targetData}")
-                }
-            }
-            TileType.WEBSITE -> {
-                try {
-                    var url = item.targetData.trim()
-                    if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                        url = "https://$url"
+            when (item.type) {
+                TileType.APPS -> {
+                    val launchIntent = packageManager.getLaunchIntentForPackage(item.targetData)
+                    if (launchIntent != null) {
+                        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        launchIntent(launchIntent)
+                    } else {
+                        showToast("App not installed: ${item.targetData}")
                     }
-                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    launchIntent(browserIntent)
-                } catch (e: Throwable) {
-                    showToast("Failed to open URL: ${e.message}")
                 }
-            }
-            TileType.SHORTCUT -> {
-                try {
-                    val intent = Intent.parseUri(item.targetData, Intent.URI_INTENT_SCHEME).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    launchIntent(intent)
-                } catch (e: Throwable) {
-                    showToast("Failed to launch shortcut: ${e.message}")
-                }
-            }
-            TileType.ACTIVITY -> {
-                try {
-                    val comp = ComponentName.unflattenFromString(item.targetData)
-                    if (comp != null) {
-                        serviceScope.launch {
-                            if (item.collapseOnTap) {
-                                mainHandler.post { collapseShade() }
-                            }
-                            AppHelper.launchActivityPrivileged(
-                                this@BaseTileService,
-                                comp.packageName,
-                                comp.className
-                            )
+                TileType.WEBSITE -> {
+                    try {
+                        var url = item.targetData.trim()
+                        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                            url = "https://$url"
                         }
+                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        launchIntent(browserIntent)
+                    } catch (e: Throwable) {
+                        showToast("Failed to open URL: ${e.message}")
                     }
-                } catch (e: Throwable) {
-                    // Silent failure
                 }
-            }
-            TileType.INTENT -> {
-                try {
-                    val intent = if (item.targetData.startsWith("intent:")) {
-                        Intent.parseUri(item.targetData, Intent.URI_INTENT_SCHEME)
-                    } else {
-                        Intent(item.targetData)
+                TileType.SHORTCUT -> {
+                    try {
+                        val intent = Intent.parseUri(item.targetData, Intent.URI_INTENT_SCHEME).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        launchIntent(intent)
+                    } catch (e: Throwable) {
+                        showToast("Failed to launch shortcut: ${e.message}")
                     }
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    launchIntent(intent)
-                } catch (e: Throwable) {
-                    showToast("Failed to execute intent: ${e.message}")
                 }
-            }
-            TileType.SHELL -> {
-                serviceScope.launch {
-                    val repo = TileRepository.getInstance(this@BaseTileService)
-                    val cmdToRun: String
-                    val shouldCollapse: Boolean
-                    if (item.multiShellSteps.isNotEmpty()) {
-                        val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
-                        val step = item.multiShellSteps[stepIndex]
-                        cmdToRun = step.command
-                        shouldCollapse = step.collapsePanel
-                        val nextIndex = (stepIndex + 1) % item.multiShellSteps.size
-                        val updatedItem = item.copy(currentMultiShellIndex = nextIndex)
-                        repo.saveTile(updatedItem)
-                        mainHandler.post { updateTileState() }
-                    } else {
-                        shouldCollapse = item.collapseOnTap
-                        val nextToggleState: Boolean
-                        when (item.visualState) {
-                            com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> {
-                                if (item.currentToggleOn) {
-                                    // Currently ON, toggle to OFF! Execute offCommand
-                                    cmdToRun = if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
-                                    nextToggleState = false
-                                } else {
-                                    // Currently OFF, toggle to ON! Execute onCommand
-                                    cmdToRun = if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
-                                    nextToggleState = true
+                TileType.ACTIVITY -> {
+                    try {
+                        val comp = ComponentName.unflattenFromString(item.targetData)
+                        if (comp != null) {
+                            asyncTask = true
+                            serviceScope.launch {
+                                try {
+                                    if (item.collapseOnTap) {
+                                        mainHandler.post { collapseShade() }
+                                    }
+                                    AppHelper.launchActivityPrivileged(
+                                        this@BaseTileService,
+                                        comp.packageName,
+                                        comp.className
+                                    )
+                                } finally {
+                                    ProcessManager.onTileTaskFinished()
                                 }
-                                val updatedItem = item.copy(currentToggleOn = nextToggleState)
+                            }
+                        }
+                    } catch (e: Throwable) {
+                        // Silent failure
+                    }
+                }
+                TileType.INTENT -> {
+                    try {
+                        val intent = if (item.targetData.startsWith("intent:")) {
+                            Intent.parseUri(item.targetData, Intent.URI_INTENT_SCHEME)
+                        } else {
+                            Intent(item.targetData)
+                        }
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        launchIntent(intent)
+                    } catch (e: Throwable) {
+                        showToast("Failed to execute intent: ${e.message}")
+                    }
+                }
+                TileType.SHELL -> {
+                    asyncTask = true
+                    serviceScope.launch {
+                        try {
+                            val repo = TileRepository.getInstance(this@BaseTileService)
+                            val cmdToRun: String
+                            val shouldCollapse: Boolean
+                            if (item.multiShellSteps.isNotEmpty()) {
+                                val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
+                                val step = item.multiShellSteps[stepIndex]
+                                cmdToRun = step.command
+                                shouldCollapse = step.collapsePanel
+                                val nextIndex = (stepIndex + 1) % item.multiShellSteps.size
+                                val updatedItem = item.copy(currentMultiShellIndex = nextIndex)
                                 repo.saveTile(updatedItem)
                                 mainHandler.post { updateTileState() }
+                            } else {
+                                shouldCollapse = item.collapseOnTap
+                                val nextToggleState: Boolean
+                                when (item.visualState) {
+                                    com.wizzwuz.quicktiles.model.TileVisualState.TOGGLE -> {
+                                        if (item.currentToggleOn) {
+                                            // Currently ON, toggle to OFF! Execute offCommand
+                                            cmdToRun = if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                                            nextToggleState = false
+                                        } else {
+                                            // Currently OFF, toggle to ON! Execute onCommand
+                                            cmdToRun = if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                                            nextToggleState = true
+                                        }
+                                        val updatedItem = item.copy(currentToggleOn = nextToggleState)
+                                        repo.saveTile(updatedItem)
+                                        mainHandler.post { updateTileState() }
+                                    }
+                                    com.wizzwuz.quicktiles.model.TileVisualState.ENABLED -> {
+                                        cmdToRun = if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                                        nextToggleState = true
+                                    }
+                                    com.wizzwuz.quicktiles.model.TileVisualState.DISABLED -> {
+                                        cmdToRun = if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                                        nextToggleState = false
+                                    }
+                                }
                             }
-                            com.wizzwuz.quicktiles.model.TileVisualState.ENABLED -> {
-                                cmdToRun = if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
-                                nextToggleState = true
+
+                            if (shouldCollapse) {
+                                mainHandler.post { collapseShade() }
                             }
-                            com.wizzwuz.quicktiles.model.TileVisualState.DISABLED -> {
-                                cmdToRun = if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
-                                nextToggleState = false
+
+                            val result = ShizukuHelper.executeCommand(cmdToRun)
+
+                            if (item.showPopups && result.output.isNotBlank()) {
+                                val lines = result.output.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                                for (line in lines) {
+                                    PopupToastHelper.showToast(applicationContext, line)
+                                    if (lines.size > 1) {
+                                        kotlinx.coroutines.delay(1200)
+                                    }
+                                }
                             }
+
+                            if (result.exitCode != 0) {
+                                com.wizzwuz.quicktiles.util.LogManager.logError(
+                                    "TileExecution",
+                                    "Tile '${item.name}' (Slot $slotNumber) Shell (${result.executionMode}) failed with exit code ${result.exitCode}: ${result.output}"
+                                )
+                            }
+                        } finally {
+                            ProcessManager.onTileTaskFinished()
                         }
-                    }
-
-                    if (shouldCollapse) {
-                        mainHandler.post { collapseShade() }
-                    }
-
-                    val result = ShizukuHelper.executeCommand(cmdToRun)
-
-                    if (item.showPopups && result.output.isNotBlank()) {
-                        val lines = result.output.lines().map { it.trim() }.filter { it.isNotEmpty() }
-                        for (line in lines) {
-                            PopupToastHelper.showToast(applicationContext, line)
-                            if (lines.size > 1) {
-                                kotlinx.coroutines.delay(1200)
-                            }
-                        }
-                    }
-
-                    if (result.exitCode != 0) {
-                        com.wizzwuz.quicktiles.util.LogManager.logError(
-                            "TileExecution",
-                            "Tile '${item.name}' (Slot $slotNumber) Shell (${result.executionMode}) failed with exit code ${result.exitCode}: ${result.output}"
-                        )
                     }
                 }
-            }
             TileType.FILES -> {
                 try {
                     val uri = Uri.parse(item.targetData)
@@ -326,6 +342,10 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                 } catch (e: Throwable) {
                     showToast("Failed to open collection: ${e.message}")
                 }
+        }
+        } finally {
+            if (!asyncTask) {
+                ProcessManager.onTileTaskFinished()
             }
         }
     }

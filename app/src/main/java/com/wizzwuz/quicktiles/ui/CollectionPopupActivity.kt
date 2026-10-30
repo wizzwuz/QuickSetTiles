@@ -51,6 +51,7 @@ import com.wizzwuz.quicktiles.util.AppHelper
 import com.wizzwuz.quicktiles.util.IconProcessor
 import com.wizzwuz.quicktiles.util.LogManager
 import com.wizzwuz.quicktiles.util.PopupToastHelper
+import com.wizzwuz.quicktiles.util.ProcessManager
 import com.wizzwuz.quicktiles.util.ShizukuHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -426,56 +427,61 @@ private fun executeCollectionItem(context: android.content.Context, repo: TileRe
                 context.startActivity(intent)
             }
             TileType.SHELL -> {
+                ProcessManager.onTileTaskStarted()
                 QuickTilesApp.applicationScope.launch(Dispatchers.Main) {
-                    val cmdToRun: String
+                    try {
+                        val cmdToRun: String
 
-                    if (item.multiShellSteps.isNotEmpty()) {
-                        val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
-                        val step = item.multiShellSteps[stepIndex]
-                        cmdToRun = step.command
-                        val nextIndex = (stepIndex + 1) % item.multiShellSteps.size
-                        val updatedItem = item.copy(currentMultiShellIndex = nextIndex)
-                        repo.saveTile(updatedItem)
-                    } else {
-                        when (item.visualState) {
-                            TileVisualState.TOGGLE -> {
-                                val nextToggleState = !item.currentToggleOn
-                                cmdToRun = if (item.currentToggleOn) {
-                                    if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
-                                } else {
-                                    if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                        if (item.multiShellSteps.isNotEmpty()) {
+                            val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
+                            val step = item.multiShellSteps[stepIndex]
+                            cmdToRun = step.command
+                            val nextIndex = (stepIndex + 1) % item.multiShellSteps.size
+                            val updatedItem = item.copy(currentMultiShellIndex = nextIndex)
+                            repo.saveTile(updatedItem)
+                        } else {
+                            when (item.visualState) {
+                                TileVisualState.TOGGLE -> {
+                                    val nextToggleState = !item.currentToggleOn
+                                    cmdToRun = if (item.currentToggleOn) {
+                                        if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                                    } else {
+                                        if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                                    }
+                                    val updatedItem = item.copy(currentToggleOn = nextToggleState)
+                                    repo.saveTile(updatedItem)
                                 }
-                                val updatedItem = item.copy(currentToggleOn = nextToggleState)
-                                repo.saveTile(updatedItem)
-                            }
-                            TileVisualState.ENABLED -> {
-                                cmdToRun = if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
-                            }
-                            TileVisualState.DISABLED -> {
-                                cmdToRun = if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                                TileVisualState.ENABLED -> {
+                                    cmdToRun = if (item.onCommand.isNotBlank()) item.onCommand else item.targetData
+                                }
+                                TileVisualState.DISABLED -> {
+                                    cmdToRun = if (item.offCommand.isNotBlank()) item.offCommand else item.targetData
+                                }
                             }
                         }
-                    }
 
-                    val result = kotlinx.coroutines.withContext(Dispatchers.IO) {
-                        ShizukuHelper.executeCommand(cmdToRun)
-                    }
+                        val result = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                            ShizukuHelper.executeCommand(cmdToRun)
+                        }
 
-                    if (item.showPopups && result.output.isNotBlank()) {
-                        val lines = result.output.lines().map { it.trim() }.filter { it.isNotEmpty() }
-                        for (line in lines) {
-                            PopupToastHelper.showToast(context.applicationContext, line)
-                            if (lines.size > 1) {
-                                delay(1200)
+                        if (item.showPopups && result.output.isNotBlank()) {
+                            val lines = result.output.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                            for (line in lines) {
+                                PopupToastHelper.showToast(context.applicationContext, line)
+                                if (lines.size > 1) {
+                                    delay(1200)
+                                }
                             }
                         }
-                    }
 
-                    if (result.exitCode != 0) {
-                        LogManager.logError(
-                            "CollectionShell",
-                            "Shell tile '${item.name}' failed: exit ${result.exitCode}: ${result.output}"
-                        )
+                        if (result.exitCode != 0) {
+                            LogManager.logError(
+                                "CollectionShell",
+                                "Shell tile '${item.name}' failed: exit ${result.exitCode}: ${result.output}"
+                            )
+                        }
+                    } finally {
+                        ProcessManager.onTileTaskFinished()
                     }
                 }
             }

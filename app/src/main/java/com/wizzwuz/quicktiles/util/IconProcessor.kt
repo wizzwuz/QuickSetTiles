@@ -21,6 +21,15 @@ object IconProcessor {
 
     private val elementCache = ConcurrentHashMap<String, Bitmap>()
 
+    fun clearCache() {
+        elementCache.values.forEach { bmp ->
+            if (!bmp.isRecycled) {
+                try { bmp.recycle() } catch (_: Throwable) {}
+            }
+        }
+        elementCache.clear()
+    }
+
     val PRESET_ICONS = listOf(
         "tile_default" to "Default Tile",
         "apps" to "App",
