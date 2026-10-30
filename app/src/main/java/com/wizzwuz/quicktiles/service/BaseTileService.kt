@@ -342,13 +342,14 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                 } catch (e: Throwable) {
                     showToast("Failed to open collection: ${e.message}")
                 }
-        }
-        } finally {
-            if (!asyncTask) {
-                ProcessManager.onTileTaskFinished()
             }
         }
+    } finally {
+        if (!asyncTask) {
+            ProcessManager.onTileTaskFinished()
+        }
     }
+}
 
     private fun collapseShade() {
         serviceScope.launch {
