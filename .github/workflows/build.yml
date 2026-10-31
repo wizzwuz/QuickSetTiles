@@ -59,8 +59,10 @@ jobs:
             -storepass "quicksettiles_keystore_pass" \
             -keypass "quicksettiles_keystore_pass" \
             -dname "CN=QuickSetTiles, OU=Mobile, O=QuickSetTiles, L=World, ST=Global, C=US"
+          echo "::notice title=Release Keystore::Generated new RSA 2048-bit release keystore for APK signing."
         else
           echo "Release keystore present."
+          echo "::notice title=Release Keystore::Using existing release keystore for APK signing."
         fi
 
     - name: Grant Execute Permission to Gradlew
@@ -75,7 +77,7 @@ jobs:
 
         icon_path = 'icon.png'
         if not os.path.exists(icon_path):
-            print('icon.png not found, skipping icon generation')
+            print('::warning title=Launcher Icons::icon.png not found; default mipmap icons will be used.')
             exit(0)
 
         img = Image.open(icon_path).convert('RGBA')
@@ -107,6 +109,7 @@ jobs:
             os.remove(xml_fg)
         fg_canvas.save('app/src/main/res/drawable/ic_launcher_foreground.png')
         print('Generated ic_launcher_foreground.png (432x432)')
+        print('::notice title=Launcher Icons::Successfully generated adaptive foreground (432x432) and mipmap launcher icons (mdpi-xxxhdpi) from icon.png.')
         "
 
     - name: Build APK
@@ -120,9 +123,36 @@ jobs:
         if-no-files-found: error
         retention-days: 14
 
-    - name: Add Build Summary
+    - name: Add Build Summary & Workflow Annotations
+      if: always()
       run: |
-        echo "### Build Complete! 🚀" >> $GITHUB_STEP_SUMMARY
-        echo "The **QuickSetTiles** ${{ matrix.build_type }} APK was compiled and signed with the release keystore." >> $GITHUB_STEP_SUMMARY
-        echo "- **Artifact:** \`${{ matrix.artifact_name }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Built on commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ job.status }}" = "success" ]; then
+          APK_FILE=$(ls ${{ matrix.artifact_path }} 2>/dev/null | head -n 1)
+          if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
+            APK_NAME=$(basename "$APK_FILE")
+            APK_SIZE_BYTES=$(wc -c < "$APK_FILE" | tr -d ' ')
+            APK_SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $APK_SIZE_BYTES / 1048576}")
+            
+            echo "::notice title=Build Success (${{ matrix.build_type }})::QuickSetTiles ${{ matrix.build_type }} APK generated: $APK_NAME ($APK_SIZE_MB MB). Artifact: ${{ matrix.artifact_name }}"
+            echo "::notice file=app/build.gradle.kts,line=16,title=App Release::com.wizzwuz.quicktiles v1.0.5 (code 6) - ${{ matrix.build_type }} signed and ready."
+            
+            echo "### Build Complete! 🚀" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Build Type** | \`${{ matrix.build_type }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Package Name** | \`com.wizzwuz.quicktiles\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Version** | \`1.0.5\` (code \`6\`) |" >> $GITHUB_STEP_SUMMARY
+            echo "| **APK File** | \`$APK_NAME\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **APK Size** | \`$APK_SIZE_MB MB\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Artifact Name** | \`${{ matrix.artifact_name }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> [!NOTE]" >> $GITHUB_STEP_SUMMARY
+            echo "> The APK is signed with the release keystore and supports Android 7.0+ (API 24 to 35)." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "::warning title=Artifact Missing (${{ matrix.build_type }})::APK file was not found at ${{ matrix.artifact_path }}"
+          fi
+        else
+          echo "::error title=Build Failure (${{ matrix.build_type }})::QuickSetTiles ${{ matrix.build_type }} build failed. Check step logs for details."
+        fi
