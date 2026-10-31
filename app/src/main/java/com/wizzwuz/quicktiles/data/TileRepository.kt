@@ -61,7 +61,13 @@ class TileRepository(private val context: Context) {
     }
 
     init {
-        loadTiles()
+        val loaded = loadTiles()
+        val migrated = prefs.getBoolean(KEY_MIGRATED_MANUAL_QS, false)
+        if (!migrated) {
+            val updated = loaded.map { it.copy(isAddedToQs = false) }
+            persistTiles(updated)
+            prefs.edit().putBoolean(KEY_MIGRATED_MANUAL_QS, true).apply()
+        }
         syncComponentStates(context)
     }
 
@@ -116,15 +122,18 @@ class TileRepository(private val context: Context) {
         val index = current.indexOfFirst { it.id == tile.id }
         val oldSlot = if (index >= 0) current[index].slotNumber else -1
 
-        val tileToSave = tile.copy(createdAt = System.currentTimeMillis())
+        val wasAddedToQs = if (index >= 0) current[index].isAddedToQs else false
+
+        val tileToSave = tile.copy(createdAt = if (tile.createdAt > 0) tile.createdAt else System.currentTimeMillis())
         val finalTile = if (tileToSave.isActive) {
             val assignedSlot = if (tileToSave.slotNumber in 1..MAX_SLOTS) {
                 tileToSave.slotNumber
             } else {
                 findNextAvailableSlot(current.filter { it.id != tileToSave.id })
             }
+            val addedToQs = if (index >= 0) wasAddedToQs else tileToSave.isAddedToQs
             if (assignedSlot in 1..MAX_SLOTS) {
-                tileToSave.copy(isActive = true, slotNumber = assignedSlot, isAddedToQs = true)
+                tileToSave.copy(isActive = true, slotNumber = assignedSlot, isAddedToQs = addedToQs)
             } else {
                 tileToSave.copy(isActive = false, slotNumber = -1, isAddedToQs = false)
             }
@@ -140,16 +149,18 @@ class TileRepository(private val context: Context) {
 
         persistTiles(current)
 
-        // Disable old slot if slot changed or tile became inactive
-        if (oldSlot in 1..MAX_SLOTS && oldSlot != finalTile.slotNumber) {
+        // Disable old slot if slot changed or tile became inactive or un-added
+        if (oldSlot in 1..MAX_SLOTS && (oldSlot != finalTile.slotNumber || !finalTile.isActive || !finalTile.isAddedToQs)) {
             setComponentEnabled(context, oldSlot, false)
             requestTileUpdate(context, oldSlot)
         }
 
-        // Always enable component and immediately refresh QS tile
-        if (finalTile.isActive && finalTile.slotNumber in 1..MAX_SLOTS) {
+        // Enable component ONLY if tile is active AND manually added to QS
+        if (finalTile.isActive && finalTile.isAddedToQs && finalTile.slotNumber in 1..MAX_SLOTS) {
             setComponentEnabled(context, finalTile.slotNumber, true)
             requestTileUpdate(context, finalTile.slotNumber)
+        } else if (finalTile.slotNumber in 1..MAX_SLOTS) {
+            setComponentEnabled(context, finalTile.slotNumber, false)
         }
     }
 
@@ -242,7 +253,7 @@ class TileRepository(private val context: Context) {
         persistTiles(tiles)
         syncComponentStates(context)
         for (tile in tiles) {
-            if (tile.isActive && tile.slotNumber in 1..MAX_SLOTS) {
+            if (tile.isActive && tile.isAddedToQs && tile.slotNumber in 1..MAX_SLOTS) {
                 requestTileUpdate(context, tile.slotNumber)
             }
         }
@@ -259,11 +270,14 @@ class TileRepository(private val context: Context) {
     }
 
     fun syncComponentStates(context: Context) {
-        val activeSlots = _tilesFlow.value.filter { it.isActive }.map { it.slotNumber }.toSet()
+        val enabledSlots = _tilesFlow.value
+            .filter { it.isActive && it.isAddedToQs }
+            .map { it.slotNumber }
+            .toSet()
         val pm = context.packageManager
         for (slot in 1..MAX_SLOTS) {
             val component = ComponentName(context, "com.wizzwuz.quicktiles.service.QuickTileService$slot")
-            val shouldBeEnabled = activeSlots.contains(slot)
+            val shouldBeEnabled = enabledSlots.contains(slot)
             val currentState = pm.getComponentEnabledSetting(component)
             val targetState = if (shouldBeEnabled) {
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED
@@ -286,6 +300,7 @@ class TileRepository(private val context: Context) {
         const val KEY_PRIVATE_ACTIVITY_LAUNCHABLE = "private_activity_launchable"
         const val KEY_SHOW_CATEGORIES = "show_categories"
         const val KEY_SORT_ORDER = "tile_sort_order"
+        private const val KEY_MIGRATED_MANUAL_QS = "migrated_manual_qs_v3"
 
         @Volatile
         private var INSTANCE: TileRepository? = null

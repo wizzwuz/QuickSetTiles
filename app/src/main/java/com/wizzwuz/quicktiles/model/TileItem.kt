@@ -18,7 +18,9 @@ enum class TileType(val displayName: String) {
 enum class TileSortOrder(val title: String) {
     NAME_ASC("Name (A-Z)"),
     NAME_DESC("Name (Z-A)"),
-    LAST_UPDATED("Last updated")
+    LAST_UPDATED("Last updated"),
+    TILE_NUMBER_ASC("Tile number (ascending)"),
+    TILE_NUMBER_DESC("Tile number (descending)")
 }
 
 enum class IconSourceType {

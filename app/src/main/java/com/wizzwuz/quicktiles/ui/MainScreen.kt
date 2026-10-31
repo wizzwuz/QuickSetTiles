@@ -63,6 +63,14 @@ fun MainScreen() {
             TileSortOrder.NAME_ASC -> nonMembers.sortedBy { it.name.lowercase() }
             TileSortOrder.NAME_DESC -> nonMembers.sortedByDescending { it.name.lowercase() }
             TileSortOrder.LAST_UPDATED -> nonMembers.sortedByDescending { it.createdAt }
+            TileSortOrder.TILE_NUMBER_ASC -> nonMembers.sortedWith(
+                compareBy<TileItem> { if (it.slotNumber in 1..TileRepository.MAX_SLOTS) it.slotNumber else Int.MAX_VALUE }
+                    .thenBy { it.name.lowercase() }
+            )
+            TileSortOrder.TILE_NUMBER_DESC -> nonMembers.sortedWith(
+                compareByDescending<TileItem> { if (it.slotNumber in 1..TileRepository.MAX_SLOTS) it.slotNumber else -1 }
+                    .thenBy { it.name.lowercase() }
+            )
         }
     }
 
@@ -173,6 +181,8 @@ fun MainScreen() {
                                                     TileSortOrder.NAME_ASC -> Icons.Default.ArrowUpward
                                                     TileSortOrder.NAME_DESC -> Icons.Default.ArrowDownward
                                                     TileSortOrder.LAST_UPDATED -> Icons.Default.Update
+                                                    TileSortOrder.TILE_NUMBER_ASC -> Icons.Default.ArrowUpward
+                                                    TileSortOrder.TILE_NUMBER_DESC -> Icons.Default.ArrowDownward
                                                 }
                                                 Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
                                             },
@@ -342,8 +352,8 @@ fun MainScreen() {
                                         selectedTileIds + tile.id
                                     }
                                 },
-                                onAddToQs = { tile ->
-                                    repository.setTileAddedToQs(tile.id, true)
+                                onToggleAddToQs = { tile, added ->
+                                    repository.setTileAddedToQs(tile.id, added)
                                 },
                                 onInactivateTile = { tile ->
                                     repository.inactivateTile(tile.id)
@@ -382,8 +392,8 @@ fun MainScreen() {
                                         selectedTileIds + tile.id
                                     }
                                 },
-                                onAddToQs = { tile ->
-                                    repository.setTileAddedToQs(tile.id, true)
+                                onToggleAddToQs = { tile, added ->
+                                    repository.setTileAddedToQs(tile.id, added)
                                 },
                                 onInactivateTile = { tile ->
                                     repository.inactivateTile(tile.id)

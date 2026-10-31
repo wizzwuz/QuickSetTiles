@@ -46,7 +46,7 @@ fun TilesListScreen(
     onTileClick: (TileItem) -> Unit,
     onTileLongClick: (TileItem) -> Unit = {},
     onTileSelectToggle: (TileItem) -> Unit = {},
-    onAddToQs: (TileItem) -> Unit = {},
+    onToggleAddToQs: (TileItem, Boolean) -> Unit = { _, _ -> },
     onInactivateTile: (TileItem) -> Unit,
     onActivateTile: (TileItem) -> Unit,
     onDeleteTile: (TileItem) -> Unit,
@@ -292,43 +292,48 @@ fun TilesListScreen(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     if (isActiveTab) {
-                                        // Button to manually add tile to system Quick Settings shade
+                                        // Button to manually add / remove tile to system Quick Settings shade
                                         IconButton(
                                             onClick = {
-                                                onAddToQs(tile)
-                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                                    try {
-                                                        val sbm = context.getSystemService(StatusBarManager::class.java)
-                                                        val comp = ComponentName(
-                                                            context,
-                                                            "com.wizzwuz.quicktiles.service.QuickTileService${tile.slotNumber}"
-                                                        )
-                                                        sbm.requestAddTileService(
-                                                            comp,
-                                                            tile.name,
-                                                            Icon.createWithBitmap(previewBitmap),
-                                                            context.mainExecutor
-                                                        ) { res ->
-                                                            val msg = when (res) {
-                                                                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "Tile already added"
-                                                                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "Tile added to Quick Settings"
-                                                                else -> "Tile not added"
+                                                if (tile.isAddedToQs) {
+                                                    onToggleAddToQs(tile, false)
+                                                    Toast.makeText(context, "Tile removed from Quick Settings", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    onToggleAddToQs(tile, true)
+                                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                                        try {
+                                                            val sbm = context.getSystemService(StatusBarManager::class.java)
+                                                            val comp = ComponentName(
+                                                                context,
+                                                                "com.wizzwuz.quicktiles.service.QuickTileService${tile.slotNumber}"
+                                                            )
+                                                            sbm.requestAddTileService(
+                                                                comp,
+                                                                tile.name,
+                                                                Icon.createWithBitmap(previewBitmap),
+                                                                context.mainExecutor
+                                                            ) { res ->
+                                                                val msg = when (res) {
+                                                                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "Tile already in Quick Settings"
+                                                                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "Tile added to Quick Settings"
+                                                                    else -> "Tile enabled in Quick Settings edit panel"
+                                                                }
+                                                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                                             }
-                                                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                                        } catch (e: Throwable) {
+                                                            Toast.makeText(context, "Tile enabled! Drag it into QS from the edit panel.", Toast.LENGTH_SHORT).show()
                                                         }
-                                                    } catch (e: Throwable) {
+                                                    } else {
                                                         Toast.makeText(context, "Tile enabled! Drag it into QS from the edit panel.", Toast.LENGTH_SHORT).show()
                                                     }
-                                                } else {
-                                                    Toast.makeText(context, "Tile enabled! Drag it into QS from the edit panel.", Toast.LENGTH_SHORT).show()
                                                 }
                                             },
                                             modifier = Modifier.size(34.dp)
                                         ) {
                                             Icon(
                                                 imageVector = if (tile.isAddedToQs) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
-                                                contentDescription = if (tile.isAddedToQs) "Tile already in Quick Settings" else "Add to Quick Settings",
-                                                tint = MaterialTheme.colorScheme.primary,
+                                                contentDescription = if (tile.isAddedToQs) "Tile added to Quick Settings (tap to remove)" else "Add to Quick Settings",
+                                                tint = if (tile.isAddedToQs) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
