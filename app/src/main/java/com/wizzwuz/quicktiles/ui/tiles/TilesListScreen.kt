@@ -34,6 +34,8 @@ import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.model.TileItem
 import com.wizzwuz.quicktiles.model.TileType
 import com.wizzwuz.quicktiles.util.IconProcessor
+import com.wizzwuz.quicktiles.util.QsTileManager
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -41,6 +43,7 @@ fun TilesListScreen(
     tiles: List<TileItem>,
     isActiveTab: Boolean,
     showCategories: Boolean = true,
+    searchQuery: String = "",
     selectedTileIds: Set<String> = emptySet(),
     listState: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
     onTileClick: (TileItem) -> Unit,
@@ -53,6 +56,7 @@ fun TilesListScreen(
     onAddTileClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var tileToDelete by remember { mutableStateOf<TileItem?>(null) }
     var selectedCategory by remember(isActiveTab) { mutableStateOf<TileType?>(null) }
 
@@ -112,31 +116,51 @@ fun TilesListScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(
-                            imageVector = if (isActiveTab) Icons.Default.ToggleOn else Icons.Default.ToggleOff,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(56.dp)
-                        )
-                        Text(
-                            text = if (isActiveTab) "No Active Tiles" else "No Inactive Tiles",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = if (isActiveTab)
-                                "Tap the center Plus (+) button below to create your first custom Quick Settings tile!"
-                            else
-                                "Deactivated tiles will appear here so you can re-enable them anytime.",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 8.dp)
-                        )
-                        if (isActiveTab) {
-                            Button(onClick = onAddTileClick) {
-                                Icon(Icons.Default.Add, contentDescription = null)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Create Tile")
+                        if (searchQuery.isNotBlank()) {
+                            Icon(
+                                imageVector = Icons.Default.SearchOff,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Text(
+                                text = "No Matching Tiles",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "No tiles found matching \"$searchQuery\".",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = if (isActiveTab) Icons.Default.ToggleOn else Icons.Default.ToggleOff,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Text(
+                                text = if (isActiveTab) "No Active Tiles" else "No Inactive Tiles",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (isActiveTab)
+                                    "Tap the center Plus (+) button below to create your first custom Quick Settings tile!"
+                                else
+                                    "Deactivated tiles will appear here so you can re-enable them anytime.",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
+                            if (isActiveTab) {
+                                Button(onClick = onAddTileClick) {
+                                    Icon(Icons.Default.Add, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Create Tile")
+                                }
                             }
                         }
                     }
@@ -296,35 +320,25 @@ fun TilesListScreen(
                                         IconButton(
                                             onClick = {
                                                 if (tile.isAddedToQs) {
-                                                    onToggleAddToQs(tile, false)
-                                                    Toast.makeText(context, "Tile removed from Quick Settings", Toast.LENGTH_SHORT).show()
+                                                    coroutineScope.launch {
+                                                        QsTileManager.removeTile(context, tile.slotNumber)
+                                                        onToggleAddToQs(tile, false)
+                                                        Toast.makeText(context, "Tile removed from Quick Settings", Toast.LENGTH_SHORT).show()
+                                                    }
                                                 } else {
-                                                    onToggleAddToQs(tile, true)
-                                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                                        try {
-                                                            val sbm = context.getSystemService(StatusBarManager::class.java)
-                                                            val comp = ComponentName(
-                                                                context,
-                                                                "com.wizzwuz.quicktiles.service.QuickTileService${tile.slotNumber}"
-                                                            )
-                                                            sbm.requestAddTileService(
-                                                                comp,
-                                                                tile.name,
-                                                                Icon.createWithBitmap(previewBitmap),
-                                                                context.mainExecutor
-                                                            ) { res ->
-                                                                val msg = when (res) {
-                                                                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "Tile already in Quick Settings"
-                                                                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "Tile added to Quick Settings"
-                                                                    else -> "Tile enabled in Quick Settings edit panel"
-                                                                }
-                                                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                                            }
-                                                        } catch (e: Throwable) {
-                                                            Toast.makeText(context, "Tile enabled! Drag it into QS from the edit panel.", Toast.LENGTH_SHORT).show()
+                                                    coroutineScope.launch {
+                                                        onToggleAddToQs(tile, true)
+                                                        val addedAtEnd = QsTileManager.addTileToLast(
+                                                            context = context,
+                                                            slot = tile.slotNumber,
+                                                            tileName = tile.name,
+                                                            iconBitmap = previewBitmap
+                                                        )
+                                                        if (addedAtEnd) {
+                                                            Toast.makeText(context, "Tile added to the end of Quick Settings", Toast.LENGTH_SHORT).show()
+                                                        } else {
+                                                            Toast.makeText(context, "Tile enabled in Quick Settings edit panel", Toast.LENGTH_SHORT).show()
                                                         }
-                                                    } else {
-                                                        Toast.makeText(context, "Tile enabled! Drag it into QS from the edit panel.", Toast.LENGTH_SHORT).show()
                                                     }
                                                 }
                                             },
@@ -340,7 +354,12 @@ fun TilesListScreen(
 
                                         // Disable button to deactivate and move to inactive tab
                                         FilledTonalButton(
-                                            onClick = { onInactivateTile(tile) },
+                                            onClick = {
+                                                coroutineScope.launch {
+                                                    QsTileManager.removeTile(context, tile.slotNumber)
+                                                    onInactivateTile(tile)
+                                                }
+                                            },
                                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                                             modifier = Modifier.height(32.dp)
                                         ) {

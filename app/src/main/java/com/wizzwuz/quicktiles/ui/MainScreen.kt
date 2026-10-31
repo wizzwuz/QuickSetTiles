@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -49,6 +50,8 @@ fun MainScreen() {
     var editingTile by remember { mutableStateOf<TileItem?>(null) }
     var selectedTileIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
+    var isSearchOpen by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
 
     val activeListState = rememberLazyListState()
     val inactiveListState = rememberLazyListState()
@@ -57,17 +60,23 @@ fun MainScreen() {
         allTiles.filter { it.type == TileType.COLLECTION }.flatMap { it.collectionItemIds }.toSet()
     }
 
-    val sortedTiles = remember(allTiles, sortOrder, collectionMemberIds) {
+    val sortedTiles = remember(allTiles, sortOrder, collectionMemberIds, searchQuery) {
         val nonMembers = allTiles.filter { it.id !in collectionMemberIds }
+        val filtered = if (searchQuery.isBlank()) {
+            nonMembers
+        } else {
+            val q = searchQuery.trim().lowercase()
+            nonMembers.filter { it.name.lowercase().contains(q) }
+        }
         when (sortOrder) {
-            TileSortOrder.NAME_ASC -> nonMembers.sortedBy { it.name.lowercase() }
-            TileSortOrder.NAME_DESC -> nonMembers.sortedByDescending { it.name.lowercase() }
-            TileSortOrder.LAST_UPDATED -> nonMembers.sortedByDescending { it.createdAt }
-            TileSortOrder.TILE_NUMBER_ASC -> nonMembers.sortedWith(
+            TileSortOrder.NAME_ASC -> filtered.sortedBy { it.name.lowercase() }
+            TileSortOrder.NAME_DESC -> filtered.sortedByDescending { it.name.lowercase() }
+            TileSortOrder.LAST_UPDATED -> filtered.sortedByDescending { it.createdAt }
+            TileSortOrder.TILE_NUMBER_ASC -> filtered.sortedWith(
                 compareBy<TileItem> { if (it.slotNumber in 1..TileRepository.MAX_SLOTS) it.slotNumber else Int.MAX_VALUE }
                     .thenBy { it.name.lowercase() }
             )
-            TileSortOrder.TILE_NUMBER_DESC -> nonMembers.sortedWith(
+            TileSortOrder.TILE_NUMBER_DESC -> filtered.sortedWith(
                 compareByDescending<TileItem> { if (it.slotNumber in 1..TileRepository.MAX_SLOTS) it.slotNumber else -1 }
                     .thenBy { it.name.lowercase() }
             )
@@ -77,8 +86,11 @@ fun MainScreen() {
     val activeTiles = remember(sortedTiles) { sortedTiles.filter { it.isActive } }
     val inactiveTiles = remember(sortedTiles) { sortedTiles.filter { !it.isActive } }
 
-    BackHandler(enabled = selectedTileIds.isNotEmpty() || currentDestination != MainDestination.LIST || selectedTab != 0) {
-        if (selectedTileIds.isNotEmpty()) {
+    BackHandler(enabled = isSearchOpen || selectedTileIds.isNotEmpty() || currentDestination != MainDestination.LIST || selectedTab != 0) {
+        if (isSearchOpen) {
+            isSearchOpen = false
+            searchQuery = ""
+        } else if (selectedTileIds.isNotEmpty()) {
             selectedTileIds = emptySet()
         } else if (currentDestination != MainDestination.LIST) {
             currentDestination = MainDestination.LIST
@@ -142,22 +154,65 @@ fun MainScreen() {
                 } else {
                     TopAppBar(
                         title = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.DashboardCustomize,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
+                            if (isSearchOpen) {
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    placeholder = {
+                                        Text("Search tiles...", fontSize = 14.sp)
+                                    },
+                                    singleLine = true,
+                                    trailingIcon = {
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { searchQuery = "" }) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = "Clear search",
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                                    )
                                 )
-                                Text(
-                                    text = "QuickSetTiles",
-                                    fontWeight = FontWeight.ExtraBold
-                                )
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.DashboardCustomize,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "QuickSetTiles",
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
                             }
                         },
                         actions = {
+                            if (isSearchOpen) {
+                                IconButton(onClick = {
+                                    isSearchOpen = false
+                                    searchQuery = ""
+                                }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close search")
+                                }
+                            } else {
+                                IconButton(onClick = { isSearchOpen = true }) {
+                                    Icon(Icons.Default.Search, contentDescription = "Search tiles by name")
+                                }
+                            }
+
                             var showSortMenu by remember { mutableStateOf(false) }
 
                             Box {
@@ -336,6 +391,7 @@ fun MainScreen() {
                                 isActiveTab = true,
                                 listState = activeListState,
                                 showCategories = showCategories,
+                                searchQuery = searchQuery,
                                 selectedTileIds = selectedTileIds,
                                 onTileClick = { tile ->
                                     editingTile = tile
@@ -376,6 +432,7 @@ fun MainScreen() {
                                 isActiveTab = false,
                                 listState = inactiveListState,
                                 showCategories = showCategories,
+                                searchQuery = searchQuery,
                                 selectedTileIds = selectedTileIds,
                                 onTileClick = { tile ->
                                     editingTile = tile

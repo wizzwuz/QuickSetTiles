@@ -11,6 +11,7 @@ import com.wizzwuz.quicktiles.util.ShizukuHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class QuickTilesApp : Application() {
     companion object {
@@ -29,6 +30,10 @@ class QuickTilesApp : Application() {
         TileRepository.getInstance(this)
         // Initialize Shizuku binder and listeners eagerly
         ShizukuHelper.init()
+        // Ensure WRITE_SECURE_SETTINGS is granted if Shizuku / Root is present
+        applicationScope.launch {
+            com.wizzwuz.quicktiles.util.QsTileManager.ensurePermission(this@QuickTilesApp)
+        }
     }
 
     override fun onTrimMemory(level: Int) {
