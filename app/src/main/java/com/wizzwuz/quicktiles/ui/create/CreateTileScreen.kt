@@ -1440,6 +1440,7 @@ fun CollectionCreatorScreen(
     var collectionIconConfig by remember {
         mutableStateOf(initialTile?.iconConfig ?: IconConfig(sourceType = IconSourceType.PRESET, sourceData = "collections"))
     }
+    var collectionVisualState by remember { mutableStateOf(initialTile?.visualState ?: TileVisualState.ENABLED) }
 
     val collectionItems = remember {
         val list = mutableStateListOf<TileItem>()
@@ -1569,7 +1570,8 @@ fun CollectionCreatorScreen(
                 isAddedToQs = false,
                 collectionItemIds = collectionItems.map { it.id },
                 collapseOnTap = collapseOnTap,
-                tilesPerRow = tilesPerRow
+                tilesPerRow = tilesPerRow,
+                visualState = collectionVisualState
             )).copy(
                 name = collectionName.ifBlank { "My Collection" },
                 type = TileType.COLLECTION,
@@ -1577,7 +1579,8 @@ fun CollectionCreatorScreen(
                 iconConfig = collectionIconConfig,
                 collectionItemIds = collectionItems.map { it.id },
                 collapseOnTap = collapseOnTap,
-                tilesPerRow = tilesPerRow
+                tilesPerRow = tilesPerRow,
+                visualState = collectionVisualState
             )
             onSaveCollection(collectionTile, collectionItems.toList())
         }
@@ -2045,6 +2048,51 @@ fun CollectionCreatorScreen(
                     isSelected = false,
                     onClick = { folderPicker.launch(null) }
                 )
+            }
+
+            // --- TILE BEHAVIOR & APPEARANCE ---
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Column {
+                        Text(
+                            text = "Tile Behavior & Appearance",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Choose whether this collection tile appears enabled or disabled in the quick settings panel",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = collectionVisualState == TileVisualState.ENABLED,
+                                onClick = { collectionVisualState = TileVisualState.ENABLED },
+                                label = { Text("Enabled", fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = collectionVisualState == TileVisualState.DISABLED,
+                                onClick = { collectionVisualState = TileVisualState.DISABLED },
+                                label = { Text("Disabled", fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
             }
 
             // Bottom-most choice in bottom section: "Collapse panel on click"
