@@ -2367,10 +2367,6 @@ fun CollectionCreatorScreen(
             initialShowPopups = false,
             initialMultiShellSteps = emptyList(),
             onDismiss = { showShellDialog = false },
-            onSwitchToMultipleShell = {
-                showShellDialog = false
-                showMultipleShellDialog = true
-            },
             onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon, popups, steps ->
                 showShellDialog = false
                 val item = TileItem(
