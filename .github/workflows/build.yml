@@ -13,7 +13,7 @@ permissions:
 jobs:
   build:
     name: Build ${{ matrix.build_type }} APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -29,21 +29,16 @@ jobs:
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         fetch-depth: 1
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Setup Java 17
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v6
       with:
         distribution: 'temurin'
         java-version: '17'
-
-    - name: Setup Gradle Cache
-      uses: gradle/actions/setup-gradle@v3
-      with:
-        cache-read-only: false
 
     - name: Ensure Release Keystore
       run: |
@@ -59,10 +54,10 @@ jobs:
             -storepass "quicksettiles_keystore_pass" \
             -keypass "quicksettiles_keystore_pass" \
             -dname "CN=QuickSetTiles, OU=Mobile, O=QuickSetTiles, L=World, ST=Global, C=US"
-          echo "::notice title=Release Keystore::Generated new RSA 2048-bit release keystore for APK signing."
+          echo "Generated new RSA 2048-bit release keystore for APK signing."
         else
           echo "Release keystore present."
-          echo "::notice title=Release Keystore::Using existing release keystore for APK signing."
+          echo "Using existing release keystore for APK signing."
         fi
 
     - name: Grant Execute Permission to Gradlew
@@ -77,7 +72,7 @@ jobs:
 
         icon_path = 'icon.png'
         if not os.path.exists(icon_path):
-            print('::warning title=Launcher Icons::icon.png not found; default mipmap icons will be used.')
+            print('icon.png not found; default mipmap icons will be used.')
             exit(0)
 
         img = Image.open(icon_path).convert('RGBA')
@@ -109,21 +104,21 @@ jobs:
             os.remove(xml_fg)
         fg_canvas.save('app/src/main/res/drawable/ic_launcher_foreground.png')
         print('Generated ic_launcher_foreground.png (432x432)')
-        print('::notice title=Launcher Icons::Successfully generated adaptive foreground (432x432) and mipmap launcher icons (mdpi-xxxhdpi) from icon.png.')
+        print('Successfully generated adaptive foreground (432x432) and mipmap launcher icons (mdpi-xxxhdpi) from icon.png.')
         "
 
     - name: Build APK
       run: ./gradlew ${{ matrix.task }} -x test --parallel --build-cache
 
     - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ matrix.artifact_name }}
         path: ${{ matrix.artifact_path }}
         if-no-files-found: error
         retention-days: 14
 
-    - name: Add Build Summary & Workflow Annotations
+    - name: Add Build Summary
       if: always()
       run: |
         if [ "${{ job.status }}" = "success" ]; then
@@ -133,8 +128,7 @@ jobs:
             APK_SIZE_BYTES=$(wc -c < "$APK_FILE" | tr -d ' ')
             APK_SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $APK_SIZE_BYTES / 1048576}")
             
-            echo "::notice title=Build Success (${{ matrix.build_type }})::QuickSetTiles ${{ matrix.build_type }} APK generated: $APK_NAME ($APK_SIZE_MB MB). Artifact: ${{ matrix.artifact_name }}"
-            echo "::notice file=app/build.gradle.kts,line=16,title=App Release::com.wizzwuz.quicktiles v1.0.5 (code 6) - ${{ matrix.build_type }} signed and ready."
+            echo "QuickSetTiles ${{ matrix.build_type }} APK generated: $APK_NAME ($APK_SIZE_MB MB). Artifact: ${{ matrix.artifact_name }}"
             
             echo "### Build Complete! 🚀" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -151,8 +145,8 @@ jobs:
             echo "> [!NOTE]" >> $GITHUB_STEP_SUMMARY
             echo "> The APK is signed with the release keystore and supports Android 7.0+ (API 24 to 35)." >> $GITHUB_STEP_SUMMARY
           else
-            echo "::warning title=Artifact Missing (${{ matrix.build_type }})::APK file was not found at ${{ matrix.artifact_path }}"
+            echo "Artifact Missing (${{ matrix.build_type }}): APK file was not found at ${{ matrix.artifact_path }}"
           fi
         else
-          echo "::error title=Build Failure (${{ matrix.build_type }})::QuickSetTiles ${{ matrix.build_type }} build failed. Check step logs for details."
+          echo "Build Failure (${{ matrix.build_type }}): QuickSetTiles ${{ matrix.build_type }} build failed. Check step logs for details."
         fi
