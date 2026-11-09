@@ -8,6 +8,7 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
+import android.util.JsonReader
 import androidx.core.content.ContextCompat
 import com.caverock.androidsvg.SVG
 import com.wizzwuz.quicktiles.R
@@ -64,17 +65,18 @@ object IconProcessor {
             "volume_up" to "Volume",
             "power_settings_new" to "Power"
         )
-        val added = HashSet<String>()
+        val addedNorm = HashSet<String>()
         popularKeys.forEach { (k, label) ->
             list.add(k to label)
-            added.add(k)
+            addedNorm.add(k.replace('-', '_'))
         }
 
         val sortedKeys = materialSvgMap?.keys?.sorted() ?: emptyList()
         for (k in sortedKeys) {
-            if (!added.contains(k)) {
+            val norm = k.replace('-', '_')
+            if (!addedNorm.contains(norm)) {
                 list.add(k to formatIconLabel(k))
-                added.add(k)
+                addedNorm.add(norm)
             }
         }
         allPresetIconsCache = list
@@ -94,15 +96,15 @@ object IconProcessor {
             try {
                 context.assets.open("material_icons.json.gz").use { inputStream ->
                     java.util.zip.GZIPInputStream(inputStream).use { gzipStream ->
-                        val reader = java.io.InputStreamReader(gzipStream, Charsets.UTF_8)
-                        val text = reader.readText()
-                        val json = org.json.JSONObject(text)
-                        val map = HashMap<String, String>(json.length())
-                        val keys = json.keys()
-                        while (keys.hasNext()) {
-                            val k = keys.next()
-                            map[k] = json.getString(k)
+                        val jsonReader = JsonReader(java.io.InputStreamReader(gzipStream, Charsets.UTF_8))
+                        val map = HashMap<String, String>(58000)
+                        jsonReader.beginObject()
+                        while (jsonReader.hasNext()) {
+                            val name = jsonReader.nextName()
+                            val value = jsonReader.nextString()
+                            map[name] = value
                         }
+                        jsonReader.endObject()
                         materialSvgMap = map
                     }
                 }
@@ -814,11 +816,16 @@ object IconProcessor {
         }
 
         val svgContent = materialSvgMap?.get(effectiveKey)
+            ?: materialSvgMap?.get(effectiveKey.replace('_', '-'))
+            ?: materialSvgMap?.get(effectiveKey.replace('-', '_'))
+
+        val colorStr = if (isDarkTheme) "white" else "#111827"
         val iconColor = if (isDarkTheme) Color.WHITE else 0xFF111827.toInt()
 
         val bitmap = if (svgContent != null) {
             try {
-                val fullSvg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"${if (isDarkTheme) "white" else "#111827"}\">$svgContent</svg>"
+                val resolvedContent = svgContent.replace("currentColor", colorStr)
+                val fullSvg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"$colorStr\">$resolvedContent</svg>"
                 val svg = SVG.getFromString(fullSvg)
                 val targetDim = 96
                 svg.documentWidth = targetDim.toFloat()
