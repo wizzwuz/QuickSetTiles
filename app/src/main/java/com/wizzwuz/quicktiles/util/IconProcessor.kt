@@ -20,6 +20,9 @@ import java.util.concurrent.ConcurrentHashMap
 object IconProcessor {
 
     private val elementCache = ConcurrentHashMap<String, Bitmap>()
+    private val presetBitmapCache = ConcurrentHashMap<String, Bitmap>()
+    private var allPresetIconsCache: List<Pair<String, String>>? = null
+    private var materialSvgMap: Map<String, String>? = null
 
     fun clearCache() {
         elementCache.values.forEach { bmp ->
@@ -28,6 +31,85 @@ object IconProcessor {
             }
         }
         elementCache.clear()
+        presetBitmapCache.values.forEach { bmp ->
+            if (!bmp.isRecycled) {
+                try { bmp.recycle() } catch (_: Throwable) {}
+            }
+        }
+        presetBitmapCache.clear()
+    }
+
+    fun getPresetIcons(context: Context): List<Pair<String, String>> {
+        allPresetIconsCache?.let { return it }
+        ensureMaterialIconsLoaded(context)
+        val list = mutableListOf<Pair<String, String>>()
+        val popularKeys = listOf(
+            "apps" to "App",
+            "web" to "Website",
+            "terminal" to "Terminal/Shell",
+            "folder" to "Folder",
+            "description" to "File",
+            "settings" to "Settings",
+            "star" to "Star",
+            "music_note" to "Music",
+            "camera_alt" to "Camera",
+            "flashlight_on" to "Flashlight",
+            "wifi" to "Wi-Fi",
+            "bluetooth" to "Bluetooth",
+            "battery_full" to "Battery",
+            "alarm" to "Alarm",
+            "dark_mode" to "Dark Mode",
+            "sync" to "Sync",
+            "lock" to "Lock",
+            "volume_up" to "Volume",
+            "power_settings_new" to "Power"
+        )
+        val added = HashSet<String>()
+        popularKeys.forEach { (k, label) ->
+            list.add(k to label)
+            added.add(k)
+        }
+
+        val sortedKeys = materialSvgMap?.keys?.sorted() ?: emptyList()
+        for (k in sortedKeys) {
+            if (!added.contains(k)) {
+                list.add(k to formatIconLabel(k))
+                added.add(k)
+            }
+        }
+        allPresetIconsCache = list
+        return list
+    }
+
+    private fun formatIconLabel(key: String): String {
+        return key.split('_', '-').joinToString(" ") { word ->
+            word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        }
+    }
+
+    private fun ensureMaterialIconsLoaded(context: Context) {
+        if (materialSvgMap != null) return
+        synchronized(this) {
+            if (materialSvgMap != null) return
+            try {
+                context.assets.open("material_icons.json.gz").use { inputStream ->
+                    java.util.zip.GZIPInputStream(inputStream).use { gzipStream ->
+                        val reader = java.io.InputStreamReader(gzipStream, Charsets.UTF_8)
+                        val text = reader.readText()
+                        val json = org.json.JSONObject(text)
+                        val map = HashMap<String, String>(json.length())
+                        val keys = json.keys()
+                        while (keys.hasNext()) {
+                            val k = keys.next()
+                            map[k] = json.getString(k)
+                        }
+                        materialSvgMap = map
+                    }
+                }
+            } catch (e: Throwable) {
+                materialSvgMap = emptyMap()
+            }
+        }
     }
 
     val PRESET_ICONS = listOf(
@@ -715,12 +797,51 @@ object IconProcessor {
         return drawableToBitmap(d)
     }
 
-    private fun getPresetBitmap(context: Context, key: String, isDarkTheme: Boolean = true): Bitmap {
-        // Draw crisp vector icon dynamically
+    fun getPresetBitmap(context: Context, key: String, isDarkTheme: Boolean = true): Bitmap {
+        val cacheKey = "${key}_$isDarkTheme"
+        presetBitmapCache[cacheKey]?.let { cached ->
+            if (!cached.isRecycled) return cached
+        }
+
+        ensureMaterialIconsLoaded(context)
+
+        val effectiveKey = when (key) {
+            "tile_default" -> "widgets"
+            "file" -> "description"
+            "music" -> "music_note"
+            "flash" -> "flashlight_on"
+            else -> key
+        }
+
+        val svgContent = materialSvgMap?.get(effectiveKey)
+        val iconColor = if (isDarkTheme) Color.WHITE else 0xFF111827.toInt()
+
+        val bitmap = if (svgContent != null) {
+            try {
+                val fullSvg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"${if (isDarkTheme) "white" else "#111827"}\">$svgContent</svg>"
+                val svg = SVG.getFromString(fullSvg)
+                val targetDim = 96
+                svg.documentWidth = targetDim.toFloat()
+                svg.documentHeight = targetDim.toFloat()
+                val bmp = Bitmap.createBitmap(targetDim, targetDim, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bmp)
+                svg.renderToCanvas(canvas)
+                bmp
+            } catch (e: Throwable) {
+                renderFallbackPresetBitmap(context, key, isDarkTheme, iconColor)
+            }
+        } else {
+            renderFallbackPresetBitmap(context, key, isDarkTheme, iconColor)
+        }
+
+        presetBitmapCache[cacheKey] = bitmap
+        return bitmap
+    }
+
+    private fun renderFallbackPresetBitmap(context: Context, key: String, isDarkTheme: Boolean, iconColor: Int): Bitmap {
         val size = 96
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val iconColor = if (isDarkTheme) Color.WHITE else 0xFF111827.toInt()
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = iconColor
             style = Paint.Style.FILL
@@ -728,7 +849,6 @@ object IconProcessor {
 
         when (key) {
             "web" -> {
-                // Draw globe
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = 6f
                 canvas.drawCircle(48f, 48f, 36f, paint)
@@ -737,7 +857,6 @@ object IconProcessor {
                 canvas.drawOval(oval, paint)
             }
             "terminal" -> {
-                // Draw terminal prompt > _
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = 7f
                 paint.strokeCap = Paint.Cap.ROUND

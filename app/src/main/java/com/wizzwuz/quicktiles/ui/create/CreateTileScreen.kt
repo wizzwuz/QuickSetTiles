@@ -357,7 +357,8 @@ fun CreateTileScreen(
             }
         )
     } else {
-        Scaffold(
+        Box(modifier = Modifier.fillMaxSize()) {
+            Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (initialTile == null) "Create Quick Tile" else "Edit Quick Tile") },
@@ -1015,6 +1016,7 @@ fun CreateTileScreen(
             }
         )
     }
+        }
     }
 }
 
@@ -1131,7 +1133,8 @@ fun EditTileSheet(
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = MaterialTheme.colorScheme.surface
     ) {
-        Column(
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
@@ -1397,70 +1400,69 @@ fun EditTileSheet(
             ) {
                 Text("Save Changes", fontWeight = FontWeight.Bold)
             }
+            if (showShellDialog) {
+                ShellDialog(
+                    initialName = itemName,
+                    initialCommand = itemTargetData,
+                    initialOnCommand = itemOnCommand,
+                    initialOffCommand = itemOffCommand,
+                    initialVisualState = itemVisualState,
+                    initialOnTileName = itemOnTileName,
+                    initialOffTileName = itemOffTileName,
+                    initialOnIconConfig = itemOnIconConfig,
+                    initialOffIconConfig = itemOffIconConfig,
+                    initialShowPopups = itemShowPopups,
+                    initialMultiShellSteps = itemMultiShellSteps,
+                    onDismiss = { showShellDialog = false },
+                    onSwitchToMultipleShell = {
+                        showShellDialog = false
+                        showMultipleShellDialog = true
+                    },
+                    onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon, popups, steps ->
+                        showShellDialog = false
+                        itemName = name
+                        itemTargetData = cmd
+                        itemOnCommand = onCmd
+                        itemOffCommand = offCmd
+                        itemVisualState = vState
+                        itemOnTileName = onName
+                        itemOffTileName = offName
+                        itemOnIconConfig = onIcon
+                        itemOffIconConfig = offIcon
+                        itemShowPopups = popups
+                        itemMultiShellSteps = steps
+                        if (onIcon != null) {
+                            itemIconConfig = onIcon
+                        }
+                    }
+                )
+            }
+
+            if (showMultipleShellDialog) {
+                MultipleShellDialog(
+                    initialSteps = itemMultiShellSteps,
+                    initialShowPopups = itemShowPopups,
+                    onDismiss = { showMultipleShellDialog = false },
+                    onBackToSingleShell = {
+                        showMultipleShellDialog = false
+                        showShellDialog = true
+                    },
+                    onConfirm = { steps, popups ->
+                        showMultipleShellDialog = false
+                        val first = steps.firstOrNull()
+                        if (first != null) {
+                            itemName = first.name.ifBlank { itemName }
+                            itemTargetData = first.command
+                            itemOnCommand = first.command
+                            itemVisualState = first.visualState
+                            itemIconConfig = first.iconConfig
+                        }
+                        itemShowPopups = popups
+                        itemMultiShellSteps = steps
+                    }
+                )
+            }
         }
-    }
-
-    if (showShellDialog) {
-        ShellDialog(
-            initialName = itemName,
-            initialCommand = itemTargetData,
-            initialOnCommand = itemOnCommand,
-            initialOffCommand = itemOffCommand,
-            initialVisualState = itemVisualState,
-            initialOnTileName = itemOnTileName,
-            initialOffTileName = itemOffTileName,
-            initialOnIconConfig = itemOnIconConfig,
-            initialOffIconConfig = itemOffIconConfig,
-            initialShowPopups = itemShowPopups,
-            initialMultiShellSteps = itemMultiShellSteps,
-            onDismiss = { showShellDialog = false },
-            onSwitchToMultipleShell = {
-                showShellDialog = false
-                showMultipleShellDialog = true
-            },
-            onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon, popups, steps ->
-                showShellDialog = false
-                itemName = name
-                itemTargetData = cmd
-                itemOnCommand = onCmd
-                itemOffCommand = offCmd
-                itemVisualState = vState
-                itemOnTileName = onName
-                itemOffTileName = offName
-                itemOnIconConfig = onIcon
-                itemOffIconConfig = offIcon
-                itemShowPopups = popups
-                itemMultiShellSteps = steps
-                if (onIcon != null) {
-                    itemIconConfig = onIcon
-                }
-            }
-        )
-    }
-
-    if (showMultipleShellDialog) {
-        MultipleShellDialog(
-            initialSteps = itemMultiShellSteps,
-            initialShowPopups = itemShowPopups,
-            onDismiss = { showMultipleShellDialog = false },
-            onBackToSingleShell = {
-                showMultipleShellDialog = false
-                showShellDialog = true
-            },
-            onConfirm = { steps, popups ->
-                showMultipleShellDialog = false
-                val first = steps.firstOrNull()
-                if (first != null) {
-                    itemName = first.name.ifBlank { itemName }
-                    itemTargetData = first.command
-                    itemOnCommand = first.command
-                    itemVisualState = first.visualState
-                    itemIconConfig = first.iconConfig
-                }
-                itemShowPopups = popups
-                itemMultiShellSteps = steps
-            }
-        )
     }
 
     if (showPresetsDialog) {
@@ -1686,7 +1688,8 @@ fun CollectionCreatorScreen(
         )
     }
 
-    Scaffold(
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (initialTile == null) "Create Collection" else "Edit Collection") },
@@ -2411,6 +2414,7 @@ fun CollectionCreatorScreen(
                 collectionIconConfig = IconConfig(sourceType = IconSourceType.APP_ICON, sourceData = pkg)
             }
         )
+    }
     }
 }
 

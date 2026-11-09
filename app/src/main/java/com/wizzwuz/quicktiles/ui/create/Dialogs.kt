@@ -32,6 +32,7 @@ import com.wizzwuz.quicktiles.model.ShellStep
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.asImageBitmap
@@ -532,18 +533,13 @@ fun FullscreenScriptEditorDialog(
         onDismissAndSave(script)
     }
 
-    Dialog(
-        onDismissRequest = { onDismissAndSave(script) },
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
     ) {
-        val view = LocalView.current
-        DisposableEffect(view) {
-            val window = (view.parent as? DialogWindowProvider)?.window
-            window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-            onDispose {}
-        }
         Scaffold(
-            modifier = Modifier.imePadding(),
+            modifier = Modifier.windowInsetsPadding(WindowInsets.ime),
             topBar = {
                 TopAppBar(
                     title = {
@@ -982,38 +978,34 @@ fun MultipleShellDialog(
 
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true
-        )
-    ) {
-        val view = LocalView.current
-        DisposableEffect(view) {
-            val window = (view.parent as? DialogWindowProvider)?.window
-            window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-            onDispose {}
-        }
+    BackHandler(onBack = onDismiss)
 
-        Box(
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss
+            )
+            .windowInsetsPadding(WindowInsets.ime)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
             modifier = Modifier
-                .fillMaxSize()
-                .imePadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .widthIn(max = 560.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {}
+                ),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 560.dp)
-                    .heightIn(max = 680.dp),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1541,38 +1533,34 @@ fun ShellDialog(
         )
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true
-        )
-    ) {
-        val view = LocalView.current
-        DisposableEffect(view) {
-            val window = (view.parent as? DialogWindowProvider)?.window
-            window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-            onDispose {}
-        }
+    BackHandler(onBack = onDismiss)
 
-        Box(
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss
+            )
+            .windowInsetsPadding(WindowInsets.ime)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
             modifier = Modifier
-                .fillMaxSize()
-                .imePadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .widthIn(max = 560.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {}
+                ),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 560.dp)
-                    .heightIn(max = 680.dp),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1988,7 +1976,6 @@ fun ShellDialog(
                 }
             }
         }
-    }
 }
 
 @Composable
@@ -2001,6 +1988,20 @@ fun IconPresetsDialog(
 ) {
     val context = LocalContext.current
     var showAppPickerInPresets by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchVisible by remember { mutableStateOf(true) }
+
+    val allPresets = remember { IconProcessor.getPresetIcons(context) }
+    val filteredPresets = remember(searchQuery, allPresets) {
+        if (searchQuery.isBlank()) {
+            allPresets
+        } else {
+            val q = searchQuery.trim().lowercase()
+            allPresets.filter { (key, label) ->
+                key.lowercase().contains(q) || label.lowercase().contains(q)
+            }
+        }
+    }
 
     val imagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -2024,84 +2025,217 @@ fun IconPresetsDialog(
         )
     }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text("Choose Preset Icon") },
-        text = {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.height(280.dp).fillMaxWidth()
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 560.dp)
+                    .fillMaxHeight(0.85f),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
-                items(IconProcessor.PRESET_ICONS) { (key, label) ->
-                    val isSelected = currentKey == key
-                    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-                    val bmp = remember(key, isDark) {
-                        IconProcessor.processIconBitmap(
-                            context,
-                            IconConfig(sourceType = IconSourceType.PRESET, sourceData = key),
-                            isDarkTheme = isDark
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    // Header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Choose Preset Icon",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${filteredPresets.size} icons available",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { isSearchVisible = !isSearchVisible },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search icons",
+                                    tint = if (isSearchVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            IconButton(
+                                onClick = onDismiss,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close"
+                                )
+                            }
+                        }
+                    }
+
+                    // Search input
+                    if (isSearchVisible) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("Search by name (e.g. wifi, battery, volume)...", fontSize = 12.sp) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            trailingIcon = if (searchQuery.isNotEmpty()) {
+                                {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Clear",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            } else null,
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                            textStyle = LocalTextStyle.current.copy(fontSize = 13.sp)
                         )
                     }
-                    Card(
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Icons Grid
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 68.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onSelectPreset(key) },
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                        )
+                            .weight(1f)
+                            .fillMaxWidth()
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(8.dp).fillMaxWidth()
+                        items(filteredPresets, key = { it.first }) { (key, label) ->
+                            val isSelected = currentKey == key
+                            val bmp = remember(key, isDark) {
+                                IconProcessor.processIconBitmap(
+                                    context,
+                                    IconConfig(sourceType = IconSourceType.PRESET, sourceData = key),
+                                    targetPixelSize = 96,
+                                    isDarkTheme = isDark
+                                )
+                            }
+                            Card(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        onSelectPreset(key)
+                                        onDismiss()
+                                    },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSelected)
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    else
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                )
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier
+                                        .padding(6.dp)
+                                        .fillMaxWidth()
+                                ) {
+                                    Image(
+                                        bitmap = bmp.asImageBitmap(),
+                                        contentDescription = label,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = label,
+                                        fontSize = 9.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalDivider()
+
+                    // Bottom action buttons
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (onSelectCustomFile != null) {
+                                OutlinedButton(
+                                    onClick = { imagePicker.launch("*/*") },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.FolderOpen,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Pick File", fontSize = 11.sp)
+                                }
+                            }
+                            if (onSelectAppIcon != null) {
+                                OutlinedButton(
+                                    onClick = { showAppPickerInPresets = true },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Apps,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("From Apps", fontSize = 11.sp)
+                                }
+                            }
+                        }
+                        TextButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.height(32.dp)
                         ) {
-                            Image(
-                                bitmap = bmp.asImageBitmap(),
-                                contentDescription = label,
-                                modifier = Modifier.size(36.dp)
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(label, fontSize = 10.sp, maxLines = 1)
+                            Text("Close")
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        },
-        dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (onSelectCustomFile != null) {
-                    OutlinedButton(
-                        onClick = { imagePicker.launch("*/*") },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FolderOpen,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Pick File", fontSize = 11.sp)
-                    }
-                }
-                if (onSelectAppIcon != null) {
-                    OutlinedButton(
-                        onClick = { showAppPickerInPresets = true },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Apps,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("From Apps", fontSize = 11.sp)
-                    }
-                }
-            }
         }
-    )
+    }
 }
