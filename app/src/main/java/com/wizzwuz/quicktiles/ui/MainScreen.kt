@@ -29,7 +29,10 @@ import com.wizzwuz.quicktiles.ui.create.ActivityPickerScreen
 import com.wizzwuz.quicktiles.ui.create.CreateTileScreen
 import com.wizzwuz.quicktiles.ui.settings.SettingsScreen
 import com.wizzwuz.quicktiles.ui.tiles.TilesListScreen
+import android.widget.Toast
+import com.wizzwuz.quicktiles.util.QsTileManager
 import com.wizzwuz.quicktiles.util.TileEditChannel
+import kotlinx.coroutines.launch
 
 private val TileItemSaver: Saver<TileItem?, String> = Saver(
     save = { it?.toJson()?.toString() },
@@ -53,6 +56,7 @@ enum class MainDestination {
 @Composable
 fun MainScreen() {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val repository = remember { TileRepository.getInstance(context) }
     val allTiles by repository.tilesFlow.collectAsState()
     val sortOrder by repository.sortOrderFlow.collectAsState()
@@ -143,6 +147,33 @@ fun MainScreen() {
                             }
                         },
                         actions = {
+                            // Disable / Enable icon (left side to select all icon)
+                            IconButton(onClick = {
+                                val targetIds = selectedTileIds.toList()
+                                coroutineScope.launch {
+                                    if (selectedTab == 0) {
+                                        targetIds.forEach { id ->
+                                            val tile = repository.getTileById(id)
+                                            if (tile != null) {
+                                                QsTileManager.removeTile(context, tile.slotNumber)
+                                                repository.inactivateTile(id)
+                                            }
+                                        }
+                                        Toast.makeText(context, "${targetIds.size} tile(s) disabled", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        targetIds.forEach { id ->
+                                            repository.activateTile(id)
+                                        }
+                                        Toast.makeText(context, "${targetIds.size} tile(s) enabled", Toast.LENGTH_SHORT).show()
+                                    }
+                                    selectedTileIds = emptySet()
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = if (selectedTab == 0) Icons.Default.PauseCircleOutline else Icons.Default.PlayCircleOutline,
+                                    contentDescription = if (selectedTab == 0) "Disable Selected" else "Enable Selected"
+                                )
+                            }
                             // Select All icon
                             IconButton(onClick = {
                                 val currentList = if (selectedTab == 0) activeTiles else inactiveTiles

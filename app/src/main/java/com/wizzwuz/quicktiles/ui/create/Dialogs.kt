@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -930,6 +931,7 @@ fun MultipleShellDialog(
     LaunchedEffect(Unit) { isRootGranted = ShizukuHelper.isRootGranted() }
 
     var showPresetPickerForStep by remember { mutableStateOf(false) }
+    var isCustomizeExpandedForStep by remember(selectedIndex) { mutableStateOf(false) }
 
     val safeIndex = selectedIndex.coerceIn(0, (steps.size - 1).coerceAtLeast(0))
     val currentStep = if (steps.isNotEmpty()) steps[safeIndex] else ShellStep()
@@ -1185,14 +1187,39 @@ fun MultipleShellDialog(
                                             )
                                         }
                                     }
-                                    OutlinedButton(
-                                        onClick = { showPresetPickerForStep = true },
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                        modifier = Modifier.height(30.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        Text("Change", fontSize = 11.sp)
+                                        OutlinedButton(
+                                            onClick = { isCustomizeExpandedForStep = !isCustomizeExpandedForStep },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(13.dp))
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text(if (isCustomizeExpandedForStep) "Hide" else "Customize", fontSize = 11.sp)
+                                        }
+                                        OutlinedButton(
+                                            onClick = { showPresetPickerForStep = true },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Text("Change", fontSize = 11.sp)
+                                        }
                                     }
                                 }
+                            }
+
+                            AnimatedVisibility(visible = isCustomizeExpandedForStep) {
+                                IconCustomizationControls(
+                                    iconConfig = currentStep.iconConfig,
+                                    onConfigChange = { newConfig ->
+                                        val updated = steps.toMutableList()
+                                        updated[safeIndex] = updated[safeIndex].copy(iconConfig = newConfig)
+                                        steps = updated
+                                    }
+                                )
                             }
 
                             // Shell Execution Mode
@@ -1439,6 +1466,8 @@ fun ShellDialog(
 
     var showPresetPickerForOn by remember { mutableStateOf(false) }
     var showPresetPickerForOff by remember { mutableStateOf(false) }
+    var isCustomizeExpandedForOn by remember { mutableStateOf(false) }
+    var isCustomizeExpandedForOff by remember { mutableStateOf(false) }
 
     if (showMultipleShellDialog) {
         MultipleShellDialog(
@@ -1691,14 +1720,35 @@ fun ShellDialog(
                                     )
                                 }
                             }
-                            OutlinedButton(
-                                onClick = { showPresetPickerForOn = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(30.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text("Change", fontSize = 11.sp)
+                                OutlinedButton(
+                                    onClick = { isCustomizeExpandedForOn = !isCustomizeExpandedForOn },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(13.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(if (isCustomizeExpandedForOn) "Hide" else "Customize", fontSize = 11.sp)
+                                }
+                                OutlinedButton(
+                                    onClick = { showPresetPickerForOn = true },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Text("Change", fontSize = 11.sp)
+                                }
                             }
                         }
+                    }
+
+                    AnimatedVisibility(visible = isCustomizeExpandedForOn) {
+                        IconCustomizationControls(
+                            iconConfig = onIconConfig,
+                            onConfigChange = { onIconConfig = it }
+                        )
                     }
 
                     // Disabled Icon row
@@ -1728,19 +1778,42 @@ fun ShellDialog(
                                     )
                                 }
                             }
-                            OutlinedButton(
-                                onClick = { showPresetPickerForOff = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(30.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text("Change", fontSize = 11.sp)
+                                OutlinedButton(
+                                    onClick = { isCustomizeExpandedForOff = !isCustomizeExpandedForOff },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(13.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(if (isCustomizeExpandedForOff) "Hide" else "Customize", fontSize = 11.sp)
+                                }
+                                OutlinedButton(
+                                    onClick = { showPresetPickerForOff = true },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Text("Change", fontSize = 11.sp)
+                                }
                             }
                         }
+                    }
+
+                    AnimatedVisibility(visible = isCustomizeExpandedForOff) {
+                        IconCustomizationControls(
+                            iconConfig = offIconConfig,
+                            onConfigChange = { offIconConfig = it }
+                        )
                     }
                 } else {
                     // Single icon
                     val currentCfg = if (visualState == TileVisualState.DISABLED) offIconConfig else onIconConfig
                     val bmp = remember(currentCfg, isDark) { IconProcessor.processIconBitmap(context, currentCfg, 40, isDarkTheme = isDark) }
+                    val isOffState = visualState == TileVisualState.DISABLED
+                    val isExpanded = if (isOffState) isCustomizeExpandedForOff else isCustomizeExpandedForOn
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
@@ -1766,16 +1839,45 @@ fun ShellDialog(
                                     )
                                 }
                             }
-                            OutlinedButton(
-                                onClick = {
-                                    if (visualState == TileVisualState.DISABLED) showPresetPickerForOff = true else showPresetPickerForOn = true
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(30.dp)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text("Change", fontSize = 11.sp)
+                                OutlinedButton(
+                                    onClick = {
+                                        if (isOffState) {
+                                            isCustomizeExpandedForOff = !isCustomizeExpandedForOff
+                                        } else {
+                                            isCustomizeExpandedForOn = !isCustomizeExpandedForOn
+                                        }
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(13.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(if (isExpanded) "Hide" else "Customize", fontSize = 11.sp)
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        if (isOffState) showPresetPickerForOff = true else showPresetPickerForOn = true
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Text("Change", fontSize = 11.sp)
+                                }
                             }
                         }
+                    }
+
+                    AnimatedVisibility(visible = isExpanded) {
+                        IconCustomizationControls(
+                            iconConfig = if (isOffState) offIconConfig else onIconConfig,
+                            onConfigChange = {
+                                if (isOffState) offIconConfig = it else onIconConfig = it
+                            }
+                        )
                     }
                 }
 
@@ -2238,3 +2340,95 @@ fun IconPresetsDialog(
         }
     }
 }
+
+/**
+ * Reusable icon customization controls with outline style selector and thickness, threshold, and size sliders.
+ */
+@Composable
+fun IconCustomizationControls(
+    iconConfig: IconConfig,
+    onConfigChange: (IconConfig) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text("Icon Customization Controls", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+
+        // Outline Style Selector
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Outline Style", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                listOf(
+                    "OUTLINE" to "Outline",
+                    "GLOW" to "Glow",
+                    "FROSTED" to "Frosted",
+                    "SOLID" to "Solid"
+                ).forEach { (styleKey, label) ->
+                    FilterChip(
+                        selected = iconConfig.outlineStyle.equals(styleKey, ignoreCase = true),
+                        onClick = { onConfigChange(iconConfig.copy(outlineStyle = styleKey)) },
+                        label = { Text(label, fontSize = 10.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        // Outline Thickness Slider
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Outline Thickness", fontSize = 11.sp)
+                Text("${String.format(java.util.Locale.US, "%.1f", iconConfig.outlineThickness)} dp", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            Slider(
+                value = iconConfig.outlineThickness,
+                onValueChange = { onConfigChange(iconConfig.copy(outlineThickness = it)) },
+                valueRange = 0f..10f
+            )
+        }
+
+        // Outline Threshold Slider
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Outline Threshold", fontSize = 11.sp)
+                Text("${(iconConfig.outlineThreshold * 100).toInt()}%", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            Slider(
+                value = iconConfig.outlineThreshold,
+                onValueChange = { onConfigChange(iconConfig.copy(outlineThreshold = it)) },
+                valueRange = 0.05f..1.0f
+            )
+        }
+
+        // Icon Size Slider (16f..160f)
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Icon Size", fontSize = 11.sp)
+                Text("${iconConfig.iconSize.toInt()} dp", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+            Slider(
+                value = iconConfig.iconSize,
+                onValueChange = { onConfigChange(iconConfig.copy(iconSize = it)) },
+                valueRange = 16f..160f
+            )
+        }
+    }
+}
+

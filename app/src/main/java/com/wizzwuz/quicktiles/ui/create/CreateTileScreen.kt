@@ -483,7 +483,7 @@ fun CreateTileScreen(
                             ) {
                                 Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text(if (isCustomizeExpanded) "Hide Sliders" else "Customize Sliders", fontSize = 12.sp)
+                                Text(if (isCustomizeExpanded) "Hide" else "Customize", fontSize = 12.sp)
                             }
                         }
                     }
