@@ -29,6 +29,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import org.json.JSONArray
+import org.json.JSONObject
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -55,6 +59,44 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+private val IconConfigSaver: Saver<IconConfig, String> = Saver(
+    save = { it.toJson().toString() },
+    restore = { str ->
+        try {
+            IconConfig.fromJson(JSONObject(str))
+        } catch (_: Throwable) {
+            IconConfig()
+        }
+    }
+)
+
+private val NullableIconConfigSaver: Saver<IconConfig?, String> = Saver(
+    save = { it?.toJson()?.toString() },
+    restore = { str ->
+        try {
+            IconConfig.fromJson(JSONObject(str))
+        } catch (_: Throwable) {
+            null
+        }
+    }
+)
+
+private val ShellStepListSaver: Saver<List<ShellStep>, String> = Saver(
+    save = { steps ->
+        val arr = JSONArray()
+        steps.forEach { arr.put(it.toJson()) }
+        arr.toString()
+    },
+    restore = { str ->
+        try {
+            val arr = JSONArray(str)
+            (0 until arr.length()).map { ShellStep.fromJson(arr.getJSONObject(it)) }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateTileScreen(
@@ -65,49 +107,73 @@ fun CreateTileScreen(
 ) {
     val context = LocalContext.current
 
-    var tileName by remember { mutableStateOf(initialTile?.name ?: "") }
-    var selectedType by remember { mutableStateOf<TileType?>(initialTile?.type) }
-    var targetData by remember { mutableStateOf(initialTile?.targetData ?: "") }
+    var tileName by rememberSaveable { mutableStateOf(initialTile?.name ?: "") }
+    var selectedType by rememberSaveable { mutableStateOf<TileType?>(initialTile?.type) }
+    var targetData by rememberSaveable { mutableStateOf(initialTile?.targetData ?: "") }
 
-    var visualState by remember { mutableStateOf(initialTile?.visualState ?: TileVisualState.ENABLED) }
-    var onCommand by remember {
+    var visualState by rememberSaveable { mutableStateOf(initialTile?.visualState ?: TileVisualState.ENABLED) }
+    var onCommand by rememberSaveable {
         mutableStateOf(
             initialTile?.onCommand?.ifBlank {
                 if (initialTile.type == TileType.SHELL && initialTile.visualState != TileVisualState.DISABLED) initialTile.targetData else ""
             } ?: (if (initialTile?.type == TileType.SHELL && initialTile.visualState != TileVisualState.DISABLED) initialTile.targetData else "")
         )
     }
-    var offCommand by remember {
+    var offCommand by rememberSaveable {
         mutableStateOf(
             initialTile?.offCommand?.ifBlank {
                 if (initialTile.type == TileType.SHELL && initialTile.visualState == TileVisualState.DISABLED) initialTile.targetData else ""
             } ?: (if (initialTile?.type == TileType.SHELL && initialTile.visualState == TileVisualState.DISABLED) initialTile.targetData else "")
         )
     }
-    var collapseOnTap by remember { mutableStateOf(initialTile?.collapseOnTap ?: true) }
-    var currentToggleOn by remember { mutableStateOf(initialTile?.currentToggleOn ?: true) }
-    var onTileName by remember { mutableStateOf(initialTile?.onTileName ?: "") }
-    var offTileName by remember { mutableStateOf(initialTile?.offTileName ?: "") }
-    var onIconConfig by remember { mutableStateOf(initialTile?.onIconConfig) }
-    var offIconConfig by remember { mutableStateOf(initialTile?.offIconConfig) }
-    var showPopups by remember { mutableStateOf(initialTile?.showPopups ?: false) }
-    var multiShellSteps by remember { mutableStateOf(initialTile?.multiShellSteps ?: emptyList()) }
-    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var collapseOnTap by rememberSaveable { mutableStateOf(initialTile?.collapseOnTap ?: true) }
+    var currentToggleOn by rememberSaveable { mutableStateOf(initialTile?.currentToggleOn ?: true) }
+    var onTileName by rememberSaveable { mutableStateOf(initialTile?.onTileName ?: "") }
+    var offTileName by rememberSaveable { mutableStateOf(initialTile?.offTileName ?: "") }
+    var onIconConfig by rememberSaveable(stateSaver = NullableIconConfigSaver) { mutableStateOf(initialTile?.onIconConfig) }
+    var offIconConfig by rememberSaveable(stateSaver = NullableIconConfigSaver) { mutableStateOf(initialTile?.offIconConfig) }
+    var showPopups by rememberSaveable { mutableStateOf(initialTile?.showPopups ?: false) }
+    var multiShellSteps by rememberSaveable(stateSaver = ShellStepListSaver) { mutableStateOf(initialTile?.multiShellSteps ?: emptyList()) }
+    var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
 
     // Icon state
-    var iconConfig by remember { mutableStateOf(initialTile?.iconConfig ?: IconConfig()) }
-    var isCustomizeExpanded by remember { mutableStateOf(false) }
+    var iconConfig by rememberSaveable(stateSaver = IconConfigSaver) { mutableStateOf(initialTile?.iconConfig ?: IconConfig()) }
+    var isCustomizeExpanded by rememberSaveable { mutableStateOf(false) }
 
     // Dialog state
-    var showAppPicker by remember { mutableStateOf(false) }
-    var showAppIconPicker by remember { mutableStateOf(false) }
-    var showWebsiteDialog by remember { mutableStateOf(false) }
-    var showShortcutDialog by remember { mutableStateOf(false) }
-    var showIntentDialog by remember { mutableStateOf(false) }
-    var showShellDialog by remember { mutableStateOf(false) }
-    var showMultipleShellDialog by remember { mutableStateOf(false) }
-    var showPresetsDialog by remember { mutableStateOf(false) }
-    var showCollectionCreator by remember { mutableStateOf(initialTile?.type == TileType.COLLECTION) }
+    var showAppPicker by rememberSaveable { mutableStateOf(false) }
+    var showAppIconPicker by rememberSaveable { mutableStateOf(false) }
+    var showWebsiteDialog by rememberSaveable { mutableStateOf(false) }
+    var showShortcutDialog by rememberSaveable { mutableStateOf(false) }
+    var showIntentDialog by rememberSaveable { mutableStateOf(false) }
+    var showShellDialog by rememberSaveable { mutableStateOf(false) }
+    var showMultipleShellDialog by rememberSaveable { mutableStateOf(false) }
+    var showPresetsDialog by rememberSaveable { mutableStateOf(false) }
+    var showCollectionCreator by rememberSaveable { mutableStateOf(initialTile?.type == TileType.COLLECTION) }
+
+    LaunchedEffect(initialTile) {
+        if (initialTile != null) {
+            tileName = initialTile.name
+            selectedType = initialTile.type
+            targetData = initialTile.targetData
+            visualState = initialTile.visualState
+            onCommand = initialTile.onCommand.ifBlank {
+                if (initialTile.type == TileType.SHELL && initialTile.visualState != TileVisualState.DISABLED) initialTile.targetData else ""
+            }
+            offCommand = initialTile.offCommand.ifBlank {
+                if (initialTile.type == TileType.SHELL && initialTile.visualState == TileVisualState.DISABLED) initialTile.targetData else ""
+            }
+            collapseOnTap = initialTile.collapseOnTap
+            currentToggleOn = initialTile.currentToggleOn
+            onTileName = initialTile.onTileName
+            offTileName = initialTile.offTileName
+            onIconConfig = initialTile.onIconConfig
+            offIconConfig = initialTile.offIconConfig
+            showPopups = initialTile.showPopups
+            multiShellSteps = initialTile.multiShellSteps
+            iconConfig = initialTile.iconConfig
+        }
+    }
 
     // File Pickers - support all image formats including SVG, PNG, WebP, JPG, GIF
     val customImagePicker = rememberLauncherForActivityResult(
@@ -830,6 +896,10 @@ fun CreateTileScreen(
             initialShowPopups = showPopups,
             initialMultiShellSteps = multiShellSteps,
             onDismiss = { showShellDialog = false },
+            onSwitchToMultipleShell = {
+                showShellDialog = false
+                showMultipleShellDialog = true
+            },
             onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon, popups, steps ->
                 showShellDialog = false
                 selectedType = TileType.SHELL
@@ -1344,6 +1414,10 @@ fun EditTileSheet(
             initialShowPopups = itemShowPopups,
             initialMultiShellSteps = itemMultiShellSteps,
             onDismiss = { showShellDialog = false },
+            onSwitchToMultipleShell = {
+                showShellDialog = false
+                showMultipleShellDialog = true
+            },
             onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon, popups, steps ->
                 showShellDialog = false
                 itemName = name
@@ -1431,16 +1505,16 @@ fun CollectionCreatorScreen(
     onSaveCollection: (collectionTile: TileItem, memberTiles: List<TileItem>) -> Unit
 ) {
     val context = LocalContext.current
-    var collectionName by remember { mutableStateOf(initialTile?.name ?: "My Collection") }
-    var collapseOnTap by remember { mutableStateOf(initialTile?.collapseOnTap ?: true) }
-    var tilesPerRow by remember { mutableStateOf(initialTile?.tilesPerRow ?: 3) }
-    var tilesPerRowInput by remember { mutableStateOf((initialTile?.tilesPerRow ?: 3).toString()) }
-    var isCollectionCustomizeExpanded by remember { mutableStateOf(false) }
-    var showDeleteConfirmation by remember { mutableStateOf(false) }
-    var collectionIconConfig by remember {
+    var collectionName by rememberSaveable { mutableStateOf(initialTile?.name ?: "My Collection") }
+    var collapseOnTap by rememberSaveable { mutableStateOf(initialTile?.collapseOnTap ?: true) }
+    var tilesPerRow by rememberSaveable { mutableIntStateOf(initialTile?.tilesPerRow ?: 3) }
+    var tilesPerRowInput by rememberSaveable { mutableStateOf((initialTile?.tilesPerRow ?: 3).toString()) }
+    var isCollectionCustomizeExpanded by rememberSaveable { mutableStateOf(false) }
+    var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
+    var collectionIconConfig by rememberSaveable(stateSaver = IconConfigSaver) {
         mutableStateOf(initialTile?.iconConfig ?: IconConfig(sourceType = IconSourceType.PRESET, sourceData = "collections"))
     }
-    var collectionVisualState by remember { mutableStateOf(initialTile?.visualState ?: TileVisualState.ENABLED) }
+    var collectionVisualState by rememberSaveable { mutableStateOf(initialTile?.visualState ?: TileVisualState.ENABLED) }
 
     val collectionItems = remember {
         val list = mutableStateListOf<TileItem>()
@@ -2293,6 +2367,10 @@ fun CollectionCreatorScreen(
             initialShowPopups = false,
             initialMultiShellSteps = emptyList(),
             onDismiss = { showShellDialog = false },
+            onSwitchToMultipleShell = {
+                showShellDialog = false
+                showMultipleShellDialog = true
+            },
             onConfirm = { name, cmd, onCmd, offCmd, vState, onName, offName, onIcon, offIcon, popups, steps ->
                 showShellDialog = false
                 val item = TileItem(

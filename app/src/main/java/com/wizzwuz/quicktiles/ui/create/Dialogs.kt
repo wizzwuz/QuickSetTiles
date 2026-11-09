@@ -62,6 +62,7 @@ fun WebsiteDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(decorFitsSystemWindows = false),
         title = { Text("Add Website Tile") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -440,6 +441,7 @@ fun IntentDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(decorFitsSystemWindows = false),
         title = { Text("Configure Intent Tile") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -524,7 +526,7 @@ fun FullscreenScriptEditorDialog(
 
     Dialog(
         onDismissRequest = { onDismissAndSave(script) },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
         Scaffold(
             topBar = {
@@ -939,371 +941,411 @@ fun MultipleShellDialog(
 
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Multiple Shells", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                if (onBackToSingleShell != null) {
-                    OutlinedButton(
-                        onClick = onBackToSingleShell,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        modifier = Modifier.height(28.dp),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Single shell", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-        },
-        text = {
-            Column(
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .widthIn(max = 560.dp)
+                    .heightIn(max = 680.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
-                // Horizontal list of shells with "+" button to the right of added shells
-                Text("Shells (${steps.size})", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(20.dp)
                 ) {
-                    steps.forEachIndexed { index, step ->
-                        val isSelected = index == safeIndex
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { selectedIndex = index },
-                            label = {
-                                Text(
-                                    text = if (step.name.isNotBlank()) step.name else "Shell ${index + 1}",
-                                    fontSize = 12.sp
-                                )
-                            },
-                            trailingIcon = if (steps.size > 1) {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Remove",
-                                        modifier = Modifier
-                                            .size(14.dp)
-                                            .clickable {
-                                                if (steps.size > 1) {
-                                                    val newSteps = steps.toMutableList()
-                                                    newSteps.removeAt(index)
-                                                    steps = newSteps
-                                                    if (selectedIndex >= newSteps.size) {
-                                                        selectedIndex = newSteps.size - 1
-                                                    }
-                                                }
-                                            }
-                                    )
-                                }
-                            } else null
-                        )
-                    }
-
-                    // Small square shape "+" button shifting to right of added shells
-                    Surface(
-                        onClick = {
-                            val nextNum = steps.size + 1
-                            val newSteps = steps.toMutableList()
-                            newSteps.add(ShellStep(name = "Shell $nextNum", command = "", visualState = TileVisualState.ENABLED))
-                            steps = newSteps
-                            selectedIndex = newSteps.size - 1
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "Add Shell",
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
-                }
-
-                if (steps.isNotEmpty()) {
-                    // Visual State: Enabled, Disabled (NO "Both" button!)
-                    Text("Tile Appearance & State", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    // Title Header
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        FilterChip(
-                            selected = currentStep.visualState == TileVisualState.ENABLED,
-                            onClick = {
-                                val updated = steps.toMutableList()
-                                updated[safeIndex] = updated[safeIndex].copy(visualState = TileVisualState.ENABLED)
-                                steps = updated
-                            },
-                            label = { Text("Enabled", fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        FilterChip(
-                            selected = currentStep.visualState == TileVisualState.DISABLED,
-                            onClick = {
-                                val updated = steps.toMutableList()
-                                updated[safeIndex] = updated[safeIndex].copy(visualState = TileVisualState.DISABLED)
-                                steps = updated
-                            },
-                            label = { Text("Disabled", fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-                            modifier = Modifier.weight(1f)
-                        )
+                        Text("Multiple Shells", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        if (onBackToSingleShell != null) {
+                            OutlinedButton(
+                                onClick = onBackToSingleShell,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Single shell", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                     }
 
-                    // Tile Name for this shell
-                    OutlinedTextField(
-                        value = currentStep.name,
-                        onValueChange = { newName ->
-                            val updated = steps.toMutableList()
-                            updated[safeIndex] = updated[safeIndex].copy(name = newName)
-                            steps = updated
-                        },
-                        label = { Text("Tile Name") },
-                        placeholder = { Text("e.g. Shell ${safeIndex + 1}") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Tile Icon for this shell
-                    Text("Tile Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    val stepBmp = remember(currentStep.iconConfig, isDark) {
-                        IconProcessor.processIconBitmap(context, currentStep.iconConfig, 40, isDarkTheme = isDark)
-                    }
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    // Scrollable content
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        // Horizontal list of shells with "+" button to the right of added shells
+                        Text("Shells (${steps.size})", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            steps.forEachIndexed { index, step ->
+                                val isSelected = index == safeIndex
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { selectedIndex = index },
+                                    label = {
+                                        Text(
+                                            text = if (step.name.isNotBlank()) step.name else "Shell ${index + 1}",
+                                            fontSize = 12.sp
+                                        )
+                                    },
+                                    trailingIcon = if (steps.size > 1) {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Remove",
+                                                modifier = Modifier
+                                                    .size(14.dp)
+                                                    .clickable {
+                                                        if (steps.size > 1) {
+                                                            val newSteps = steps.toMutableList()
+                                                            newSteps.removeAt(index)
+                                                            steps = newSteps
+                                                            if (selectedIndex >= newSteps.size) {
+                                                                selectedIndex = newSteps.size - 1
+                                                            }
+                                                        }
+                                                    }
+                                            )
+                                        }
+                                    } else null
+                                )
+                            }
+
+                            // Small square shape "+" button shifting to right of added shells
+                            Surface(
+                                onClick = {
+                                    val nextNum = steps.size + 1
+                                    val newSteps = steps.toMutableList()
+                                    newSteps.add(ShellStep(name = "Shell $nextNum", command = "", visualState = TileVisualState.ENABLED))
+                                    steps = newSteps
+                                    selectedIndex = newSteps.size - 1
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.size(34.dp)
                             ) {
-                                Image(bitmap = stepBmp.asImageBitmap(), contentDescription = "Icon", modifier = Modifier.size(32.dp))
-                                Column {
-                                    Text(if (currentStep.visualState == TileVisualState.DISABLED) "Disabled Icon" else "Enabled Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        if (currentStep.iconConfig.sourceType == IconSourceType.CUSTOM_FILE) "File: ${currentStep.iconConfig.sourceData.substringAfterLast('/')}" else "Preset: ${currentStep.iconConfig.sourceData}",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Add Shell",
+                                        modifier = Modifier.size(20.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                 }
                             }
-                            OutlinedButton(
-                                onClick = { showPresetPickerForStep = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(30.dp)
-                            ) {
-                                Text("Change", fontSize = 11.sp)
-                            }
                         }
-                    }
 
-                    // Shell Execution Mode
-                    val currentMode = try { ShellMode.valueOf(currentStep.executionMode) } catch (e: Exception) { ShellMode.AUTO }
-                    Text("Execution Mode", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        ShellMode.values().forEach { mode ->
-                            FilterChip(
-                                selected = currentMode == mode,
-                                onClick = {
+                        if (steps.isNotEmpty()) {
+                            // Visual State: Enabled, Disabled (NO "Both" button!)
+                            Text("Tile Appearance & State", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilterChip(
+                                    selected = currentStep.visualState == TileVisualState.ENABLED,
+                                    onClick = {
+                                        val updated = steps.toMutableList()
+                                        updated[safeIndex] = updated[safeIndex].copy(visualState = TileVisualState.ENABLED)
+                                        steps = updated
+                                    },
+                                    label = { Text("Enabled", fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                FilterChip(
+                                    selected = currentStep.visualState == TileVisualState.DISABLED,
+                                    onClick = {
+                                        val updated = steps.toMutableList()
+                                        updated[safeIndex] = updated[safeIndex].copy(visualState = TileVisualState.DISABLED)
+                                        steps = updated
+                                    },
+                                    label = { Text("Disabled", fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            // Tile Name for this shell
+                            OutlinedTextField(
+                                value = currentStep.name,
+                                onValueChange = { newName ->
                                     val updated = steps.toMutableList()
-                                    updated[safeIndex] = updated[safeIndex].copy(executionMode = mode.name)
+                                    updated[safeIndex] = updated[safeIndex].copy(name = newName)
                                     steps = updated
                                 },
-                                label = { Text(mode.name, fontSize = 11.sp) }
+                                label = { Text("Tile Name") },
+                                placeholder = { Text("e.g. Shell ${safeIndex + 1}") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
                             )
-                        }
-                    }
 
-                    // Execution access status card
-                    if (isRootGranted) {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "✓ Root access: Granted",
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(8.dp)
-                            )
-                        }
-                    } else {
-                        val isPermRequired = shizukuStatus == com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = when (shizukuStatus) {
-                                    com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                                    com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
-                                    com.wizzwuz.quicktiles.util.ShizukuStatus.NOT_RUNNING -> MaterialTheme.colorScheme.surfaceVariant
-                                }
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(
-                                    text = when (shizukuStatus) {
-                                        com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> "✓ Shizuku: Connected & Authorized"
-                                        com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> "⚠ Shizuku: Permission Required"
-                                        com.wizzwuz.quicktiles.util.ShizukuStatus.NOT_RUNNING -> "ℹ Shizuku: Not Running (Will use Root or sh)"
-                                    },
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 11.sp
-                                )
-                                if (isPermRequired) {
-                                    Button(
-                                        onClick = { ShizukuHelper.requestShizukuPermission() },
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                        modifier = Modifier.height(28.dp)
+                            // Tile Icon for this shell
+                            Text("Tile Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            val stepBmp = remember(currentStep.iconConfig, isDark) {
+                                IconProcessor.processIconBitmap(context, currentStep.iconConfig, 40, isDarkTheme = isDark)
+                            }
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Text("Grant Shizuku Permission", fontSize = 10.sp)
+                                        Image(bitmap = stepBmp.asImageBitmap(), contentDescription = "Icon", modifier = Modifier.size(32.dp))
+                                        Column {
+                                            Text(if (currentStep.visualState == TileVisualState.DISABLED) "Disabled Icon" else "Enabled Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                if (currentStep.iconConfig.sourceType == IconSourceType.CUSTOM_FILE) "File: ${currentStep.iconConfig.sourceData.substringAfterLast('/')}" else "Preset: ${currentStep.iconConfig.sourceData}",
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    OutlinedButton(
+                                        onClick = { showPresetPickerForStep = true },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(30.dp)
+                                    ) {
+                                        Text("Change", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+
+                            // Shell Execution Mode
+                            val currentMode = try { ShellMode.valueOf(currentStep.executionMode) } catch (e: Exception) { ShellMode.AUTO }
+                            Text("Execution Mode", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                ShellMode.values().forEach { mode ->
+                                    FilterChip(
+                                        selected = currentMode == mode,
+                                        onClick = {
+                                            val updated = steps.toMutableList()
+                                            updated[safeIndex] = updated[safeIndex].copy(executionMode = mode.name)
+                                            steps = updated
+                                        },
+                                        label = { Text(mode.name, fontSize = 11.sp) }
+                                    )
+                                }
+                            }
+
+                            // Execution access status card
+                            if (isRootGranted) {
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "✓ Root access: Granted",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.padding(8.dp)
+                                    )
+                                }
+                            } else {
+                                val isPermRequired = shizukuStatus == com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = when (shizukuStatus) {
+                                            com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                            com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+                                            com.wizzwuz.quicktiles.util.ShizukuStatus.NOT_RUNNING -> MaterialTheme.colorScheme.surfaceVariant
+                                        }
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(
+                                            text = when (shizukuStatus) {
+                                                com.wizzwuz.quicktiles.util.ShizukuStatus.AUTHORIZED -> "✓ Shizuku: Connected & Authorized"
+                                                com.wizzwuz.quicktiles.util.ShizukuStatus.PERMISSION_REQUIRED -> "⚠ Shizuku: Permission Required"
+                                                com.wizzwuz.quicktiles.util.ShizukuStatus.NOT_RUNNING -> "ℹ Shizuku: Not Running (Will use Root or sh)"
+                                            },
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 11.sp
+                                        )
+                                        if (isPermRequired) {
+                                            Button(
+                                                onClick = { ShizukuHelper.requestShizukuPermission() },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(28.dp)
+                                            ) {
+                                                Text("Grant Shizuku Permission", fontSize = 10.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Shell Command for this step
+                            ShellCommandInputField(
+                                label = if (currentStep.visualState == TileVisualState.DISABLED) "Shell Command (Disabled state)" else "Shell Command (Enabled state)",
+                                command = currentStep.command,
+                                onCommandChange = { newCmd ->
+                                    val updated = steps.toMutableList()
+                                    updated[safeIndex] = updated[safeIndex].copy(command = newCmd)
+                                    steps = updated
+                                },
+                                selectedMode = currentMode,
+                                placeholder = "e.g. echo 'Running step ${safeIndex + 1}'"
+                            )
+
+                            // Collapse panel toggle for this shell
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val updated = steps.toMutableList()
+                                        updated[safeIndex] = updated[safeIndex].copy(collapsePanel = !currentStep.collapsePanel)
+                                        steps = updated
+                                    },
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("Collapse panel", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            "Collapse notification shade / tray after executing this shell",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Switch(
+                                        checked = currentStep.collapsePanel,
+                                        onCheckedChange = { checked ->
+                                            val updated = steps.toMutableList()
+                                            updated[safeIndex] = updated[safeIndex].copy(collapsePanel = checked)
+                                            steps = updated
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Advance option dropdown menu
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { advanceExpanded = !advanceExpanded },
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Advance option", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                    Icon(
+                                        imageVector = if (advanceExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null
+                                    )
+                                }
+                                if (advanceExpanded) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    HorizontalDivider()
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Pop-up message", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                "Output echo commands as pop-up messages. If or else outputs multiple messages separately.",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Switch(
+                                            checked = showPopups,
+                                            onCheckedChange = { showPopups = it }
+                                        )
                                     }
                                 }
                             }
                         }
                     }
 
-                    // Shell Command for this step
-                    ShellCommandInputField(
-                        label = if (currentStep.visualState == TileVisualState.DISABLED) "Shell Command (Disabled state)" else "Shell Command (Enabled state)",
-                        command = currentStep.command,
-                        onCommandChange = { newCmd ->
-                            val updated = steps.toMutableList()
-                            updated[safeIndex] = updated[safeIndex].copy(command = newCmd)
-                            steps = updated
-                        },
-                        selectedMode = currentMode,
-                        placeholder = "e.g. echo 'Running step ${safeIndex + 1}'"
-                    )
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                    // Collapse panel toggle for this shell
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                val updated = steps.toMutableList()
-                                updated[safeIndex] = updated[safeIndex].copy(collapsePanel = !currentStep.collapsePanel)
-                                steps = updated
-                            },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    // Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Collapse panel", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                Text(
-                                    "Collapse notification shade / tray after executing this shell",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = currentStep.collapsePanel,
-                                onCheckedChange = { checked ->
-                                    val updated = steps.toMutableList()
-                                    updated[safeIndex] = updated[safeIndex].copy(collapsePanel = checked)
-                                    steps = updated
+                        TextButton(onClick = onDismiss) { Text("Cancel") }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        val canSave = steps.isNotEmpty() && steps.any { it.command.isNotBlank() }
+                        Button(
+                            onClick = {
+                                if (canSave) {
+                                    onConfirm(steps, showPopups)
                                 }
-                            )
-                        }
-                    }
-                }
-
-                // Advance option dropdown menu
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { advanceExpanded = !advanceExpanded },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            },
+                            enabled = canSave
                         ) {
-                            Text("Advance option", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                            Icon(
-                                imageVector = if (advanceExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                contentDescription = null
-                            )
-                        }
-                        if (advanceExpanded) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            HorizontalDivider()
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("Pop-up message", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        "Output echo commands as pop-up messages. If or else outputs multiple messages separately.",
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Switch(
-                                    checked = showPopups,
-                                    onCheckedChange = { showPopups = it }
-                                )
-                            }
+                            Text("Select")
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            val canSave = steps.isNotEmpty() && steps.any { it.command.isNotBlank() }
-            Button(
-                onClick = {
-                    if (canSave) {
-                        onConfirm(steps, showPopups)
-                    }
-                },
-                enabled = canSave
-            ) {
-                Text("Select")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
-    )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -1321,6 +1363,7 @@ fun ShellDialog(
     initialShowPopups: Boolean = false,
     initialMultiShellSteps: List<ShellStep> = emptyList(),
     onDismiss: () -> Unit,
+    onSwitchToMultipleShell: (() -> Unit)? = null,
     onConfirm: (
         name: String,
         targetData: String,
@@ -1450,37 +1493,74 @@ fun ShellDialog(
         )
     }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Configure Shell Tile",
-                    modifier = Modifier.weight(1f),
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                OutlinedButton(
-                    onClick = { showMultipleShellDialog = true },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    modifier = Modifier.height(28.dp),
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text("Multiple shell", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
-        },
-        text = {
-            Column(
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .widthIn(max = 560.dp)
+                    .heightIn(max = 680.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp)
+                ) {
+                    // Title Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Configure Shell Tile",
+                            modifier = Modifier.weight(1f),
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                if (onSwitchToMultipleShell != null) {
+                                    onSwitchToMultipleShell()
+                                } else {
+                                    showMultipleShellDialog = true
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text("Multiple shell", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Scrollable content
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                 // Visual State: Enabled, Disabled, Toggle (Both)
                 Text("Tile Appearance & State", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Row(
@@ -1800,51 +1880,60 @@ fun ShellDialog(
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {
-            val canSave = when (visualState) {
-                TileVisualState.TOGGLE -> onCommand.isNotBlank() || offCommand.isNotBlank()
-                TileVisualState.ENABLED -> onCommand.isNotBlank()
-                TileVisualState.DISABLED -> offCommand.isNotBlank()
-            }
-            Button(
-                onClick = {
-                    if (canSave) {
-                        val finalPrimaryName = if (visualState == TileVisualState.TOGGLE) {
-                            onTileName.ifBlank { offTileName.ifBlank { "Shell Toggle Tile" } }
-                        } else {
-                            name.ifBlank { "Shell Command" }
-                        }
-                        val effectiveCmd = when (visualState) {
-                            TileVisualState.TOGGLE -> onCommand.ifBlank { offCommand }
-                            TileVisualState.DISABLED -> offCommand
-                            TileVisualState.ENABLED -> onCommand
-                        }
-                        onConfirm(
-                            finalPrimaryName,
-                            effectiveCmd.trim(),
-                            onCommand.trim(),
-                            offCommand.trim(),
-                            visualState,
-                            onTileName.trim(),
-                            offTileName.trim(),
-                            onIconConfig,
-                            offIconConfig,
-                            showPopups,
-                            emptyList()
-                        )
                     }
-                },
-                enabled = canSave
-            ) {
-                Text("Select")
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss) { Text("Cancel") }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        val canSave = when (visualState) {
+                            TileVisualState.TOGGLE -> onCommand.isNotBlank() || offCommand.isNotBlank()
+                            TileVisualState.ENABLED -> onCommand.isNotBlank()
+                            TileVisualState.DISABLED -> offCommand.isNotBlank()
+                        }
+                        Button(
+                            onClick = {
+                                if (canSave) {
+                                    val finalPrimaryName = if (visualState == TileVisualState.TOGGLE) {
+                                        onTileName.ifBlank { offTileName.ifBlank { "Shell Toggle Tile" } }
+                                    } else {
+                                        name.ifBlank { "Shell Command" }
+                                    }
+                                    val effectiveCmd = when (visualState) {
+                                        TileVisualState.TOGGLE -> onCommand.ifBlank { offCommand }
+                                        TileVisualState.DISABLED -> offCommand
+                                        TileVisualState.ENABLED -> onCommand
+                                    }
+                                    onConfirm(
+                                        finalPrimaryName,
+                                        effectiveCmd.trim(),
+                                        onCommand.trim(),
+                                        offCommand.trim(),
+                                        visualState,
+                                        onTileName.trim(),
+                                        offTileName.trim(),
+                                        onIconConfig,
+                                        offIconConfig,
+                                        showPopups,
+                                        emptyList()
+                                    )
+                                }
+                            },
+                            enabled = canSave
+                        ) {
+                            Text("Select")
+                        }
+                    }
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
-    )
+    }
 }
 
 @Composable

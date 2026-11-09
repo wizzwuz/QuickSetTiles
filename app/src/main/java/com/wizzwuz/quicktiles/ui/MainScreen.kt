@@ -16,7 +16,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
+import org.json.JSONObject
 import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.model.IconConfig
 import com.wizzwuz.quicktiles.model.IconSourceType
@@ -28,6 +30,17 @@ import com.wizzwuz.quicktiles.ui.create.CreateTileScreen
 import com.wizzwuz.quicktiles.ui.settings.SettingsScreen
 import com.wizzwuz.quicktiles.ui.tiles.TilesListScreen
 import com.wizzwuz.quicktiles.util.TileEditChannel
+
+private val TileItemSaver: Saver<TileItem?, String> = Saver(
+    save = { it?.toJson()?.toString() },
+    restore = { str ->
+        try {
+            TileItem.fromJson(JSONObject(str))
+        } catch (_: Throwable) {
+            null
+        }
+    }
+)
 
 enum class MainDestination {
     LIST,
@@ -47,7 +60,7 @@ fun MainScreen() {
 
     var currentDestination by rememberSaveable { mutableStateOf(MainDestination.LIST) }
     var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0 = Active Tiles, 1 = Inactive Tiles
-    var editingTile by remember { mutableStateOf<TileItem?>(null) }
+    var editingTile by rememberSaveable(stateSaver = TileItemSaver) { mutableStateOf<TileItem?>(null) }
     var selectedTileIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
     var isSearchOpen by rememberSaveable { mutableStateOf(false) }

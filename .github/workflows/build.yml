@@ -2,9 +2,9 @@ name: Build QuickSetTiles APK
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "experiments" ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "experiments" ]
   workflow_dispatch:
 
 permissions:
