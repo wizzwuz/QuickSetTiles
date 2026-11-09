@@ -84,3 +84,22 @@ To build locally:
 ```bash
 ./gradlew assembleRelease assembleDebug
 ```
+
+---
+
+## 💖 Credits & Open Source Acknowledgements
+
+QuickSetTiles is built on top of and made possible by these incredible open-source projects, libraries, and design systems:
+
+| Project / Library | Maintainer / Author | License | Description & Purpose |
+| :--- | :--- | :--- | :--- |
+| **[Shizuku](https://github.com/RikkaApps/Shizuku)** | [RikkaApps](https://github.com/RikkaApps) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Provides elevated permissions interface (UID 2000 shell / ADB / Root) enabling rootless shell execution and launching unexported activities. |
+| **[AndroidSVG](https://github.com/BigBadaboom/androidsvg)** | [Paul LeBeau (caverock)](https://github.com/BigBadaboom) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | High-performance SVG parsing and rendering library used to rasterize all 57,000+ Material preset vector icons onto Android Canvases and Bitmaps. |
+| **[Coil](https://github.com/coil-kt/coil)** | [Coil Contributors](https://github.com/coil-kt) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Fast, lightweight, Kotlin coroutine-first image loading library for Jetpack Compose. |
+| **[Material Symbols (Iconify)](https://icon-sets.iconify.design/material-symbols/)** | [Iconify](https://github.com/iconify) & [Google](https://github.com/google) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Extensive dataset of 57,000+ vector glyphs spanning Outlined, Rounded, and Sharp variants powering the preset icon catalog. |
+| **[Google Material Design Icons](https://github.com/google/material-design-icons)** | [Google LLC](https://github.com/google) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Google's official baseline Material Design vector icon specification and assets. |
+| **[Jetpack Compose](https://developer.android.com/jetpack/compose)** | [Google / AOSP](https://android.googlesource.com/platform/frameworks/support) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Modern declarative UI toolkit powering the entire reactive user interface, adaptive grid, and animations. |
+| **[Material 3 for Compose](https://developer.android.com/jetpack/androidx/releases/compose-material3)** | [Google / AOSP](https://android.googlesource.com/platform/frameworks/support) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Material You design system implementation, Dynamic Color theming, and modern surface components. |
+| **[AndroidX Libraries](https://developer.android.com/jetpack/androidx)** | [Google / AOSP](https://android.googlesource.com/platform/frameworks/support) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Essential Android jetpack components including `androidx.core:core-ktx`, `androidx.activity:activity-compose`, and `androidx.lifecycle`. |
+| **[Kotlin & Coroutines](https://github.com/JetBrains/kotlin)** | [JetBrains](https://github.com/JetBrains) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | First-class programming language, Kotlin Compose compiler plugin, and `kotlinx.coroutines` for asynchronous background loading and I/O. |
+| **[Pillow (PIL)](https://github.com/python-pillow/Pillow)** | [Alex Clark and Contributors](https://github.com/python-pillow) | [HPND](https://github.com/python-pillow/Pillow/blob/main/LICENSE) | Python imaging library used in automated CI/CD workflows for adaptive foreground and mipmap launcher icon synthesis. |
