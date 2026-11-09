@@ -1,8 +1,10 @@
-# QuickSetTiles
+<div align="center">
 
 <p align="center">
-  <img src="app/src/main/res/drawable/ic_launcher_foreground.xml" width="96" height="96" alt="QuickSetTiles Logo" />
+  <img src="icon.png" width="96" height="96" alt="QuickSetTiles Logo" />
 </p>
+
+# QuickSetTiles
 
 <p align="center">
   <b>A powerful, modern Android Quick Settings tile creator and manager built with Jetpack Compose & Material 3.</b>
@@ -16,7 +18,7 @@
   <img src="https://img.shields.io/badge/Shizuku-Enabled-red.svg" alt="Shizuku" />
 </p>
 
----
+</div>
 
 ## ✨ Features
 
