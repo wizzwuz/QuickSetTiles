@@ -13,11 +13,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -282,7 +286,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (isGridViewEnabled) "Grid View (Quick Settings circular tiles)" else "Classic Card View (Original list)",
+                                text = if (isGridViewEnabled) "Grid View" else "Classic Card View",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -294,6 +298,155 @@ fun SettingsScreen(
                             repository.setGridViewEnabled(it)
                         }
                     )
+                }
+            }
+
+            // 2c. Grid Dimensions & Arrangement Configuration Card (visible only when Grid View is enabled)
+            AnimatedVisibility(visible = isGridViewEnabled) {
+                val isGridDynamic by repository.gridDynamicFlow.collectAsState()
+                val gridColumns by repository.gridColumnsFlow.collectAsState()
+                val gridRows by repository.gridRowsFlow.collectAsState()
+
+                var columnsInput by remember(gridColumns) { mutableStateOf("$gridColumns") }
+                var rowsInput by remember(gridRows) { mutableStateOf("$gridRows") }
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.GridOn,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "Grid Dimensions",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = if (isGridDynamic) "Dynamic arrangement" else "$gridColumns columns × $gridRows rows",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        // Option called Dynamic
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = isGridDynamic,
+                                onClick = { repository.setGridDynamic(true) },
+                                label = {
+                                    Text(
+                                        text = "Dynamic",
+                                        fontWeight = if (isGridDynamic) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = !isGridDynamic,
+                                onClick = { repository.setGridDynamic(false) },
+                                label = {
+                                    Text(
+                                        text = "Custom Grid",
+                                        fontWeight = if (!isGridDynamic) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Tune,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        if (isGridDynamic) {
+                            Text(
+                                text = "Dynamic (original grid arrangement when app is resized or in split-screen mode)",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = columnsInput,
+                                    onValueChange = { input ->
+                                        val digits = input.filter { it.isDigit() }.take(2)
+                                        columnsInput = digits
+                                        val num = digits.toIntOrNull()
+                                        if (num != null && num in 1..12) {
+                                            repository.setGridColumns(num)
+                                        }
+                                    },
+                                    label = { Text("Columns") },
+                                    placeholder = { Text("3") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                OutlinedTextField(
+                                    value = rowsInput,
+                                    onValueChange = { input ->
+                                        val digits = input.filter { it.isDigit() }.take(2)
+                                        rowsInput = digits
+                                        val num = digits.toIntOrNull()
+                                        if (num != null && num in 1..12) {
+                                            repository.setGridRows(num)
+                                        }
+                                    },
+                                    label = { Text("Rows") },
+                                    placeholder = { Text("4") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            Text(
+                                text = "Enter number of columns and rows to arrange the tile grid.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
 

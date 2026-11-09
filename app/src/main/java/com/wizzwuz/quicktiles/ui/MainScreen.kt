@@ -62,6 +62,9 @@ fun MainScreen() {
     val sortOrder by repository.sortOrderFlow.collectAsState()
     val showCategories by repository.showCategoriesFlow.collectAsState()
     val isGridViewEnabled by repository.gridViewFlow.collectAsState()
+    val isGridDynamic by repository.gridDynamicFlow.collectAsState()
+    val gridColumns by repository.gridColumnsFlow.collectAsState()
+    val gridRows by repository.gridRowsFlow.collectAsState()
 
     var currentDestination by rememberSaveable { mutableStateOf(MainDestination.LIST) }
     var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0 = Active Tiles, 1 = Inactive Tiles
@@ -437,6 +440,9 @@ fun MainScreen() {
                                 tiles = activeTiles,
                                 isActiveTab = true,
                                 isGridView = isGridViewEnabled,
+                                isGridDynamic = isGridDynamic,
+                                gridColumns = gridColumns,
+                                gridRows = gridRows,
                                 listState = activeListState,
                                 gridState = activeGridState,
                                 showCategories = showCategories,
@@ -480,6 +486,9 @@ fun MainScreen() {
                                 tiles = inactiveTiles,
                                 isActiveTab = false,
                                 isGridView = isGridViewEnabled,
+                                isGridDynamic = isGridDynamic,
+                                gridColumns = gridColumns,
+                                gridRows = gridRows,
                                 listState = inactiveListState,
                                 gridState = inactiveGridState,
                                 showCategories = showCategories,

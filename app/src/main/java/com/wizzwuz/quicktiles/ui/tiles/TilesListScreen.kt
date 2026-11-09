@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
@@ -52,7 +53,10 @@ import kotlinx.coroutines.launch
 fun TilesListScreen(
     tiles: List<TileItem>,
     isActiveTab: Boolean,
-    isGridView: Boolean = true,
+    isGridView: Boolean = false,
+    isGridDynamic: Boolean = true,
+    gridColumns: Int = 3,
+    gridRows: Int = 4,
     showCategories: Boolean = true,
     searchQuery: String = "",
     selectedTileIds: Set<String> = emptySet(),
@@ -233,42 +237,60 @@ fun TilesListScreen(
         } else {
             if (isGridView) {
                 // Quick Settings Grid Layout
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 92.dp),
-                    state = gridState,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(filteredTiles, key = { it.id }) { tile ->
-                        val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-                        val previewBitmap = remember(tile.iconConfig, isDark) {
-                            IconProcessor.processIconBitmap(context, tile.iconConfig, targetPixelSize = 96, isDarkTheme = isDark)
-                        }
-                        val isSelectionMode = selectedTileIds.isNotEmpty()
-                        val isSelected = tile.id in selectedTileIds
+                val gridCells = if (isGridDynamic) {
+                    GridCells.Adaptive(minSize = 92.dp)
+                } else {
+                    GridCells.Fixed(gridColumns.coerceIn(1, 12))
+                }
 
-                        TileGridItem(
-                            tile = tile,
-                            previewBitmap = previewBitmap,
-                            isSelected = isSelected,
-                            isSelectionMode = isSelectionMode,
-                            onClick = {
-                                if (isSelectionMode) {
-                                    onTileSelectToggle(tile)
-                                } else {
-                                    onTileClick(tile)
-                                }
-                            },
-                            onLongClick = {
-                                if (isSelectionMode) {
-                                    onTileSelectToggle(tile)
-                                } else {
-                                    activeContextMenuTile = tile
-                                }
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val availableHeight = maxHeight - 100.dp
+                    val itemModifier = if (!isGridDynamic && gridRows > 0) {
+                        val verticalGaps = ((gridRows - 1) * 16).dp
+                        val computedHeight = (availableHeight - verticalGaps) / gridRows
+                        Modifier.height(computedHeight.coerceAtLeast(80.dp))
+                    } else {
+                        Modifier
+                    }
+
+                    LazyVerticalGrid(
+                        columns = gridCells,
+                        state = gridState,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(filteredTiles, key = { it.id }) { tile ->
+                            val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                            val previewBitmap = remember(tile.iconConfig, isDark) {
+                                IconProcessor.processIconBitmap(context, tile.iconConfig, targetPixelSize = 96, isDarkTheme = isDark)
                             }
-                        )
+                            val isSelectionMode = selectedTileIds.isNotEmpty()
+                            val isSelected = tile.id in selectedTileIds
+
+                            TileGridItem(
+                                tile = tile,
+                                previewBitmap = previewBitmap,
+                                isSelected = isSelected,
+                                isSelectionMode = isSelectionMode,
+                                modifier = itemModifier,
+                                onClick = {
+                                    if (isSelectionMode) {
+                                        onTileSelectToggle(tile)
+                                    } else {
+                                        onTileClick(tile)
+                                    }
+                                },
+                                onLongClick = {
+                                    if (isSelectionMode) {
+                                        onTileSelectToggle(tile)
+                                    } else {
+                                        activeContextMenuTile = tile
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             } else {
@@ -324,22 +346,60 @@ fun TilesListScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
-                                // Icon
+                                // Circular Quick Settings Tile Icon (matching grid view)
                                 Box(
-                                    modifier = Modifier
-                                        .size(52.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(
-                                            if (tile.isActive) MaterialTheme.colorScheme.primaryContainer
-                                             else MaterialTheme.colorScheme.surface
-                                        ),
+                                    modifier = Modifier.size(56.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Image(
-                                        bitmap = previewBitmap.asImageBitmap(),
-                                        contentDescription = tile.name,
-                                        modifier = Modifier.size(36.dp)
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(52.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                when {
+                                                    isSelected -> MaterialTheme.colorScheme.primaryContainer
+                                                    tile.isAddedToQs -> MaterialTheme.colorScheme.primary
+                                                    else -> MaterialTheme.colorScheme.surfaceVariant
+                                                }
+                                            )
+                                            .then(
+                                                if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                                else Modifier
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Image(
+                                            bitmap = previewBitmap.asImageBitmap(),
+                                            contentDescription = tile.name,
+                                            colorFilter = ColorFilter.tint(
+                                                when {
+                                                    isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
+                                                    tile.isAddedToQs -> MaterialTheme.colorScheme.onPrimary
+                                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                                }
+                                            ),
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    }
+
+                                    // Selection Checkmark Badge
+                                    if (isSelectionMode && isSelected) {
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .size(18.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = "Selected",
+                                                tint = MaterialTheme.colorScheme.onPrimary,
+                                                modifier = Modifier.size(11.dp)
+                                            )
+                                        }
+                                    }
                                 }
 
                                 // Details: Tile Name and "Tile X" pill below
@@ -605,6 +665,13 @@ fun TileGridItem(
                 Image(
                     bitmap = previewBitmap.asImageBitmap(),
                     contentDescription = tile.name,
+                    colorFilter = ColorFilter.tint(
+                        when {
+                            isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
+                            tile.isAddedToQs -> MaterialTheme.colorScheme.onPrimary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    ),
                     modifier = Modifier.size(32.dp)
                 )
             }
@@ -739,6 +806,10 @@ fun TileContextMenuDialog(
                     Image(
                         bitmap = previewBitmap.asImageBitmap(),
                         contentDescription = tile.name,
+                        colorFilter = ColorFilter.tint(
+                            if (tile.isAddedToQs) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
                         modifier = Modifier.size(34.dp)
                     )
                 }

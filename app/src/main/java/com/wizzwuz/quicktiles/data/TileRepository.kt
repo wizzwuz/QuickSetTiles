@@ -40,7 +40,7 @@ class TileRepository(private val context: Context) {
     val sortOrderFlow: StateFlow<TileSortOrder> = _sortOrderFlow.asStateFlow()
 
     private val _gridViewFlow = MutableStateFlow(
-        prefs.getBoolean(KEY_GRID_VIEW, true)
+        prefs.getBoolean(KEY_GRID_VIEW, false)
     )
     val gridViewFlow: StateFlow<Boolean> = _gridViewFlow.asStateFlow()
 
@@ -49,6 +49,44 @@ class TileRepository(private val context: Context) {
     fun setGridViewEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_GRID_VIEW, enabled).apply()
         _gridViewFlow.value = enabled
+    }
+
+    private val _gridDynamicFlow = MutableStateFlow(
+        prefs.getBoolean(KEY_GRID_DYNAMIC, true)
+    )
+    val gridDynamicFlow: StateFlow<Boolean> = _gridDynamicFlow.asStateFlow()
+
+    fun isGridDynamic(): Boolean = _gridDynamicFlow.value
+
+    fun setGridDynamic(dynamic: Boolean) {
+        prefs.edit().putBoolean(KEY_GRID_DYNAMIC, dynamic).apply()
+        _gridDynamicFlow.value = dynamic
+    }
+
+    private val _gridColumnsFlow = MutableStateFlow(
+        prefs.getInt(KEY_GRID_COLUMNS, 3)
+    )
+    val gridColumnsFlow: StateFlow<Int> = _gridColumnsFlow.asStateFlow()
+
+    fun getGridColumns(): Int = _gridColumnsFlow.value
+
+    fun setGridColumns(columns: Int) {
+        val valid = columns.coerceIn(1, 12)
+        prefs.edit().putInt(KEY_GRID_COLUMNS, valid).apply()
+        _gridColumnsFlow.value = valid
+    }
+
+    private val _gridRowsFlow = MutableStateFlow(
+        prefs.getInt(KEY_GRID_ROWS, 4)
+    )
+    val gridRowsFlow: StateFlow<Int> = _gridRowsFlow.asStateFlow()
+
+    fun getGridRows(): Int = _gridRowsFlow.value
+
+    fun setGridRows(rows: Int) {
+        val valid = rows.coerceIn(1, 12)
+        prefs.edit().putInt(KEY_GRID_ROWS, valid).apply()
+        _gridRowsFlow.value = valid
     }
 
     fun isPrivateActivityLaunchable(): Boolean = _privateActivityLaunchableFlow.value
@@ -313,6 +351,9 @@ class TileRepository(private val context: Context) {
         const val KEY_SHOW_CATEGORIES = "show_categories"
         const val KEY_SORT_ORDER = "tile_sort_order"
         const val KEY_GRID_VIEW = "pref_grid_view"
+        const val KEY_GRID_DYNAMIC = "pref_grid_dynamic"
+        const val KEY_GRID_COLUMNS = "pref_grid_columns"
+        const val KEY_GRID_ROWS = "pref_grid_rows"
         private const val KEY_MIGRATED_MANUAL_QS = "migrated_manual_qs_v3"
 
         @Volatile
