@@ -311,11 +311,7 @@ fun TilesListScreen(
                                         }
                                     },
                                     onLongClick = {
-                                        if (isSelectionMode) {
-                                            onTileSelectToggle(tile)
-                                        } else {
-                                            activeContextMenuTile = tile
-                                        }
+                                        onTileSelectToggle(tile)
                                     }
                                 ),
                             border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
