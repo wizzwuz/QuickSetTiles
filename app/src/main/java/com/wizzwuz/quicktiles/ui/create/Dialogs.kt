@@ -2,10 +2,12 @@ package com.wizzwuz.quicktiles.ui.create
 
 import android.graphics.Bitmap
 import android.net.Uri
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,6 +18,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -29,15 +33,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import com.wizzwuz.quicktiles.model.IconConfig
 import com.wizzwuz.quicktiles.model.IconSourceType
 import com.wizzwuz.quicktiles.model.TileVisualState
@@ -528,7 +536,14 @@ fun FullscreenScriptEditorDialog(
         onDismissRequest = { onDismissAndSave(script) },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
+        val view = LocalView.current
+        DisposableEffect(view) {
+            val window = (view.parent as? DialogWindowProvider)?.window
+            window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            onDispose {}
+        }
         Scaffold(
+            modifier = Modifier.imePadding(),
             topBar = {
                 TopAppBar(
                     title = {
@@ -685,6 +700,7 @@ fun FullscreenScriptEditorDialog(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ShellCommandInputField(
     label: String,
@@ -693,7 +709,7 @@ fun ShellCommandInputField(
     selectedMode: ShellMode = ShellMode.AUTO,
     placeholder: String = "e.g. input tap 500 500\npm list packages",
     minLines: Int = 2,
-    maxLines: Int = 5,
+    maxLines: Int = 4,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -701,6 +717,20 @@ fun ShellCommandInputField(
     var isTesting by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<CommandResult?>(null) }
     var showFullscreenEditor by remember { mutableStateOf(false) }
+
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val imeInsets = WindowInsets.ime
+    val density = LocalDensity.current
+    val isImeVisible = remember(imeInsets, density) {
+        imeInsets.getBottom(density) > 0
+    }
+
+    LaunchedEffect(isImeVisible) {
+        if (isImeVisible) {
+            kotlinx.coroutines.delay(120)
+            bringIntoViewRequester.bringIntoView()
+        }
+    }
 
     if (showFullscreenEditor) {
         FullscreenScriptEditorDialog(
@@ -715,7 +745,9 @@ fun ShellCommandInputField(
     }
 
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoViewRequester),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
@@ -747,7 +779,16 @@ fun ShellCommandInputField(
             minLines = minLines,
             maxLines = maxLines,
             textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focusState ->
+                    if (focusState.isFocused) {
+                        coroutineScope.launch {
+                            kotlinx.coroutines.delay(100)
+                            bringIntoViewRequester.bringIntoView()
+                        }
+                    }
+                }
         )
 
         Row(
@@ -950,11 +991,18 @@ fun MultipleShellDialog(
             dismissOnClickOutside = true
         )
     ) {
+        val view = LocalView.current
+        DisposableEffect(view) {
+            val window = (view.parent as? DialogWindowProvider)?.window
+            window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            onDispose {}
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding()
-                .padding(horizontal = 16.dp, vertical = 20.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
             Card(
@@ -969,7 +1017,7 @@ fun MultipleShellDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp)
+                        .padding(horizontal = 18.dp, vertical = 12.dp)
                 ) {
                     // Title Header
                     Row(
@@ -992,7 +1040,7 @@ fun MultipleShellDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     // Scrollable content
                     Column(
@@ -1000,7 +1048,7 @@ fun MultipleShellDialog(
                             .fillMaxWidth()
                             .weight(1f, fill = false)
                             .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         // Horizontal list of shells with "+" button to the right of added shells
                         Text("Shells (${steps.size})", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -1320,7 +1368,7 @@ fun MultipleShellDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     // Buttons
                     Row(
@@ -1502,11 +1550,18 @@ fun ShellDialog(
             dismissOnClickOutside = true
         )
     ) {
+        val view = LocalView.current
+        DisposableEffect(view) {
+            val window = (view.parent as? DialogWindowProvider)?.window
+            window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            onDispose {}
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding()
-                .padding(horizontal = 16.dp, vertical = 20.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
             Card(
@@ -1521,7 +1576,7 @@ fun ShellDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp)
+                        .padding(horizontal = 18.dp, vertical = 12.dp)
                 ) {
                     // Title Header
                     Row(
@@ -1551,7 +1606,7 @@ fun ShellDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     // Scrollable content
                     Column(
@@ -1559,7 +1614,7 @@ fun ShellDialog(
                             .fillMaxWidth()
                             .weight(1f, fill = false)
                             .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                 // Visual State: Enabled, Disabled, Toggle (Both)
                 Text("Tile Appearance & State", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -1882,7 +1937,7 @@ fun ShellDialog(
                 }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     // Buttons
                     Row(
