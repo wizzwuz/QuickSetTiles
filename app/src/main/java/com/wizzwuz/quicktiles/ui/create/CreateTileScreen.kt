@@ -1400,7 +1400,9 @@ fun EditTileSheet(
             ) {
                 Text("Save Changes", fontWeight = FontWeight.Bold)
             }
-            if (showShellDialog) {
+        }
+
+        if (showShellDialog) {
                 ShellDialog(
                     initialName = itemName,
                     initialCommand = itemTargetData,
