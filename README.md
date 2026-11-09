@@ -102,3 +102,9 @@ QuickSetTiles is built on top of and made possible by these incredible open-sour
 | **[Kotlin & Coroutines](https://github.com/JetBrains/kotlin)** | [JetBrains](https://github.com/JetBrains) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Modern programming language, Compose compiler plugin, and `kotlinx.coroutines` powering asynchronous background loading and I/O tasks. |
 | **[Gradle](https://github.com/gradle/gradle)** | [Gradle Inc.](https://github.com/gradle) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Build automation system and wrapper powering the continuous integration, dependency management, and APK assembly. |
 | **[Pillow (PIL)](https://github.com/python-pillow/Pillow)** | [Alex Clark and Contributors](https://github.com/python-pillow) | [HPND](https://github.com/python-pillow/Pillow/blob/main/LICENSE) | Python imaging library used in automated CI/CD workflows for adaptive foreground and mipmap launcher icon synthesis. |
+
+---
+
+## 📄 License
+
+This project is licensed under the **GNU General Public License v3.0** (GPLv3) - see the [LICENSE](LICENSE) file for details.

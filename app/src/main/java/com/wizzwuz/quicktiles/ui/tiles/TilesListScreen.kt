@@ -243,54 +243,43 @@ fun TilesListScreen(
                     GridCells.Fixed(gridColumns.coerceIn(1, 12))
                 }
 
-                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    val availableHeight = maxHeight - 100.dp
-                    val itemModifier = if (!isGridDynamic && gridRows > 0) {
-                        val verticalGaps = ((gridRows - 1) * 16).dp
-                        val computedHeight = (availableHeight - verticalGaps) / gridRows
-                        Modifier.height(computedHeight.coerceAtLeast(80.dp))
-                    } else {
-                        Modifier
-                    }
-
-                    LazyVerticalGrid(
-                        columns = gridCells,
-                        state = gridState,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(filteredTiles, key = { it.id }) { tile ->
-                            val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-                            val previewBitmap = remember(tile.iconConfig, isDark) {
-                                IconProcessor.processIconBitmap(context, tile.iconConfig, targetPixelSize = 96, isDarkTheme = isDark)
-                            }
-                            val isSelectionMode = selectedTileIds.isNotEmpty()
-                            val isSelected = tile.id in selectedTileIds
-
-                            TileGridItem(
-                                tile = tile,
-                                previewBitmap = previewBitmap,
-                                isSelected = isSelected,
-                                isSelectionMode = isSelectionMode,
-                                modifier = itemModifier,
-                                onClick = {
-                                    if (isSelectionMode) {
-                                        onTileSelectToggle(tile)
-                                    } else {
-                                        onTileClick(tile)
-                                    }
-                                },
-                                onLongClick = {
-                                    if (isSelectionMode) {
-                                        onTileSelectToggle(tile)
-                                    } else {
-                                        activeContextMenuTile = tile
-                                    }
-                                }
-                            )
+                LazyVerticalGrid(
+                    columns = gridCells,
+                    state = gridState,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(filteredTiles, key = { it.id }) { tile ->
+                        val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                        val previewBitmap = remember(tile.iconConfig, isDark) {
+                            IconProcessor.processIconBitmap(context, tile.iconConfig, targetPixelSize = 96, isDarkTheme = isDark)
                         }
+                        val isSelectionMode = selectedTileIds.isNotEmpty()
+                        val isSelected = tile.id in selectedTileIds
+
+                        TileGridItem(
+                            tile = tile,
+                            previewBitmap = previewBitmap,
+                            isSelected = isSelected,
+                            isSelectionMode = isSelectionMode,
+                            gridColumns = if (isGridDynamic) 3 else gridColumns,
+                            onClick = {
+                                if (isSelectionMode) {
+                                    onTileSelectToggle(tile)
+                                } else {
+                                    onTileClick(tile)
+                                }
+                            },
+                            onLongClick = {
+                                if (isSelectionMode) {
+                                    onTileSelectToggle(tile)
+                                } else {
+                                    activeContextMenuTile = tile
+                                }
+                            }
+                        )
                     }
                 }
             } else {
@@ -625,29 +614,37 @@ fun TileGridItem(
     previewBitmap: android.graphics.Bitmap,
     isSelected: Boolean,
     isSelectionMode: Boolean,
+    gridColumns: Int = 3,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isDense = gridColumns >= 5
+    val outerIconSize = if (isDense) 50.dp else 60.dp
+    val innerCircleSize = if (isDense) 46.dp else 56.dp
+    val glyphSize = if (isDense) 24.dp else 30.dp
+    val titleFontSize = if (isDense) 11.sp else 12.sp
+    val subtitleFontSize = if (isDense) 10.sp else 11.sp
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(14.dp))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(vertical = 8.dp, horizontal = 4.dp),
+            .padding(vertical = 6.dp, horizontal = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Circular Tile Icon
         Box(
-            modifier = Modifier.size(64.dp),
+            modifier = Modifier.size(outerIconSize),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
-                    .size(60.dp)
+                    .size(innerCircleSize)
                     .clip(CircleShape)
                     .background(
                         when {
@@ -657,7 +654,7 @@ fun TileGridItem(
                         }
                     )
                     .then(
-                        if (isSelected) Modifier.border(2.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                        if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
                         else Modifier
                     ),
                 contentAlignment = Alignment.Center
@@ -672,7 +669,7 @@ fun TileGridItem(
                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                         }
                     ),
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(glyphSize)
                 )
             }
 
@@ -681,7 +678,7 @@ fun TileGridItem(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .size(20.dp)
+                        .size(18.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center
@@ -690,23 +687,24 @@ fun TileGridItem(
                         imageVector = Icons.Default.Check,
                         contentDescription = "Selected",
                         tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(13.dp)
+                        modifier = Modifier.size(11.dp)
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-        // Title
+        // Title (Tile Name) - ALWAYS visible with explicit color
         Text(
             text = tile.name,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Medium,
-            fontSize = 12.sp,
+            fontSize = titleFontSize,
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            lineHeight = 15.sp,
+            lineHeight = (titleFontSize.value + 3).sp,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 2.dp)
@@ -714,7 +712,7 @@ fun TileGridItem(
 
         Spacer(modifier = Modifier.height(2.dp))
 
-        // Subtitle: (Tile X)
+        // Subtitle: (Tile X) / (Active) / (Inactive) - ALWAYS visible with explicit color
         Text(
             text = if (tile.isActive && tile.slotNumber in 1..TileRepository.MAX_SLOTS) {
                 "(Tile ${tile.slotNumber})"
@@ -723,7 +721,7 @@ fun TileGridItem(
             } else {
                 "(Inactive)"
             },
-            fontSize = 11.sp,
+            fontSize = subtitleFontSize,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             maxLines = 1,
