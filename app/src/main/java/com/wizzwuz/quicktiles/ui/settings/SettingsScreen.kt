@@ -245,6 +245,58 @@ fun SettingsScreen(
                 }
             }
 
+            // 2b. Tile Layout Style Toggle Card
+            val isGridViewEnabled by repository.gridViewFlow.collectAsState()
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            repository.setGridViewEnabled(!isGridViewEnabled)
+                        }
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f).padding(end = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isGridViewEnabled) Icons.Default.GridView else Icons.Default.ViewAgenda,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Tile Layout Style",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isGridViewEnabled) "Grid View (Quick Settings circular tiles)" else "Classic Card View (Original list)",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = isGridViewEnabled,
+                        onCheckedChange = {
+                            repository.setGridViewEnabled(it)
+                        }
+                    )
+                }
+            }
+
             // 3. Categories Display Toggle Card
             val showCategories by repository.showCategoriesFlow.collectAsState()
 

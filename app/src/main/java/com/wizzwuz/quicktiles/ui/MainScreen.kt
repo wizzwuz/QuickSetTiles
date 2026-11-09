@@ -57,6 +57,7 @@ fun MainScreen() {
     val allTiles by repository.tilesFlow.collectAsState()
     val sortOrder by repository.sortOrderFlow.collectAsState()
     val showCategories by repository.showCategoriesFlow.collectAsState()
+    val isGridViewEnabled by repository.gridViewFlow.collectAsState()
 
     var currentDestination by rememberSaveable { mutableStateOf(MainDestination.LIST) }
     var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0 = Active Tiles, 1 = Inactive Tiles
@@ -68,6 +69,8 @@ fun MainScreen() {
 
     val activeListState = rememberLazyListState()
     val inactiveListState = rememberLazyListState()
+    val activeGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val inactiveGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
 
     val collectionMemberIds = remember(allTiles) {
         allTiles.filter { it.type == TileType.COLLECTION }.flatMap { it.collectionItemIds }.toSet()
@@ -402,7 +405,9 @@ fun MainScreen() {
                             TilesListScreen(
                                 tiles = activeTiles,
                                 isActiveTab = true,
+                                isGridView = isGridViewEnabled,
                                 listState = activeListState,
+                                gridState = activeGridState,
                                 showCategories = showCategories,
                                 searchQuery = searchQuery,
                                 selectedTileIds = selectedTileIds,
@@ -443,7 +448,9 @@ fun MainScreen() {
                             TilesListScreen(
                                 tiles = inactiveTiles,
                                 isActiveTab = false,
+                                isGridView = isGridViewEnabled,
                                 listState = inactiveListState,
+                                gridState = inactiveGridState,
                                 showCategories = showCategories,
                                 searchQuery = searchQuery,
                                 selectedTileIds = selectedTileIds,

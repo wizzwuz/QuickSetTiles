@@ -39,6 +39,18 @@ class TileRepository(private val context: Context) {
     )
     val sortOrderFlow: StateFlow<TileSortOrder> = _sortOrderFlow.asStateFlow()
 
+    private val _gridViewFlow = MutableStateFlow(
+        prefs.getBoolean(KEY_GRID_VIEW, true)
+    )
+    val gridViewFlow: StateFlow<Boolean> = _gridViewFlow.asStateFlow()
+
+    fun isGridViewEnabled(): Boolean = _gridViewFlow.value
+
+    fun setGridViewEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_GRID_VIEW, enabled).apply()
+        _gridViewFlow.value = enabled
+    }
+
     fun isPrivateActivityLaunchable(): Boolean = _privateActivityLaunchableFlow.value
 
     fun setPrivateActivityLaunchable(enabled: Boolean) {
@@ -300,6 +312,7 @@ class TileRepository(private val context: Context) {
         const val KEY_PRIVATE_ACTIVITY_LAUNCHABLE = "private_activity_launchable"
         const val KEY_SHOW_CATEGORIES = "show_categories"
         const val KEY_SORT_ORDER = "tile_sort_order"
+        const val KEY_GRID_VIEW = "pref_grid_view"
         private const val KEY_MIGRATED_MANUAL_QS = "migrated_manual_qs_v3"
 
         @Volatile

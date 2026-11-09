@@ -2,9 +2,9 @@ name: Build QuickSetTiles APK
 
 on:
   push:
-    branches: [ "main", "master", "experiments", "experimentals*" ]
+    branches: [ "main", "master", "experiments", "experimentals*", "tile-redesign*" ]
   pull_request:
-    branches: [ "main", "master", "experiments", "experimentals*" ]
+    branches: [ "main", "master", "experiments", "experimentals*", "tile-redesign*" ]
   workflow_dispatch:
 
 permissions:
