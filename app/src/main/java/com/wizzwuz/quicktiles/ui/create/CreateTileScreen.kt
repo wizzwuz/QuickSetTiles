@@ -566,7 +566,7 @@ fun CreateTileScreen(
                                 Slider(
                                     value = iconConfig.iconSize,
                                     onValueChange = { iconConfig = iconConfig.copy(iconSize = it) },
-                                    valueRange = 16f..64f
+                                    valueRange = 16f..160f
                                 )
                             }
                         }
@@ -1874,7 +1874,7 @@ fun CollectionCreatorScreen(
                                 Slider(
                                     value = collectionIconConfig.iconSize,
                                     onValueChange = { collectionIconConfig = collectionIconConfig.copy(iconSize = it) },
-                                    valueRange = 16f..64f
+                                    valueRange = 16f..160f
                                 )
                             }
                         }

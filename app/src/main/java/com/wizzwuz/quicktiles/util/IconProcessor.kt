@@ -619,15 +619,19 @@ object IconProcessor {
     ): Bitmap {
         val density = context.resources.displayMetrics.density
 
+        // Scale factor from iconSize (16dp to 160dp, base 32dp = 1.0x)
+        val scaleFactor = (config.iconSize / 32f).coerceIn(0.4f, 6.0f)
+        val scaledDim = ((targetPixelSize * 0.75f) * scaleFactor).toInt().coerceAtLeast(16)
+
         val rawElement: Bitmap = when (config.sourceType) {
             IconSourceType.APP_ICON -> {
-                extractAppIconElement(context, config.sourceData, targetSize = targetPixelSize)
+                extractAppIconElement(context, config.sourceData, targetSize = scaledDim)
             }
             IconSourceType.CUSTOM_FILE -> {
                 try {
                     val file = File(config.sourceData)
                     if (file.exists()) {
-                        loadBitmapFromFile(file, targetPixelSize) ?: getDefaultPresetBitmap(context, isDarkTheme)
+                        loadBitmapFromFile(file, scaledDim) ?: getDefaultPresetBitmap(context, isDarkTheme)
                     } else {
                         getDefaultPresetBitmap(context, isDarkTheme)
                     }
@@ -636,15 +640,15 @@ object IconProcessor {
                 }
             }
             IconSourceType.PRESET -> {
-                getPresetBitmap(context, config.sourceData, isDarkTheme)
+                getPresetBitmap(context, config.sourceData, isDarkTheme, targetDim = scaledDim)
             }
         }
 
-        // Scale factor from iconSize (16dp to 64dp, base 32dp)
-        val scaleFactor = (config.iconSize / 32f).coerceIn(0.5f, 2.0f)
-        val scaledDim = ((targetPixelSize * 0.75f) * scaleFactor).toInt().coerceIn(24, targetPixelSize)
-
-        val scaledElement = Bitmap.createScaledBitmap(rawElement, scaledDim, scaledDim, true)
+        val scaledElement = if (rawElement.width == scaledDim && rawElement.height == scaledDim) {
+            rawElement
+        } else {
+            Bitmap.createScaledBitmap(rawElement, scaledDim, scaledDim, true)
+        }
 
         val thicknessPx = config.outlineThickness * density
 
@@ -866,11 +870,19 @@ object IconProcessor {
         return drawableToBitmap(d)
     }
 
-    fun getPresetBitmap(context: Context, key: String, isDarkTheme: Boolean = true): Bitmap {
+    fun getPresetBitmap(
+        context: Context,
+        key: String,
+        isDarkTheme: Boolean = true,
+        targetDim: Int = 96
+    ): Bitmap {
+        val isDefaultSize = (targetDim == 96)
         val cacheKey = "${key}_$isDarkTheme"
-        val cached = synchronized(presetBitmapCache) { presetBitmapCache.get(cacheKey) }
-        if (cached != null && !cached.isRecycled) {
-            return cached
+        if (isDefaultSize) {
+            val cached = synchronized(presetBitmapCache) { presetBitmapCache.get(cacheKey) }
+            if (cached != null && !cached.isRecycled) {
+                return cached
+            }
         }
 
         ensureMaterialIconsLoaded(context)
@@ -895,7 +907,6 @@ object IconProcessor {
                 val resolvedContent = svgContent.replace("currentColor", colorStr)
                 val fullSvg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"$colorStr\">$resolvedContent</svg>"
                 val svg = SVG.getFromString(fullSvg)
-                val targetDim = 96
                 svg.documentWidth = targetDim.toFloat()
                 svg.documentHeight = targetDim.toFloat()
                 val bmp = Bitmap.createBitmap(targetDim, targetDim, Bitmap.Config.ARGB_8888)
@@ -903,22 +914,25 @@ object IconProcessor {
                 svg.renderToCanvas(canvas)
                 bmp
             } catch (e: Throwable) {
-                renderFallbackPresetBitmap(context, key, isDarkTheme, iconColor)
+                renderFallbackPresetBitmap(context, key, isDarkTheme, iconColor, targetDim)
             }
         } else {
-            renderFallbackPresetBitmap(context, key, isDarkTheme, iconColor)
+            renderFallbackPresetBitmap(context, key, isDarkTheme, iconColor, targetDim)
         }
 
-        synchronized(presetBitmapCache) {
-            presetBitmapCache.put(cacheKey, bitmap)
+        if (isDefaultSize) {
+            synchronized(presetBitmapCache) {
+                presetBitmapCache.put(cacheKey, bitmap)
+            }
         }
         return bitmap
     }
 
-    private fun renderFallbackPresetBitmap(context: Context, key: String, isDarkTheme: Boolean, iconColor: Int): Bitmap {
-        val size = 96
+    private fun renderFallbackPresetBitmap(context: Context, key: String, isDarkTheme: Boolean, iconColor: Int, size: Int = 96): Bitmap {
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
+        val scale = size / 96f
+        canvas.scale(scale, scale)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = iconColor
             style = Paint.Style.FILL
