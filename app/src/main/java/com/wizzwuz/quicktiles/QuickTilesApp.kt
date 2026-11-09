@@ -34,6 +34,10 @@ class QuickTilesApp : Application() {
         applicationScope.launch {
             com.wizzwuz.quicktiles.util.QsTileManager.ensurePermission(this@QuickTilesApp)
         }
+        // Preload preset icons asynchronously so preset picker opens instantly
+        applicationScope.launch(Dispatchers.IO) {
+            IconProcessor.getPresetIcons(this@QuickTilesApp)
+        }
     }
 
     override fun onTrimMemory(level: Int) {

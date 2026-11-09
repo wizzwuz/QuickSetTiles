@@ -1998,8 +1998,11 @@ fun IconPresetsDialog(
             allPresets
         } else {
             val q = searchQuery.trim().lowercase()
+            val qNorm = q.replace(' ', '_').replace('-', '_')
             allPresets.filter { (key, label) ->
-                key.lowercase().contains(q) || label.lowercase().contains(q)
+                key.lowercase().contains(q) ||
+                label.lowercase().contains(q) ||
+                key.replace('-', '_').contains(qNorm)
             }
         }
     }
@@ -2141,12 +2144,7 @@ fun IconPresetsDialog(
                         items(filteredPresets, key = { it.first }) { (key, label) ->
                             val isSelected = currentKey == key
                             val bmp = remember(key, isDark) {
-                                IconProcessor.processIconBitmap(
-                                    context,
-                                    IconConfig(sourceType = IconSourceType.PRESET, sourceData = key),
-                                    targetPixelSize = 96,
-                                    isDarkTheme = isDark
-                                )
+                                IconProcessor.getPresetBitmap(context, key, isDark)
                             }
                             Card(
                                 modifier = Modifier

@@ -9,6 +9,7 @@ import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.util.JsonReader
+import android.util.LruCache
 import androidx.core.content.ContextCompat
 import com.caverock.androidsvg.SVG
 import com.wizzwuz.quicktiles.R
@@ -21,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 object IconProcessor {
 
     private val elementCache = ConcurrentHashMap<String, Bitmap>()
-    private val presetBitmapCache = ConcurrentHashMap<String, Bitmap>()
+    private val presetBitmapCache = LruCache<String, Bitmap>(500)
     private var allPresetIconsCache: List<Pair<String, String>>? = null
     private var materialSvgMap: Map<String, String>? = null
 
@@ -32,12 +33,9 @@ object IconProcessor {
             }
         }
         elementCache.clear()
-        presetBitmapCache.values.forEach { bmp ->
-            if (!bmp.isRecycled) {
-                try { bmp.recycle() } catch (_: Throwable) {}
-            }
+        synchronized(presetBitmapCache) {
+            presetBitmapCache.evictAll()
         }
-        presetBitmapCache.clear()
     }
 
     fun getPresetIcons(context: Context): List<Pair<String, String>> {
@@ -65,18 +63,15 @@ object IconProcessor {
             "volume_up" to "Volume",
             "power_settings_new" to "Power"
         )
-        val addedNorm = HashSet<String>()
+        val popularKeySet = popularKeys.map { it.first }.toSet()
         popularKeys.forEach { (k, label) ->
             list.add(k to label)
-            addedNorm.add(k.replace('-', '_'))
         }
 
         val sortedKeys = materialSvgMap?.keys?.sorted() ?: emptyList()
         for (k in sortedKeys) {
-            val norm = k.replace('-', '_')
-            if (!addedNorm.contains(norm)) {
+            if (!popularKeySet.contains(k)) {
                 list.add(k to formatIconLabel(k))
-                addedNorm.add(norm)
             }
         }
         allPresetIconsCache = list
@@ -89,26 +84,98 @@ object IconProcessor {
         }
     }
 
-    private fun ensureMaterialIconsLoaded(context: Context) {
-        if (materialSvgMap != null) return
-        synchronized(this) {
-            if (materialSvgMap != null) return
+    private fun openIconsAsset(context: Context): java.io.InputStream? {
+        val candidates = listOf(
+            "material_icons.json",
+            "material_icons.json.gz",
+            "material_icons.bin",
+            "material_icons.dat"
+        )
+        for (name in candidates) {
             try {
-                context.assets.open("material_icons.json.gz").use { inputStream ->
-                    java.util.zip.GZIPInputStream(inputStream).use { gzipStream ->
-                        val jsonReader = JsonReader(java.io.InputStreamReader(gzipStream, Charsets.UTF_8))
-                        val map = HashMap<String, String>(58000)
-                        jsonReader.beginObject()
-                        while (jsonReader.hasNext()) {
-                            val name = jsonReader.nextName()
-                            val value = jsonReader.nextString()
-                            map[name] = value
+                val rawStream = context.assets.open(name)
+                val bis = java.io.BufferedInputStream(rawStream, 65536)
+                bis.mark(4)
+                val b1 = bis.read()
+                val b2 = bis.read()
+                bis.reset()
+                return if (b1 == 0x1f && b2 == (0x8b and 0xff)) {
+                    java.util.zip.GZIPInputStream(bis)
+                } else {
+                    bis
+                }
+            } catch (_: java.io.FileNotFoundException) {
+                // Try next candidate
+            } catch (e: Throwable) {
+                android.util.Log.w("IconProcessor", "Failed opening asset $name: ${e.message}")
+            }
+        }
+        return null
+    }
+
+    private fun ensureMaterialIconsLoaded(context: Context) {
+        if (materialSvgMap != null && materialSvgMap!!.isNotEmpty()) return
+        synchronized(this) {
+            if (materialSvgMap != null && materialSvgMap!!.isNotEmpty()) return
+            val start = System.currentTimeMillis()
+            val map = HashMap<String, String>(65000)
+            try {
+                val stream = openIconsAsset(context)
+                if (stream == null) {
+                    android.util.Log.e("IconProcessor", "material_icons asset file not found in assets!")
+                    materialSvgMap = emptyMap()
+                    return
+                }
+                stream.use { s ->
+                    val reader = java.io.BufferedReader(java.io.InputStreamReader(s, Charsets.UTF_8), 65536)
+                    var c = reader.read()
+                    while (c != -1 && c != '{'.code) {
+                        c = reader.read()
+                    }
+                    val sb = StringBuilder(1024)
+                    while (c != -1) {
+                        while (c != -1 && c != '"'.code && c != '}'.code) {
+                            c = reader.read()
                         }
-                        jsonReader.endObject()
-                        materialSvgMap = map
+                        if (c == '}'.code || c == -1) break
+
+                        // Read key
+                        sb.setLength(0)
+                        while (true) {
+                            c = reader.read()
+                            if (c == -1 || c == '"'.code) break
+                            if (c == '\\'.code) {
+                                c = reader.read()
+                            }
+                            sb.append(c.toChar())
+                        }
+                        val key = sb.toString()
+
+                        // Skip to value start
+                        while (c != -1 && c != ':'.code) c = reader.read()
+                        while (c != -1 && c != '"'.code) c = reader.read()
+
+                        // Read value
+                        sb.setLength(0)
+                        while (true) {
+                            c = reader.read()
+                            if (c == -1 || c == '"'.code) break
+                            if (c == '\\'.code) {
+                                c = reader.read()
+                            }
+                            sb.append(c.toChar())
+                        }
+                        val value = sb.toString()
+                        map[key] = value
+
+                        while (c != -1 && c != ','.code && c != '}'.code) c = reader.read()
+                        if (c == '}'.code) break
                     }
                 }
+                materialSvgMap = map
+                android.util.Log.i("IconProcessor", "Successfully loaded ${map.size} material icons in ${System.currentTimeMillis() - start} ms")
             } catch (e: Throwable) {
+                android.util.Log.e("IconProcessor", "Error loading material icons: ${e.message}", e)
                 materialSvgMap = emptyMap()
             }
         }
@@ -801,8 +868,9 @@ object IconProcessor {
 
     fun getPresetBitmap(context: Context, key: String, isDarkTheme: Boolean = true): Bitmap {
         val cacheKey = "${key}_$isDarkTheme"
-        presetBitmapCache[cacheKey]?.let { cached ->
-            if (!cached.isRecycled) return cached
+        val cached = synchronized(presetBitmapCache) { presetBitmapCache.get(cacheKey) }
+        if (cached != null && !cached.isRecycled) {
+            return cached
         }
 
         ensureMaterialIconsLoaded(context)
@@ -841,7 +909,9 @@ object IconProcessor {
             renderFallbackPresetBitmap(context, key, isDarkTheme, iconColor)
         }
 
-        presetBitmapCache[cacheKey] = bitmap
+        synchronized(presetBitmapCache) {
+            presetBitmapCache.put(cacheKey, bitmap)
+        }
         return bitmap
     }
 

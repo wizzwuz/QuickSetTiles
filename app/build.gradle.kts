@@ -22,6 +22,10 @@ android {
         resourceConfigurations += setOf("en")
     }
 
+    androidResources {
+        noCompress += listOf("gz", "bin")
+    }
+
     signingConfigs {
         create("release") {
             val keystoreFile = rootProject.file("keystore/release.jks")
