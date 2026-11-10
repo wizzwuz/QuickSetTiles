@@ -1,6 +1,7 @@
 package com.wizzwuz.quicksettiles.util
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -132,14 +133,45 @@ object ShizukuHelper {
         }
     }
 
-    fun requestShizukuPermission(requestCode: Int = 1001) {
-        if (!isShizukuRunning()) return
+    fun requestShizukuPermission(context: Context? = null, requestCode: Int = 1001) {
+        var requestedViaApi = false
         try {
-            if (!hasShizukuPermission()) {
+            if (isShizukuRunning() && !hasShizukuPermission()) {
                 Shizuku.requestPermission(requestCode)
+                requestedViaApi = true
             }
         } catch (e: Throwable) {
-            LogManager.logError("ShizukuHelper", "Failed to request Shizuku permission", e)
+            LogManager.logError("ShizukuHelper", "Failed to request Shizuku permission via API", e)
+        }
+
+        // If context is provided, handle Shevery and Shizuku authorization prompts / fallback
+        if (context != null) {
+            try {
+                // 1. Try explicit REQUEST_AUTHORIZATION intent supported by Shevery and Shizuku
+                val authIntent = Intent("moe.shizuku.privileged.api.intent.action.REQUEST_AUTHORIZATION").apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (context.packageManager.queryIntentActivities(authIntent, 0).isNotEmpty()) {
+                    context.startActivity(authIntent)
+                    return
+                }
+            } catch (e: Throwable) {
+                // Fallback to manager launch
+            }
+
+            // 2. Direct launch of Shevery or Shizuku manager app so user can enable permission
+            try {
+                val pm = context.packageManager
+                val sheveryIntent = pm.getLaunchIntentForPackage("com.hamondev.shevery")
+                val shizukuIntent = pm.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                val target = sheveryIntent ?: shizukuIntent
+                if (target != null) {
+                    target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(target)
+                }
+            } catch (e: Throwable) {
+                // ignore
+            }
         }
     }
 

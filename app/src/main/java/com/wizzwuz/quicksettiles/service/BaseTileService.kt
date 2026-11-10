@@ -379,29 +379,38 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
             TileType.CONTACTS -> {
                 try {
                     val uri = Uri.parse(item.targetData)
-                    val action = if (item.targetData.startsWith("smsto:")) Intent.ACTION_SENDTO else Intent.ACTION_DIAL
-                    val intent = Intent(action, uri).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (item.targetData.startsWith("smsto:")) {
+                        val intent = Intent(Intent.ACTION_SENDTO, uri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        launchIntent(intent)
+                    } else {
+                        try {
+                            val callIntent = Intent(Intent.ACTION_CALL, uri).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            launchIntent(callIntent)
+                        } catch (e: SecurityException) {
+                            val dialIntent = Intent(Intent.ACTION_DIAL, uri).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            launchIntent(dialIntent)
+                        }
                     }
-                    launchIntent(intent)
                 } catch (e: Throwable) {
                     showToast("Failed to open contact: ${e.message}")
                 }
             }
             TileType.SPLIT_APPS -> {
-                asyncTask = true
-                serviceScope.launch {
-                    try {
-                        if (item.collapseOnTap) {
-                            mainHandler.post { collapseShade() }
-                        }
-                        val result = AppHelper.launchSplitApps(this@BaseTileService, item.targetData)
-                        result.onFailure { e ->
-                            mainHandler.post { showToast("Failed to launch split apps: ${e.message}") }
-                        }
-                    } finally {
-                        ProcessManager.onTileTaskFinished()
+                try {
+                    val intent = Intent(this, com.wizzwuz.quicksettiles.ui.InternalPluginActivity::class.java).apply {
+                        action = "launch_split_apps"
+                        putExtra("split_data", item.targetData)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
                     }
+                    launchIntent(intent)
+                } catch (e: Throwable) {
+                    showToast("Failed to launch split apps: ${e.message}")
                 }
             }
         }

@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -47,7 +48,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -246,6 +250,10 @@ fun CreateTileScreen(
             }
         }
     }
+
+    val callPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { /* result */ }
 
     val contactPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -1066,6 +1074,9 @@ fun CreateTileScreen(
             onDismiss = { showContactsDialog = false },
             onSelectPhoneDial = {
                 contactPickerMode = "dial"
+                if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CALL_PHONE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    callPermissionLauncher.launch(android.Manifest.permission.CALL_PHONE)
+                }
                 try {
                     contactPickerLauncher.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
                 } catch (e: Throwable) {
@@ -1816,6 +1827,69 @@ fun CollectionCreatorScreen(
     var showIntentDialog by remember { mutableStateOf(false) }
     var showActivityPicker by remember { mutableStateOf(false) }
     var showCollectionPresetsDialog by remember { mutableStateOf(false) }
+    var showCollectionContactsDialog by remember { mutableStateOf(false) }
+    var collectionContactPickerMode by remember { mutableStateOf("dial") }
+
+    val collectionContactPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK && result.data?.data != null) {
+            val contactUri = result.data!!.data!!
+            val projection = arrayOf(
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ContactsContract.CommonDataKinds.Phone.NUMBER,
+                ContactsContract.CommonDataKinds.Phone.PHOTO_URI
+            )
+            try {
+                context.contentResolver.query(contactUri, projection, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                        val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                        val photoIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.PHOTO_URI)
+
+                        val name = if (nameIndex >= 0) cursor.getString(nameIndex) ?: "" else ""
+                        val number = if (numberIndex >= 0) cursor.getString(numberIndex) ?: "" else ""
+                        val photoUriStr = if (photoIndex >= 0) cursor.getString(photoIndex) else null
+
+                        val finalTileName = name.ifBlank { number }
+                        val mode = collectionContactPickerMode
+                        val target = if (mode == "dial") "tel:$number" else "smsto:$number"
+                        val presetName = if (mode == "dial") "phone" else "chat"
+                        var iconCfg = IconConfig(sourceType = IconSourceType.PRESET, sourceData = presetName)
+
+                        if (!photoUriStr.isNullOrBlank()) {
+                            try {
+                                val photoUri = Uri.parse(photoUriStr)
+                                context.contentResolver.openInputStream(photoUri)?.use { stream ->
+                                    val bmp = BitmapFactory.decodeStream(stream)
+                                    if (bmp != null) {
+                                        val savedPath = IconProcessor.saveBitmapToFile(context, bmp, "contact_${System.currentTimeMillis()}")
+                                        if (savedPath != null) {
+                                            iconCfg = IconConfig(sourceType = IconSourceType.CUSTOM_FILE, sourceData = savedPath)
+                                        }
+                                    }
+                                }
+                            } catch (e: Throwable) {}
+                        }
+
+                        val item = TileItem(
+                            id = UUID.randomUUID().toString(),
+                            name = finalTileName,
+                            type = TileType.CONTACTS,
+                            targetData = target,
+                            iconConfig = iconCfg,
+                            isActive = false,
+                            slotNumber = -1,
+                            collapseCollectionOnClick = collapseOnTap
+                        )
+                        collectionItems.add(item)
+                    }
+                }
+            } catch (e: Throwable) {
+                Toast.makeText(context, "Error reading contact: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     // File pickers
     val customImagePicker = rememberLauncherForActivityResult(
@@ -2224,7 +2298,7 @@ fun CollectionCreatorScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Tap a tile to edit",
+                            text = "Hold & drag to rearrange • Tap to edit",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -2246,6 +2320,11 @@ fun CollectionCreatorScreen(
                             )
                         }
                     } else {
+                        var draggedTileId by remember { mutableStateOf<String?>(null) }
+                        var dragOffsetX by remember { mutableFloatStateOf(0f) }
+                        val density = androidx.compose.ui.platform.LocalDensity.current
+                        val itemSlotPx = remember(density) { with(density) { 94.dp.toPx() } }
+
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -2261,15 +2340,60 @@ fun CollectionCreatorScreen(
                                         IconProcessor.loadRawBitmap(context, item.iconConfig, targetPixelSize = 96, isDarkTheme = isDark)
                                     }
                                 }
+                                val isDragging = draggedTileId == item.id
                                 Card(
                                     modifier = Modifier
                                         .width(84.dp)
+                                        .zIndex(if (isDragging) 10f else 1f)
+                                        .graphicsLayer {
+                                            translationX = if (isDragging) dragOffsetX else 0f
+                                            scaleX = if (isDragging) 1.08f else 1.0f
+                                            scaleY = if (isDragging) 1.08f else 1.0f
+                                            shadowElevation = if (isDragging) 12.dp.toPx() else 2.dp.toPx()
+                                        }
+                                        .pointerInput(item.id) {
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart = {
+                                                    draggedTileId = item.id
+                                                    dragOffsetX = 0f
+                                                },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    dragOffsetX += dragAmount.x
+                                                    val currentIdx = collectionItems.indexOfFirst { it.id == draggedTileId }
+                                                    if (currentIdx != -1) {
+                                                        val threshold = itemSlotPx * 0.6f
+                                                        if (dragOffsetX > threshold && currentIdx < collectionItems.size - 1) {
+                                                            val targetIdx = currentIdx + 1
+                                                            val moved = collectionItems.removeAt(currentIdx)
+                                                            collectionItems.add(targetIdx, moved)
+                                                            dragOffsetX -= itemSlotPx
+                                                        } else if (dragOffsetX < -threshold && currentIdx > 0) {
+                                                            val targetIdx = currentIdx - 1
+                                                            val moved = collectionItems.removeAt(currentIdx)
+                                                            collectionItems.add(targetIdx, moved)
+                                                            dragOffsetX += itemSlotPx
+                                                        }
+                                                    }
+                                                },
+                                                onDragEnd = {
+                                                    draggedTileId = null
+                                                    dragOffsetX = 0f
+                                                },
+                                                onDragCancel = {
+                                                    draggedTileId = null
+                                                    dragOffsetX = 0f
+                                                }
+                                            )
+                                        }
                                         .clip(RoundedCornerShape(14.dp))
                                         .clickable {
-                                            if (item.type == TileType.SHELL && item.multiShellSteps.isNotEmpty()) {
-                                                selectedMultiShellItemForEdit = item
-                                            } else {
-                                                selectedItemForEdit = item
+                                            if (draggedTileId == null) {
+                                                if (item.type == TileType.SHELL && item.multiShellSteps.isNotEmpty()) {
+                                                    selectedMultiShellItemForEdit = item
+                                                } else {
+                                                    selectedItemForEdit = item
+                                                }
                                             }
                                         },
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -2404,6 +2528,21 @@ fun CollectionCreatorScreen(
                     isSelected = false,
                     onClick = { folderPicker.launch(null) }
                 )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TileTypeButton(
+                    modifier = Modifier.weight(1f),
+                    title = "Contacts",
+                    subtitle = "Dial or message",
+                    icon = Icons.Default.Call,
+                    isSelected = false,
+                    onClick = { showCollectionContactsDialog = true }
+                )
+                Spacer(modifier = Modifier.weight(1f))
             }
 
             // --- TILE BEHAVIOR & APPEARANCE ---
@@ -2807,6 +2946,29 @@ fun CollectionCreatorScreen(
             onSelectAppIcon = { pkg ->
                 showCollectionPresetsDialog = false
                 collectionIconConfig = IconConfig(sourceType = IconSourceType.APP_ICON, sourceData = pkg)
+            }
+    // Contacts Dialog for Collection
+    if (showCollectionContactsDialog) {
+        ContactsChoiceDialog(
+            onDismiss = { showCollectionContactsDialog = false },
+            onSelectPhoneDial = {
+                collectionContactPickerMode = "dial"
+                if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CALL_PHONE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    callPermissionLauncher.launch(android.Manifest.permission.CALL_PHONE)
+                }
+                try {
+                    collectionContactPickerLauncher.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
+                } catch (e: Throwable) {
+                    Toast.makeText(context, "Could not open contacts: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onSelectMessage = {
+                collectionContactPickerMode = "message"
+                try {
+                    collectionContactPickerLauncher.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
+                } catch (e: Throwable) {
+                    Toast.makeText(context, "Could not open contacts: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         )
     }

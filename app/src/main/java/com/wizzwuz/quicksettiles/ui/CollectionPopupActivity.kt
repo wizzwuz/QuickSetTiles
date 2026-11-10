@@ -520,11 +520,24 @@ private fun executeCollectionItem(context: android.content.Context, repo: TileRe
             }
             TileType.CONTACTS -> {
                 val uri = android.net.Uri.parse(item.targetData)
-                val action = if (item.targetData.startsWith("smsto:")) Intent.ACTION_SENDTO else Intent.ACTION_DIAL
-                val intent = Intent(action, uri).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (item.targetData.startsWith("smsto:")) {
+                    val intent = Intent(Intent.ACTION_SENDTO, uri).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                } else {
+                    try {
+                        val callIntent = Intent(Intent.ACTION_CALL, uri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(callIntent)
+                    } catch (e: SecurityException) {
+                        val dialIntent = Intent(Intent.ACTION_DIAL, uri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(dialIntent)
+                    }
                 }
-                context.startActivity(intent)
             }
             TileType.SPLIT_APPS -> {
                 collectionScope.launch {

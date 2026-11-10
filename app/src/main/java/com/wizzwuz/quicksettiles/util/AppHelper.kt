@@ -672,7 +672,7 @@ object AppHelper {
 
         val pm = context.packageManager
 
-        // Strategy 1: Privileged launch via Shizuku / Root with windowingMode 3 & 4
+        // Strategy 1: Privileged launch via Shizuku / Root with statusbar toggle & windowingMode
         if ((ShizukuHelper.isShizukuRunning() && ShizukuHelper.hasShizukuPermission()) || ShizukuHelper.isRootBinaryPresent()) {
             try {
                 val launchIntent1 = pm.getLaunchIntentForPackage(pkg1)
@@ -682,9 +682,29 @@ object AppHelper {
                 val comp2 = launchIntent2?.component?.flattenToString()
 
                 if (comp1 != null && comp2 != null) {
-                    ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "-n", comp1, "--windowingMode", "3"))
+                    // 1. Collapse shade first
+                    ShizukuHelper.executePrivilegedCommand("cmd statusbar collapse")
+                    delay(150)
+
+                    // 2. Launch first app in full screen / primary
+                    ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "-n", comp1, "-f", "0x10000000"))
+                    delay(300)
+
+                    // 3. Trigger split-screen toggle via SystemUI
+                    val toggleRes = ShizukuHelper.executePrivilegedCommand("cmd statusbar toggle-split-screen")
                     delay(350)
-                    ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "-n", comp2, "--windowingMode", "4"))
+
+                    // 4. Launch second app into secondary adjacent window
+                    ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "-n", comp2, "-f", "0x10001000", "--windowingMode", "4", "--activity-multiple-task"))
+                    delay(200)
+
+                    // 5. Fallback if toggle-split-screen was unsupported on this OEM
+                    if (toggleRes.exitCode != 0) {
+                        ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "--windowingMode", "3", "-n", comp1, "-f", "0x10001000"))
+                        delay(250)
+                        ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "--windowingMode", "4", "-n", comp2, "-f", "0x10001000", "--activity-multiple-task"))
+                    }
+
                     return@withContext Result.success("Launched split apps in split screen mode")
                 }
             } catch (e: Throwable) {
@@ -695,15 +715,18 @@ object AppHelper {
         // Strategy 2: Standard Android launch with FLAG_ACTIVITY_LAUNCH_ADJACENT
         try {
             val intent1 = pm.getLaunchIntentForPackage(pkg1)?.apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             val intent2 = pm.getLaunchIntentForPackage(pkg2)?.apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
             }
 
             if (intent1 != null && intent2 != null) {
                 withContext(Dispatchers.Main) {
                     context.startActivity(intent1)
+                }
+                delay(300)
+                withContext(Dispatchers.Main) {
                     context.startActivity(intent2)
                 }
                 Result.success("Launched split apps")

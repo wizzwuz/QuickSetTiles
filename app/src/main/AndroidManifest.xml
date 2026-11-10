@@ -14,6 +14,7 @@
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
 
     <queries>
         <package android:name="moe.shizuku.privileged.api" />
@@ -23,6 +24,9 @@
         </intent>
         <intent>
             <action android:name="android.intent.action.CREATE_SHORTCUT" />
+        </intent>
+        <intent>
+            <action android:name="moe.shizuku.privileged.api.intent.action.REQUEST_AUTHORIZATION" />
         </intent>
     </queries>
 

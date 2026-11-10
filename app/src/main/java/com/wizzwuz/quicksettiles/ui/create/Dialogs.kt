@@ -1353,7 +1353,7 @@ fun MultipleShellDialog(
                                         )
                                         if (isPermRequired) {
                                             Button(
-                                                onClick = { ShizukuHelper.requestShizukuPermission() },
+                                                onClick = { ShizukuHelper.requestShizukuPermission(context) },
                                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                                 modifier = Modifier.height(28.dp)
                                             ) {
@@ -2009,7 +2009,7 @@ fun ShellDialog(
                             )
                             if (isPermRequired) {
                                 Button(
-                                    onClick = { ShizukuHelper.requestShizukuPermission() },
+                                    onClick = { ShizukuHelper.requestShizukuPermission(context) },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                     modifier = Modifier.height(28.dp)
                                 ) {

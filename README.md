@@ -37,17 +37,23 @@
     - *Tap*: Activates the tile and assigns it to an active quick settings slot.
     - *Long press*: Opens the tile editor or delete options.
 
-- **8 Versatile Tile Types**:
+- **11 Versatile Tile Types**:
   1. 📱 **Apps**: Floating menu with real-time search across all apps (including system apps).
   2. 🌐 **Website**: Add a custom label and URL to launch directly in your default browser.
-  3. ⚡ **Shortcut**: Select from inbuilt application shortcuts.
+  3. ⚡ **Shortcut**: Select from inbuilt application shortcuts and deep links.
   4. 🧩 **Activity**: Full-page explorer of installed apps with accordion drop-downs of all activities.
      - *Tap*: Selects the activity for your tile.
      - *Long press*: Live test launch to verify execution before saving!
   5. 📨 **Intent**: Custom broadcast or activity intents with package name, action, and URI.
-  6. 🐚 **Shell**: Execute shell commands or scripts using **Shizuku API** or Superuser root (`su`) with live output feedback.
+  6. 🐚 **Shell**: Execute shell commands or scripts using **Shizuku API**, **Shevery**, or Superuser root (`su`) with live output feedback.
   7. 📄 **Files**: Select any file to open instantly from your Quick Settings panel.
   8. 📁 **Folders**: Select any directory to open in the system file manager.
+  9. 👤 **Contacts**:
+     - **Phone Dial**: Select any contact from your address book to create a dedicated dial tile. Directly invokes the system SIM chooser or initiates an immediate call if a default SIM is configured.
+     - **Message**: Directly opens the SMS/messaging conversation for the selected contact.
+     - Automatically pulls contact name and contact photo for tile labeling and icon.
+  10. 🔀 **Split Apps**: Pair any two installed applications and launch both in multi-window / split-screen mode with one tap. Includes a quick swap (`⇋`) button to easily flip left/top and right/bottom app placement.
+  11. 🗂️ **Collections**: Group multiple tiles into a single Quick Settings tile tray popup. Supports interactive drag-and-drop reordering in the tile preview tray!
 
 - **🔒 Inbuilt Private Activities & Shizuku Plugin**:
   - Launch unexported/private activities that are normally blocked by Android's permissions using Shizuku (UID 2000) or Superuser root (`su`).

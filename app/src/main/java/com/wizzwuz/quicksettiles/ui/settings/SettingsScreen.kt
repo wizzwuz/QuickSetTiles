@@ -830,9 +830,9 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            if (diagnostics.isShizukuRunning && !diagnostics.hasShizukuPermission) {
+                            if (!diagnostics.hasShizukuPermission) {
                                 Button(
-                                    onClick = { ShizukuHelper.requestShizukuPermission() },
+                                    onClick = { ShizukuHelper.requestShizukuPermission(context) },
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Text("Request Shizuku Permission", fontSize = 12.sp)
