@@ -1830,6 +1830,10 @@ fun CollectionCreatorScreen(
     var showCollectionContactsDialog by remember { mutableStateOf(false) }
     var collectionContactPickerMode by remember { mutableStateOf("dial") }
 
+    val callPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { /* result */ }
+
     val collectionContactPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -2947,6 +2951,9 @@ fun CollectionCreatorScreen(
                 showCollectionPresetsDialog = false
                 collectionIconConfig = IconConfig(sourceType = IconSourceType.APP_ICON, sourceData = pkg)
             }
+        )
+    }
+
     // Contacts Dialog for Collection
     if (showCollectionContactsDialog) {
         ContactsChoiceDialog(
