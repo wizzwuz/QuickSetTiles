@@ -420,16 +420,9 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
             }
             TileType.SPLIT_APPS -> {
                 try {
-                    val parts = item.targetData.split("|")
                     val intent = Intent(this, com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity::class.java).apply {
                         putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_DATA, item.targetData)
-                        if (parts.size >= 2) {
-                            val uri1 = packageManager.getLaunchIntentForPackage(parts[0].trim())?.toUri(0) ?: parts[0].trim()
-                            val uri2 = packageManager.getLaunchIntentForPackage(parts[1].trim())?.toUri(0) ?: parts[1].trim()
-                            putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_TOP, uri1)
-                            putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_BOTTOM, uri2)
-                        }
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
                     }
                     launchIntent(intent)
                 } catch (e: Throwable) {

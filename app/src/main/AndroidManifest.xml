@@ -39,6 +39,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.QuickTiles"
         android:largeHeap="true"
+        android:resizeableActivity="true"
         tools:targetApi="35">
 
         <activity
@@ -86,6 +87,8 @@
             android:name=".ui.split.LaunchSplitActivity"
             android:exported="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
             android:taskAffinity="">
             <intent-filter>
                 <action android:name="com.wizzwuz.quicksettiles.intent.action.SPLIT" />
