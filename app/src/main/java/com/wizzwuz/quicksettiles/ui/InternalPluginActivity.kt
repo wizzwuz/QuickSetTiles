@@ -62,8 +62,15 @@ class InternalPluginActivity : Activity() {
             cleanFinish()
         } else if (action == "launch_split_apps") {
             val splitData = intent.getStringExtra("split_data") ?: ""
+            val parts = splitData.split("|")
             val launchIntent = Intent(this, com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity::class.java).apply {
-                putExtra("split_data", splitData)
+                putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_DATA, splitData)
+                if (parts.size >= 2) {
+                    val uri1 = packageManager.getLaunchIntentForPackage(parts[0].trim())?.toUri(0) ?: parts[0].trim()
+                    val uri2 = packageManager.getLaunchIntentForPackage(parts[1].trim())?.toUri(0) ?: parts[1].trim()
+                    putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_TOP, uri1)
+                    putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_BOTTOM, uri2)
+                }
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
             }
             startActivity(launchIntent)

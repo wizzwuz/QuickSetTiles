@@ -556,8 +556,15 @@ private fun executeCollectionItem(context: android.content.Context, repo: TileRe
                 }
             }
             TileType.SPLIT_APPS -> {
+                val parts = item.targetData.split("|")
                 val intent = Intent(context, com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity::class.java).apply {
-                    putExtra("split_data", item.targetData)
+                    putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_DATA, item.targetData)
+                    if (parts.size >= 2) {
+                        val uri1 = context.packageManager.getLaunchIntentForPackage(parts[0].trim())?.toUri(0) ?: parts[0].trim()
+                        val uri2 = context.packageManager.getLaunchIntentForPackage(parts[1].trim())?.toUri(0) ?: parts[1].trim()
+                        putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_TOP, uri1)
+                        putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_BOTTOM, uri2)
+                    }
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
                 }
                 context.startActivity(intent)
