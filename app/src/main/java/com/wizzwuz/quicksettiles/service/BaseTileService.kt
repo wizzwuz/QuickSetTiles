@@ -467,15 +467,11 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val options = ActivityOptions.makeBasic().apply {
-                    setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
-                }.toBundle()
                 val pendingIntent = PendingIntent.getActivity(
                     this,
                     slotNumber + 1000,
                     intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                    options
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 startActivityAndCollapse(pendingIntent)
             } else {
@@ -489,42 +485,27 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
 
     private fun launchIntent(intent: Intent) {
         val reqCode = (slotNumber * 1000 + (System.currentTimeMillis() % 1000)).toInt()
-        val options = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ActivityOptions.makeBasic().apply {
-                setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
-            }.toBundle()
-        } else {
-            null
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            reqCode,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            options
-        )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            try {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val pendingIntent = PendingIntent.getActivity(
+                    this,
+                    reqCode,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
                 startActivityAndCollapse(pendingIntent)
-            } catch (e: Throwable) {
-                try {
-                    collapseShade()
-                    startActivity(intent.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
-                } catch (e2: Throwable) {
-                    com.wizzwuz.quicksettiles.util.LogManager.logError("BaseTileService", "launchIntent fallback failed", e2)
-                }
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            try {
+            } else {
+                @Suppress("DEPRECATION")
                 startActivityAndCollapse(intent)
-            } catch (e: Throwable) {
-                try {
-                    collapseShade()
-                    startActivity(intent.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
-                } catch (e2: Throwable) {
-                    com.wizzwuz.quicksettiles.util.LogManager.logError("BaseTileService", "launchIntent fallback failed", e2)
-                }
+            }
+        } catch (e: Throwable) {
+            com.wizzwuz.quicksettiles.util.LogManager.logError("BaseTileService", "startActivityAndCollapse failed, trying direct start", e)
+            try {
+                collapseShade()
+                startActivity(intent.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+            } catch (e2: Throwable) {
+                com.wizzwuz.quicksettiles.util.LogManager.logError("BaseTileService", "launchIntent fallback failed", e2)
+                showToast("Failed to launch: ${e2.message}")
             }
         }
     }
