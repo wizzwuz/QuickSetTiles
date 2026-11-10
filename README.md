@@ -18,6 +18,12 @@
   <img src="https://img.shields.io/badge/Shizuku-Enabled-red.svg" alt="Shizuku" />
 </p>
 
+<p align="center">
+  <a href="https://buymeacoffee.com/wizzwuz">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="60px">
+  </a>
+</p>
+
 </div>
 
 ## ✨ Features
