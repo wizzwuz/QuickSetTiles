@@ -166,7 +166,6 @@ object QsTileManager {
         }
 
         TileRepository.setComponentEnabled(context, slot, false)
-        TileRepository.requestTileUpdate(context, slot)
         return true
     }
 }

@@ -556,12 +556,11 @@ private fun executeCollectionItem(context: android.content.Context, repo: TileRe
                 }
             }
             TileType.SPLIT_APPS -> {
-                collectionScope.launch {
-                    val res = AppHelper.launchSplitApps(context, item.targetData)
-                    res.onFailure { e ->
-                        Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
+                val intent = Intent(context, com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity::class.java).apply {
+                    putExtra("split_data", item.targetData)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
                 }
+                context.startActivity(intent)
             }
         }
     } catch (e: Throwable) {

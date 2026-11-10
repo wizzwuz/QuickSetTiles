@@ -43,7 +43,7 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
             val repo = TileRepository.getInstance(context)
             val tiles = repo.tilesFlow.value
             for (tile in tiles) {
-                if (tile.isActive && tile.slotNumber in 1..TileRepository.MAX_SLOTS) {
+                if (tile.isActive && tile.isAddedToQs && tile.slotNumber in 1..TileRepository.MAX_SLOTS) {
                     refreshSlot(tile.slotNumber)
                     TileRepository.requestTileUpdate(context, tile.slotNumber)
                 }
@@ -54,8 +54,35 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    override fun onTileAdded() {
+        super.onTileAdded()
+        val repo = TileRepository.getInstance(this)
+        val item = repo.getTileBySlot(slotNumber)
+        if (item == null || !item.isActive || !item.isAddedToQs) {
+            TileRepository.setComponentEnabled(this, slotNumber, false)
+            return
+        }
+        updateTileState()
+    }
+
+    override fun onTileRemoved() {
+        super.onTileRemoved()
+        val repo = TileRepository.getInstance(this)
+        val item = repo.getTileBySlot(slotNumber)
+        if (item != null) {
+            repo.setTileAddedToQs(item.id, false)
+        }
+        TileRepository.setComponentEnabled(this, slotNumber, false)
+    }
+
     override fun onStartListening() {
         super.onStartListening()
+        val repo = TileRepository.getInstance(this)
+        val item = repo.getTileBySlot(slotNumber)
+        if (item == null || !item.isActive || !item.isAddedToQs) {
+            TileRepository.setComponentEnabled(this, slotNumber, false)
+            return
+        }
         activeInstances[slotNumber] = this
         ProcessManager.onTileListeningStarted()
         updateTileState()
@@ -77,68 +104,64 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
         val repo = TileRepository.getInstance(this)
         val item = repo.getTileBySlot(slotNumber)
 
+        if (item == null || !item.isActive || !item.isAddedToQs) {
+            TileRepository.setComponentEnabled(this, slotNumber, false)
+            return
+        }
+
         val isDeviceLocked = try { isLocked } catch (e: Throwable) { false }
 
-        if (item != null && item.isActive) {
-            if (isDeviceLocked && !item.allowOnLockScreen && item.hideFromLockScreen) {
-                // Completely hide tile from lock screen by disabling component in PackageManager
-                TileRepository.setComponentEnabled(this, slotNumber, false)
-                return
-            }
+        if (isDeviceLocked && !item.allowOnLockScreen && item.hideFromLockScreen) {
+            // Completely hide tile from lock screen by disabling component in PackageManager
+            TileRepository.setComponentEnabled(this, slotNumber, false)
+            return
+        }
 
-            if (item.multiShellSteps.isNotEmpty()) {
-                val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
-                val step = item.multiShellSteps[stepIndex]
-                tile.state = if (step.visualState == com.wizzwuz.quicksettiles.model.TileVisualState.ENABLED) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-                val displayName = step.name.ifBlank { item.name }
-                tile.label = displayName.ifBlank { "Tile $slotNumber" }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    tile.subtitle = "${stepIndex + 1}/${item.multiShellSteps.size}"
-                }
-                try {
-                    tile.icon = IconProcessor.createTileIcon(this, step.iconConfig)
-                } catch (e: Throwable) {
-                    tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_default)
-                }
-            } else {
-                tile.state = when (item.visualState) {
-                    com.wizzwuz.quicksettiles.model.TileVisualState.ENABLED -> Tile.STATE_ACTIVE
-                    com.wizzwuz.quicksettiles.model.TileVisualState.DISABLED -> Tile.STATE_INACTIVE
-                    com.wizzwuz.quicksettiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-                }
-                val displayName = when (item.visualState) {
-                    com.wizzwuz.quicksettiles.model.TileVisualState.TOGGLE -> {
-                        if (item.currentToggleOn) item.onTileName.ifBlank { item.name } else item.offTileName.ifBlank { item.name }
-                    }
-                    com.wizzwuz.quicksettiles.model.TileVisualState.ENABLED -> item.name
-                    com.wizzwuz.quicksettiles.model.TileVisualState.DISABLED -> item.offTileName.ifBlank { item.name }
-                }
-                tile.label = displayName.ifBlank { item.name.ifBlank { "Tile $slotNumber" } }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    tile.subtitle = when (item.visualState) {
-                        com.wizzwuz.quicksettiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) "Enabled" else "Disabled"
-                        com.wizzwuz.quicksettiles.model.TileVisualState.ENABLED -> "Enabled"
-                        com.wizzwuz.quicksettiles.model.TileVisualState.DISABLED -> "Disabled"
-                    }
-                }
-                val effectiveIcon = when (item.visualState) {
-                    com.wizzwuz.quicksettiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) (item.onIconConfig ?: item.iconConfig) else (item.offIconConfig ?: item.iconConfig)
-                    com.wizzwuz.quicksettiles.model.TileVisualState.ENABLED -> item.iconConfig
-                    com.wizzwuz.quicksettiles.model.TileVisualState.DISABLED -> item.offIconConfig ?: item.iconConfig
-                }
-                try {
-                    tile.icon = IconProcessor.createTileIcon(this, effectiveIcon)
-                } catch (e: Throwable) {
-                    tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_default)
-                }
+        if (item.multiShellSteps.isNotEmpty()) {
+            val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
+            val step = item.multiShellSteps[stepIndex]
+            tile.state = if (step.visualState == com.wizzwuz.quicksettiles.model.TileVisualState.ENABLED) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+            val displayName = step.name.ifBlank { item.name }
+            tile.label = displayName.ifBlank { "Tile $slotNumber" }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                tile.subtitle = "${stepIndex + 1}/${item.multiShellSteps.size}"
+            }
+            try {
+                tile.icon = IconProcessor.createTileIcon(this, step.iconConfig)
+            } catch (e: Throwable) {
+                tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_default)
             }
         } else {
-            tile.state = Tile.STATE_INACTIVE
-            tile.label = "Tile $slotNumber"
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                tile.subtitle = "Unassigned"
+            tile.state = when (item.visualState) {
+                com.wizzwuz.quicksettiles.model.TileVisualState.ENABLED -> Tile.STATE_ACTIVE
+                com.wizzwuz.quicksettiles.model.TileVisualState.DISABLED -> Tile.STATE_INACTIVE
+                com.wizzwuz.quicksettiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
             }
-            tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_default)
+            val displayName = when (item.visualState) {
+                com.wizzwuz.quicksettiles.model.TileVisualState.TOGGLE -> {
+                    if (item.currentToggleOn) item.onTileName.ifBlank { item.name } else item.offTileName.ifBlank { item.name }
+                }
+                com.wizzwuz.quicksettiles.model.TileVisualState.ENABLED -> item.name
+                com.wizzwuz.quicksettiles.model.TileVisualState.DISABLED -> item.offTileName.ifBlank { item.name }
+            }
+            tile.label = displayName.ifBlank { item.name.ifBlank { "Tile $slotNumber" } }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                tile.subtitle = when (item.visualState) {
+                    com.wizzwuz.quicksettiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) "Enabled" else "Disabled"
+                    com.wizzwuz.quicksettiles.model.TileVisualState.ENABLED -> "Enabled"
+                    com.wizzwuz.quicksettiles.model.TileVisualState.DISABLED -> "Disabled"
+                }
+            }
+            val effectiveIcon = when (item.visualState) {
+                com.wizzwuz.quicksettiles.model.TileVisualState.TOGGLE -> if (item.currentToggleOn) (item.onIconConfig ?: item.iconConfig) else (item.offIconConfig ?: item.iconConfig)
+                com.wizzwuz.quicksettiles.model.TileVisualState.ENABLED -> item.iconConfig
+                com.wizzwuz.quicksettiles.model.TileVisualState.DISABLED -> item.offIconConfig ?: item.iconConfig
+            }
+            try {
+                tile.icon = IconProcessor.createTileIcon(this, effectiveIcon)
+            } catch (e: Throwable) {
+                tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_default)
+            }
         }
         tile.updateTile()
     }
@@ -148,12 +171,8 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
         val repo = TileRepository.getInstance(this)
         val item = repo.getTileBySlot(slotNumber)
 
-        if (item == null || !item.isActive) {
-            // Open Quick Tiles app to configure this slot
-            val intent = Intent(this, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            launchIntent(intent)
+        if (item == null || !item.isActive || !item.isAddedToQs) {
+            TileRepository.setComponentEnabled(this, slotNumber, false)
             return
         }
 
@@ -400,8 +419,7 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
             }
             TileType.SPLIT_APPS -> {
                 try {
-                    val intent = Intent(this, com.wizzwuz.quicksettiles.ui.InternalPluginActivity::class.java).apply {
-                        action = "launch_split_apps"
+                    val intent = Intent(this, com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity::class.java).apply {
                         putExtra("split_data", item.targetData)
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
                     }
