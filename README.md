@@ -101,6 +101,7 @@ QuickSetTiles is built on top of and made possible by these incredible open-sour
 
 | Project / Library | Maintainer / Author | License | Description & Purpose |
 | :--- | :--- | :--- | :--- |
+| **[Activity Launcher Shizuku Plugin](https://github.com/ActivityLauncher/ActivityLauncherShizukuPlugin)** | [ActivityLauncher](https://github.com/ActivityLauncher) | [GPL 3.0](https://www.gnu.org/licenses/gpl-3.0.html) | Inspiration for launching private (unexported) activities via Shizuku. |
 | **[Shizuku](https://github.com/RikkaApps/Shizuku)** | [RikkaApps](https://github.com/RikkaApps) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Provides the elevated permissions interface (UID 2000 shell / ADB / Root) enabling rootless shell execution and launching unexported activities. |
 | **[AndroidSVG](https://github.com/BigBadaboom/androidsvg)** | [Paul LeBeau (caverock)](https://github.com/BigBadaboom) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | High-performance SVG parsing and rendering engine used to rasterize all 57,000+ Material preset vector icons onto Android Canvases and Bitmaps. |
 | **[Coil](https://github.com/coil-kt/coil)** | [Coil Contributors](https://github.com/coil-kt) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Fast, lightweight, Kotlin coroutine-first image loading library. |

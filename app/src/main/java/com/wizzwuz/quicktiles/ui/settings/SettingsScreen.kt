@@ -1383,6 +1383,7 @@ fun AboutSection(context: Context) {
     ) {
         val creditsList = remember {
             listOf(
+                Triple("Activity Launcher Shizuku Plugin", "GPL 3.0", "Inspiration for launching private activities via Shizuku" to "https://github.com/ActivityLauncher/ActivityLauncherShizukuPlugin"),
                 Triple("Shizuku", "Apache 2.0", "Elevated permissions interface (ADB shell / Root) for rootless execution" to "https://github.com/RikkaApps/Shizuku"),
                 Triple("AndroidSVG", "Apache 2.0", "Vector parsing & rendering engine rasterizing 57,000+ preset icons" to "https://github.com/BigBadaboom/androidsvg"),
                 Triple("Coil", "Apache 2.0", "Fast, lightweight Kotlin coroutine-first image loading library" to "https://github.com/coil-kt/coil"),
