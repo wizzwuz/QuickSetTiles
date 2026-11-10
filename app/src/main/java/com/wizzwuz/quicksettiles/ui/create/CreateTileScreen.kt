@@ -1,7 +1,9 @@
 package com.wizzwuz.quicksettiles.ui.create
 
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.ContactsContract
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -157,6 +159,9 @@ fun CreateTileScreen(
     var showMultipleShellDialog by rememberSaveable { mutableStateOf(false) }
     var showPresetsDialog by rememberSaveable { mutableStateOf(false) }
     var showCollectionCreator by rememberSaveable { mutableStateOf(initialTile?.type == TileType.COLLECTION) }
+    var showSplitAppsDialog by rememberSaveable { mutableStateOf(initialTile?.type == TileType.SPLIT_APPS) }
+    var showContactsDialog by rememberSaveable { mutableStateOf(false) }
+    var contactPickerMode by rememberSaveable { mutableStateOf("dial") }
 
     LaunchedEffect(initialTile) {
         if (initialTile != null) {
@@ -237,6 +242,68 @@ fun CreateTileScreen(
             if (tileName.isBlank()) {
                 val folderName = it.lastPathSegment?.substringAfterLast(':') ?: "Folder Tile"
                 tileName = folderName
+            }
+        }
+    }
+
+    val contactPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK && result.data?.data != null) {
+            val contactUri = result.data!!.data!!
+            val projection = arrayOf(
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ContactsContract.CommonDataKinds.Phone.NUMBER,
+                ContactsContract.CommonDataKinds.Phone.PHOTO_URI
+            )
+            try {
+                context.contentResolver.query(contactUri, projection, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                        val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                        val photoIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.PHOTO_URI)
+
+                        val name = if (nameIndex >= 0) cursor.getString(nameIndex) ?: "" else ""
+                        val number = if (numberIndex >= 0) cursor.getString(numberIndex) ?: "" else ""
+                        val photoUriStr = if (photoIndex >= 0) cursor.getString(photoIndex) else null
+
+                        tileName = name.ifBlank { number }
+                        selectedType = TileType.CONTACTS
+                        val mode = contactPickerMode
+                        targetData = if (mode == "dial") "tel:$number" else "smsto:$number"
+
+                        coroutineScope.launch(Dispatchers.IO) {
+                            var photoLoaded = false
+                            if (!photoUriStr.isNullOrBlank()) {
+                                try {
+                                    val photoUri = Uri.parse(photoUriStr)
+                                    context.contentResolver.openInputStream(photoUri)?.use { stream ->
+                                        val bmp = BitmapFactory.decodeStream(stream)
+                                        if (bmp != null) {
+                                            val savedPath = IconProcessor.saveBitmapToFile(context, bmp, "contact_${System.currentTimeMillis()}")
+                                            if (savedPath != null) {
+                                                iconConfig = iconConfig.copy(
+                                                    sourceType = IconSourceType.CUSTOM_FILE,
+                                                    sourceData = savedPath
+                                                )
+                                                photoLoaded = true
+                                            }
+                                        }
+                                    }
+                                } catch (e: Throwable) {}
+                            }
+                            if (!photoLoaded) {
+                                val presetName = if (mode == "dial") "phone" else "chat"
+                                iconConfig = iconConfig.copy(
+                                    sourceType = IconSourceType.PRESET,
+                                    sourceData = presetName
+                                )
+                            }
+                        }
+                    }
+                }
+            } catch (e: Throwable) {
+                Toast.makeText(context, "Error picking contact: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -602,11 +669,17 @@ fun CreateTileScreen(
                 ) {
                     TileTypeButton(
                         modifier = Modifier.weight(1f),
-                        title = "Apps",
-                        subtitle = "Select any app",
-                        icon = Icons.Default.Apps,
-                        isSelected = selectedType == TileType.APPS,
-                        onClick = { showAppPicker = true }
+                        title = if (selectedType == TileType.SPLIT_APPS) "Split Apps" else "Apps",
+                        subtitle = if (selectedType == TileType.SPLIT_APPS) "Dual split screen apps" else "Select any app",
+                        icon = if (selectedType == TileType.SPLIT_APPS) Icons.Default.ViewStream else Icons.Default.Apps,
+                        isSelected = selectedType == TileType.APPS || selectedType == TileType.SPLIT_APPS,
+                        onClick = {
+                            if (selectedType == TileType.SPLIT_APPS) {
+                                showSplitAppsDialog = true
+                            } else {
+                                showAppPicker = true
+                            }
+                        }
                     )
 
                     TileTypeButton(
@@ -698,7 +771,16 @@ fun CreateTileScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     TileTypeButton(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.weight(1f),
+                        title = "Contacts",
+                        subtitle = "Dial or message",
+                        icon = Icons.Default.Call,
+                        isSelected = selectedType == TileType.CONTACTS,
+                        onClick = { showContactsDialog = true }
+                    )
+
+                    TileTypeButton(
+                        modifier = Modifier.weight(1f),
                         title = "Collections",
                         subtitle = "Create a collection",
                         icon = Icons.Default.Collections,
@@ -938,6 +1020,64 @@ fun CreateTileScreen(
                     iconSize = 32f,
                     outlineStyle = "OUTLINE"
                 )
+            },
+            onOpenSplit = {
+                showAppPicker = false
+                showSplitAppsDialog = true
+            }
+        )
+    }
+
+    if (showSplitAppsDialog) {
+        val splitParts = targetData.split("|")
+        val initP1 = if (selectedType == TileType.SPLIT_APPS && splitParts.isNotEmpty()) splitParts[0] else null
+        val initP2 = if (selectedType == TileType.SPLIT_APPS && splitParts.size > 1) splitParts[1] else null
+
+        SplitAppsDialog(
+            initialPkg1 = initP1,
+            initialPkg2 = initP2,
+            onBack = {
+                showSplitAppsDialog = false
+                showAppPicker = true
+            },
+            onDismiss = {
+                showSplitAppsDialog = false
+            },
+            onConfirm = { p1, p2, l1, l2, icon1, icon2 ->
+                showSplitAppsDialog = false
+                selectedType = TileType.SPLIT_APPS
+                targetData = "$p1|$p2"
+                tileName = "$l1 | $l2"
+                iconConfig = IconConfig(
+                    sourceType = IconSourceType.APP_ICON,
+                    sourceData = p1,
+                    outlineThickness = 2.5f,
+                    outlineThreshold = 0.4f,
+                    iconSize = 32f,
+                    outlineStyle = "OUTLINE"
+                )
+            }
+        )
+    }
+
+    if (showContactsDialog) {
+        ContactsChoiceDialog(
+            onDismiss = { showContactsDialog = false },
+            onSelectPhoneDial = {
+                contactPickerMode = "dial"
+                try {
+                    contactPickerLauncher.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
+                } catch (e: Throwable) {
+                    Toast.makeText(context, "Could not open contacts: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onSelectMessage = {
+                contactPickerMode = "message"
+                try {
+                    contactPickerLauncher.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
+                } catch (e: Throwable) {
+                    Toast.makeText(context, "Could not open contacts: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         )
     }

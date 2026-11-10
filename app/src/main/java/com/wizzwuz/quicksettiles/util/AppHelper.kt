@@ -5,10 +5,14 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Process
 import android.provider.Settings
 import android.util.TypedValue
 import kotlinx.coroutines.Dispatchers
@@ -49,7 +53,9 @@ data class AppShortcutItem(
     val longLabel: String? = null,
     val iconBitmap: Bitmap? = null,
     val intentUri: String,
-    val packageName: String
+    val packageName: String,
+    val isShortcutProvider: Boolean = false,
+    val providerActivityName: String? = null
 )
 
 /**
@@ -426,9 +432,10 @@ object AppHelper {
     }
 
     /**
-     * Extracts all apps that have static launcher shortcuts defined via
-     * <meta-data android:name="android.app.shortcuts"> in their launcher activities.
-     * Parses the shortcuts XML resource to extract label, long label, icon, and intent.
+     * Extracts all shortcuts for all installed applications:
+     * 1. Static XML shortcuts (<meta-data android:name="android.app.shortcuts"> across all activities)
+     * 2. Shortcut provider activities (Intent.ACTION_CREATE_SHORTCUT)
+     * 3. Dynamic / pinned shortcuts via LauncherApps (when supported/accessible)
      */
     suspend fun getAppsWithShortcuts(context: Context): List<AppWithShortcuts> = withContext(Dispatchers.IO) {
         val cacheKey = "all"
@@ -436,28 +443,33 @@ object AppHelper {
 
         val pm = context.packageManager
 
-        // Query all launcher activities (they declare shortcuts in their meta-data)
+        // 1. Query activities with ACTION_CREATE_SHORTCUT (shortcut providers like Contact, Drive shortcut, etc.)
+        val providerIntent = Intent(Intent.ACTION_CREATE_SHORTCUT)
+        val providerInfos = try {
+            pm.queryIntentActivities(providerIntent, PackageManager.GET_META_DATA)
+        } catch (e: Throwable) {
+            emptyList()
+        }
+        val providersByPkg = providerInfos.groupBy { it.activityInfo.packageName }
+
+        // 2. Query activities with android.app.shortcuts XML meta-data across ALL launcher and main activities
         val launcherIntent = Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
-        val launcherApps = pm.queryIntentActivities(launcherIntent, PackageManager.GET_META_DATA)
+        val launcherApps = try { pm.queryIntentActivities(launcherIntent, PackageManager.GET_META_DATA) } catch (e: Throwable) { emptyList() }
+        val allMainApps = try { pm.queryIntentActivities(Intent(Intent.ACTION_MAIN), PackageManager.GET_META_DATA) } catch (e: Throwable) { emptyList() }
 
-        // Deduplicate by package
-        val uniqueApps = launcherApps
+        val uniqueActivityInfos = (launcherApps + allMainApps)
             .mapNotNull { it.activityInfo }
-            .distinctBy { it.packageName }
-            .filter { it.metaData?.getInt("android.app.shortcuts", 0) != 0 }
+            .distinctBy { it.packageName to (it.metaData?.getInt("android.app.shortcuts", 0) ?: 0) }
+            .filter { (it.metaData?.getInt("android.app.shortcuts", 0) ?: 0) != 0 }
 
-        // Parse each app's shortcuts in parallel
-        val result = coroutineScope {
-            uniqueApps.map { actInfo ->
+        val xmlShortcutsByPkg = coroutineScope {
+            uniqueActivityInfos.map { actInfo ->
                 async {
                     val pkg = actInfo.packageName
+                    val shortcuts = mutableListOf<AppShortcutItem>()
                     try {
                         val shortcutsResId = actInfo.metaData!!.getInt("android.app.shortcuts", 0)
-                        val appLabel = try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (e: Throwable) { pkg }
-                        val appIcon = try { pm.getApplicationIcon(pkg) } catch (e: Throwable) { pm.defaultActivityIcon }
                         val appRes = pm.getResourcesForApplication(pkg)
-
-                        val shortcuts = mutableListOf<AppShortcutItem>()
                         val parser = appRes.getXml(shortcutsResId)
 
                         var shortcutId = ""
@@ -465,6 +477,7 @@ object AppHelper {
                         var shortcutLongLabel: String? = null
                         var shortcutIconResId = 0
                         var insideShortcut = false
+                        var isShortcutEnabled = true
                         val intents = mutableListOf<Intent>()
 
                         var eventType = parser.eventType
@@ -473,21 +486,24 @@ object AppHelper {
                             when {
                                 eventType == XmlPullParser.START_TAG && tagName == "shortcut" -> {
                                     insideShortcut = true
-                                    shortcutId = ""; shortcutLabel = ""; shortcutLongLabel = null; shortcutIconResId = 0; intents.clear()
+                                    shortcutId = ""; shortcutLabel = ""; shortcutLongLabel = null; shortcutIconResId = 0
+                                    isShortcutEnabled = true
+                                    intents.clear()
                                     for (i in 0 until parser.attributeCount) {
-                                        val attrName = parser.getAttributeName(i)
+                                        val attrName = parser.getAttributeName(i) ?: ""
                                         val attrValue = parser.getAttributeValue(i)
-                                        when (attrName) {
-                                            "shortcutId" -> shortcutId = attrValue ?: ""
-                                            "shortcutShortLabel" -> {
+                                        when {
+                                            attrName.endsWith("shortcutId") -> shortcutId = attrValue ?: ""
+                                            attrName.endsWith("shortcutShortLabel") -> {
                                                 val resId = parser.getAttributeResourceValue(i, 0)
                                                 shortcutLabel = if (resId != 0) try { appRes.getString(resId) } catch (e: Throwable) { attrValue ?: "" } else attrValue ?: ""
                                             }
-                                            "shortcutLongLabel" -> {
+                                            attrName.endsWith("shortcutLongLabel") -> {
                                                 val resId = parser.getAttributeResourceValue(i, 0)
                                                 shortcutLongLabel = if (resId != 0) try { appRes.getString(resId) } catch (e: Throwable) { attrValue } else attrValue
                                             }
-                                            "icon" -> shortcutIconResId = parser.getAttributeResourceValue(i, 0)
+                                            attrName.endsWith("icon") -> shortcutIconResId = parser.getAttributeResourceValue(i, 0)
+                                            attrName.endsWith("enabled") -> isShortcutEnabled = attrValue?.toBoolean() ?: true
                                         }
                                     }
                                 }
@@ -495,24 +511,29 @@ object AppHelper {
                                     var action = "android.intent.action.MAIN"
                                     var intentPkg = pkg
                                     var intentClass = ""
+                                    var intentData = ""
                                     for (i in 0 until parser.attributeCount) {
-                                        when (parser.getAttributeName(i)) {
-                                            "action" -> action = parser.getAttributeValue(i) ?: action
-                                            "targetPackage" -> intentPkg = parser.getAttributeValue(i) ?: pkg
-                                            "targetClass" -> intentClass = parser.getAttributeValue(i) ?: ""
+                                        val attrName = parser.getAttributeName(i) ?: ""
+                                        val attrVal = parser.getAttributeValue(i) ?: ""
+                                        when {
+                                            attrName.endsWith("action") -> action = attrVal.ifBlank { action }
+                                            attrName.endsWith("targetPackage") -> intentPkg = attrVal.ifBlank { pkg }
+                                            attrName.endsWith("targetClass") -> intentClass = attrVal
+                                            attrName.endsWith("data") -> intentData = attrVal
                                         }
                                     }
                                     try {
                                         intents.add(Intent(action).apply {
                                             if (intentClass.isNotBlank()) component = ComponentName(intentPkg, intentClass)
                                             else setPackage(intentPkg)
+                                            if (intentData.isNotBlank()) data = Uri.parse(intentData)
                                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                         })
                                     } catch (e: Throwable) { }
                                 }
                                 eventType == XmlPullParser.END_TAG && tagName == "shortcut" && insideShortcut -> {
                                     insideShortcut = false
-                                    if (shortcutLabel.isNotBlank() && intents.isNotEmpty()) {
+                                    if (isShortcutEnabled && shortcutLabel.isNotBlank() && intents.isNotEmpty()) {
                                         val iconBitmap: Bitmap? = if (shortcutIconResId != 0) {
                                             try { IconProcessor.drawableToBitmap(appRes.getDrawable(shortcutIconResId, null), 96, 96) } catch (e: Throwable) { null }
                                         } else null
@@ -526,7 +547,111 @@ object AppHelper {
                             eventType = parser.next()
                         }
                         parser.close()
-                        if (shortcuts.isNotEmpty()) AppWithShortcuts(appLabel, pkg, appIcon, shortcuts) else null
+                    } catch (e: Throwable) { }
+                    pkg to shortcuts
+                }
+            }.awaitAll()
+        }.groupBy({ it.first }, { it.second }).mapValues { entry -> entry.value.flatten() }
+
+        // 3. Dynamic / pinned shortcuts via LauncherApps (Android 7.1+)
+        val dynamicShortcutsByPkg = mutableMapOf<String, MutableList<AppShortcutItem>>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
+            try {
+                val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as? LauncherApps
+                if (launcherApps != null && launcherApps.hasShortcutHostPermission()) {
+                    val query = LauncherApps.ShortcutQuery().apply {
+                        setQueryFlags(
+                            LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
+                            LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
+                            LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED
+                        )
+                    }
+                    val rawShortcuts = launcherApps.getShortcuts(query, Process.myUserHandle())
+                    if (rawShortcuts != null) {
+                        for (si in rawShortcuts) {
+                            val pkg = si.`package`
+                            val label = si.shortLabel?.toString() ?: si.id
+                            val longLabel = si.longLabel?.toString()
+                            val iconDrawable = try { launcherApps.getShortcutIconDrawable(si, 0) } catch (e: Throwable) { null }
+                            val iconBmp = iconDrawable?.let { IconProcessor.drawableToBitmap(it, 96, 96) }
+                            val intent = si.intent
+                            val uri = intent?.toUri(Intent.URI_INTENT_SCHEME) ?: ""
+                            if (uri.isNotBlank()) {
+                                dynamicShortcutsByPkg.getOrPut(pkg) { mutableListOf() }.add(
+                                    AppShortcutItem(
+                                        id = si.id,
+                                        label = label,
+                                        longLabel = longLabel,
+                                        iconBitmap = iconBmp,
+                                        intentUri = uri,
+                                        packageName = pkg
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            } catch (e: Throwable) { }
+        }
+
+        // 4. Combine all packages that have shortcuts
+        val allPackages = (xmlShortcutsByPkg.keys + providersByPkg.keys + dynamicShortcutsByPkg.keys).toSet()
+
+        val result = coroutineScope {
+            allPackages.map { pkg ->
+                async {
+                    try {
+                        val appInfo = pm.getApplicationInfo(pkg, 0)
+                        val appLabel = pm.getApplicationLabel(appInfo).toString()
+                        val appIcon = try { pm.getApplicationIcon(pkg) } catch (e: Throwable) { pm.defaultActivityIcon }
+
+                        val combinedShortcuts = mutableListOf<AppShortcutItem>()
+
+                        // Add XML shortcuts
+                        xmlShortcutsByPkg[pkg]?.let { combinedShortcuts.addAll(it) }
+
+                        // Add Dynamic shortcuts
+                        dynamicShortcutsByPkg[pkg]?.let { dynamicList ->
+                            for (ds in dynamicList) {
+                                if (combinedShortcuts.none { it.id == ds.id || it.label.equals(ds.label, ignoreCase = true) }) {
+                                    combinedShortcuts.add(ds)
+                                }
+                            }
+                        }
+
+                        // Add Shortcut Provider activities (like Contact, Drive shortcut, Drive scan)
+                        providersByPkg[pkg]?.let { pInfos ->
+                            for (info in pInfos) {
+                                val actName = info.activityInfo.name
+                                val label = try { info.loadLabel(pm).toString() } catch (e: Throwable) { actName.substringAfterLast('.') }
+                                val icon = try { info.loadIcon(pm) } catch (e: Throwable) { null }
+                                val iconBmp = icon?.let { IconProcessor.drawableToBitmap(it, 96, 96) }
+                                // Only add if not already in shortcuts
+                                if (combinedShortcuts.none { it.label.equals(label, ignoreCase = true) }) {
+                                    combinedShortcuts.add(
+                                        AppShortcutItem(
+                                            id = "$pkg/$actName",
+                                            label = label,
+                                            longLabel = null,
+                                            iconBitmap = iconBmp,
+                                            intentUri = "",
+                                            packageName = pkg,
+                                            isShortcutProvider = true,
+                                            providerActivityName = actName
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        if (combinedShortcuts.isNotEmpty()) {
+                            AppWithShortcuts(
+                                appLabel = appLabel,
+                                packageName = pkg,
+                                appIcon = appIcon,
+                                shortcuts = combinedShortcuts.sortedBy { it.label.lowercase() }
+                            )
+                        } else null
                     } catch (e: Throwable) { null }
                 }
             }.awaitAll().filterNotNull()
@@ -535,5 +660,58 @@ object AppHelper {
         val sorted = result.sortedBy { it.appLabel.lowercase() }
         shortcutsCache[cacheKey] = sorted
         sorted
+    }
+
+    suspend fun launchSplitApps(context: Context, targetData: String): Result<String> = withContext(Dispatchers.IO) {
+        val parts = targetData.split("|")
+        if (parts.size < 2) {
+            return@withContext Result.failure(IllegalArgumentException("Invalid split apps data"))
+        }
+        val pkg1 = parts[0].trim()
+        val pkg2 = parts[1].trim()
+
+        val pm = context.packageManager
+
+        // Strategy 1: Privileged launch via Shizuku / Root with windowingMode 3 & 4
+        if ((ShizukuHelper.isShizukuRunning() && ShizukuHelper.hasShizukuPermission()) || ShizukuHelper.isRootBinaryPresent()) {
+            try {
+                val launchIntent1 = pm.getLaunchIntentForPackage(pkg1)
+                val launchIntent2 = pm.getLaunchIntentForPackage(pkg2)
+
+                val comp1 = launchIntent1?.component?.flattenToString()
+                val comp2 = launchIntent2?.component?.flattenToString()
+
+                if (comp1 != null && comp2 != null) {
+                    ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "-n", comp1, "--windowingMode", "3"))
+                    delay(350)
+                    ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "-n", comp2, "--windowingMode", "4"))
+                    return@withContext Result.success("Launched split apps in split screen mode")
+                }
+            } catch (e: Throwable) {
+                // Fall back to standard launch
+            }
+        }
+
+        // Strategy 2: Standard Android launch with FLAG_ACTIVITY_LAUNCH_ADJACENT
+        try {
+            val intent1 = pm.getLaunchIntentForPackage(pkg1)?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+            }
+            val intent2 = pm.getLaunchIntentForPackage(pkg2)?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+            }
+
+            if (intent1 != null && intent2 != null) {
+                withContext(Dispatchers.Main) {
+                    context.startActivity(intent1)
+                    context.startActivity(intent2)
+                }
+                Result.success("Launched split apps")
+            } else {
+                Result.failure(Exception("Could not find launch intent for split apps"))
+            }
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
     }
 }

@@ -20,6 +20,13 @@ import com.wizzwuz.quicksettiles.util.TileEditChannel
 
 class MainActivity : ComponentActivity() {
 
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
+        if (ev != null && ev.pointerCount > 2) {
+            return true
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.init(this)

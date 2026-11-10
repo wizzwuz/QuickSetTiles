@@ -42,6 +42,17 @@ class InternalPluginActivity : Activity() {
 
         val action = intent.action
         if (action == ACTION_LAUNCH_ACTIVITY) {
+            val repo = com.wizzwuz.quicksettiles.data.TileRepository.getInstance(this)
+            val caller = callingPackage ?: (if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                try { launchedFromPackage } catch (e: Throwable) { null }
+            } else null)
+
+            val isInternal = caller == null || caller == packageName
+            if (!isInternal && !repo.isPrivateActivityLaunchable()) {
+                Toast.makeText(this, "QuickSetTiles: External launching of private activities is disabled in settings.", Toast.LENGTH_LONG).show()
+                cleanFinish()
+                return
+            }
             handleLaunchIntent()
         } else if (action == ACTION_SHOW_POPUP) {
             val msg = intent.getStringExtra(EXTRA_MESSAGE) ?: ""

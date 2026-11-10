@@ -31,7 +31,8 @@ import com.wizzwuz.quicksettiles.util.IconProcessor
 @Composable
 fun AppPickerSheet(
     onDismiss: () -> Unit,
-    onAppSelected: (AppItem) -> Unit
+    onAppSelected: (AppItem) -> Unit,
+    onOpenSplit: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
@@ -105,6 +106,16 @@ fun AppPickerSheet(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+                    }
+                    if (onOpenSplit != null) {
+                        FilledTonalButton(
+                            onClick = onOpenSplit,
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) {
+                            Text("Split", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                     IconButton(onClick = onDismiss) {

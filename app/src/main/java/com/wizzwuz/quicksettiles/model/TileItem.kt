@@ -12,7 +12,9 @@ enum class TileType(val displayName: String) {
     SHELL("Shell"),
     FILES("Files"),
     FOLDERS("Folders"),
-    COLLECTION("Collection")
+    COLLECTION("Collection"),
+    CONTACTS("Contacts"),
+    SPLIT_APPS("Split Apps")
 }
 
 enum class TileSortOrder(val title: String) {

@@ -1,7 +1,10 @@
 package com.wizzwuz.quicksettiles.ui.create
 
+import android.content.ComponentName
+import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -125,6 +128,42 @@ fun ShortcutDialog(
     var isLoading by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
     val expandedApps = remember { mutableStateMapOf<String, Boolean>() }
+
+    var pendingProviderName by remember { mutableStateOf<String?>(null) }
+    var pendingProviderPkg by remember { mutableStateOf<String?>(null) }
+    var pendingProviderAct by remember { mutableStateOf<String?>(null) }
+    var pendingProviderIcon by remember { mutableStateOf<Bitmap?>(null) }
+
+    val createShortcutLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK && result.data != null) {
+            val data = result.data!!
+            val shortcutIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                data.getParcelableExtra(Intent.EXTRA_SHORTCUT_INTENT, Intent::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                data.getParcelableExtra(Intent.EXTRA_SHORTCUT_INTENT)
+            }
+            val name = data.getStringExtra(Intent.EXTRA_SHORTCUT_NAME) ?: pendingProviderName ?: ""
+            val icon = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                data.getParcelableExtra(Intent.EXTRA_SHORTCUT_ICON, Bitmap::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                data.getParcelableExtra(Intent.EXTRA_SHORTCUT_ICON)
+            } ?: pendingProviderIcon
+
+            if (shortcutIntent != null) {
+                onSelect(name, shortcutIntent.toUri(Intent.URI_INTENT_SCHEME), pendingProviderPkg ?: "", icon)
+            } else {
+                val fallbackIntent = Intent().apply {
+                    component = ComponentName(pendingProviderPkg ?: "", pendingProviderAct ?: "")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                onSelect(name, fallbackIntent.toUri(Intent.URI_INTENT_SCHEME), pendingProviderPkg ?: "", icon)
+            }
+        }
+    }
 
     // Instant cached display + background refresh every time dialog opens
     LaunchedEffect(Unit) {
@@ -363,33 +402,66 @@ fun ShortcutDialog(
                                                     modifier = androidx.compose.ui.Modifier
                                                         .fillMaxWidth()
                                                         .clickable {
-                                                            onSelect(
-                                                                shortcut.label,
-                                                                shortcut.intentUri,
-                                                                shortcut.packageName,
-                                                                shortcut.iconBitmap
-                                                            )
+                                                            if (shortcut.isShortcutProvider && !shortcut.providerActivityName.isNullOrBlank()) {
+                                                                pendingProviderName = shortcut.label
+                                                                pendingProviderPkg = shortcut.packageName
+                                                                pendingProviderAct = shortcut.providerActivityName
+                                                                pendingProviderIcon = shortcut.iconBitmap
+                                                                try {
+                                                                    val intent = Intent(Intent.ACTION_CREATE_SHORTCUT).apply {
+                                                                        component = ComponentName(shortcut.packageName, shortcut.providerActivityName)
+                                                                    }
+                                                                    createShortcutLauncher.launch(intent)
+                                                                } catch (e: Throwable) {
+                                                                    val fallbackIntent = Intent().apply {
+                                                                        component = ComponentName(shortcut.packageName, shortcut.providerActivityName)
+                                                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                                    }
+                                                                    onSelect(shortcut.label, fallbackIntent.toUri(Intent.URI_INTENT_SCHEME), shortcut.packageName, shortcut.iconBitmap)
+                                                                }
+                                                            } else {
+                                                                onSelect(
+                                                                    shortcut.label,
+                                                                    shortcut.intentUri,
+                                                                    shortcut.packageName,
+                                                                    shortcut.iconBitmap
+                                                                )
+                                                            }
                                                         }
                                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
                                                     // Shortcut icon or fallback
-                                                    if (shortcut.iconBitmap != null) {
-                                                        Image(
-                                                            bitmap = shortcut.iconBitmap.asImageBitmap(),
-                                                            contentDescription = shortcut.label,
-                                                            modifier = androidx.compose.ui.Modifier
-                                                                .size(32.dp)
-                                                                .clip(RoundedCornerShape(6.dp))
-                                                        )
-                                                    } else {
-                                                        Icon(
-                                                            imageVector = androidx.compose.material.icons.Icons.Filled.OpenInNew,
-                                                            contentDescription = shortcut.label,
-                                                            modifier = androidx.compose.ui.Modifier.size(32.dp),
-                                                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                                                        )
+                                                    Box(modifier = androidx.compose.ui.Modifier.size(32.dp)) {
+                                                        if (shortcut.iconBitmap != null) {
+                                                            Image(
+                                                                bitmap = shortcut.iconBitmap.asImageBitmap(),
+                                                                contentDescription = shortcut.label,
+                                                                modifier = androidx.compose.ui.Modifier
+                                                                    .fillMaxSize()
+                                                                    .clip(RoundedCornerShape(6.dp))
+                                                            )
+                                                        } else {
+                                                            Icon(
+                                                                imageVector = androidx.compose.material.icons.Icons.Filled.OpenInNew,
+                                                                contentDescription = shortcut.label,
+                                                                modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+                                                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                                            )
+                                                        }
+                                                        if (shortcut.isShortcutProvider) {
+                                                            Icon(
+                                                                imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward,
+                                                                contentDescription = null,
+                                                                modifier = androidx.compose.ui.Modifier
+                                                                    .size(12.dp)
+                                                                    .align(Alignment.BottomEnd)
+                                                                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(2.dp))
+                                                                    .padding(1.dp),
+                                                                tint = MaterialTheme.colorScheme.primary
+                                                            )
+                                                        }
                                                     }
 
                                                     // Shortcut label + long label

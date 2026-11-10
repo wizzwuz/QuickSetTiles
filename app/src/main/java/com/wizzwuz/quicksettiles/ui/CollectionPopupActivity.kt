@@ -60,6 +60,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class CollectionPopupActivity : ComponentActivity() {
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
+        if (ev != null && ev.pointerCount > 2) {
+            return true
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.init(this)
@@ -192,7 +200,8 @@ fun CollectionPopupScreen(
                                                 executeCollectionItem(context, repo, item)
                                                 val isLaunchable = when (item.type) {
                                                     TileType.APPS, TileType.WEBSITE, TileType.SHORTCUT,
-                                                    TileType.ACTIVITY, TileType.INTENT, TileType.FILES, TileType.FOLDERS -> true
+                                                    TileType.ACTIVITY, TileType.INTENT, TileType.FILES,
+                                                    TileType.FOLDERS, TileType.CONTACTS, TileType.SPLIT_APPS -> true
                                                     TileType.SHELL -> {
                                                         val cmd = if (item.multiShellSteps.isNotEmpty()) {
                                                             val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
@@ -508,6 +517,22 @@ private fun executeCollectionItem(context: android.content.Context, repo: TileRe
                     addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 }
                 context.startActivity(intent)
+            }
+            TileType.CONTACTS -> {
+                val uri = android.net.Uri.parse(item.targetData)
+                val action = if (item.targetData.startsWith("smsto:")) Intent.ACTION_SENDTO else Intent.ACTION_DIAL
+                val intent = Intent(action, uri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            }
+            TileType.SPLIT_APPS -> {
+                scope.launch {
+                    val res = AppHelper.launchSplitApps(context, item.targetData)
+                    res.onFailure { e ->
+                        Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
     } catch (e: Throwable) {

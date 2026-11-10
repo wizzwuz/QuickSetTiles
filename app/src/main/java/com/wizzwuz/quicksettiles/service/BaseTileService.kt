@@ -81,15 +81,8 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
 
         if (item != null && item.isActive) {
             if (isDeviceLocked && !item.allowOnLockScreen && item.hideFromLockScreen) {
-                // When "Hide from lock screen" is enabled:
-                // Custom quick tile should not show in lock screen and unlocking the screen it should show in quick settings panel
-                tile.state = Tile.STATE_UNAVAILABLE
-                tile.label = ""
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    tile.subtitle = null
-                }
-                tile.icon = Icon.createWithBitmap(android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888))
-                tile.updateTile()
+                // Completely hide tile from lock screen by disabling component in PackageManager
+                TileRepository.setComponentEnabled(this, slotNumber, false)
                 return
             }
 
@@ -381,6 +374,34 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                     launchIntent(intent)
                 } catch (e: Throwable) {
                     showToast("Failed to open collection: ${e.message}")
+                }
+            }
+            TileType.CONTACTS -> {
+                try {
+                    val uri = Uri.parse(item.targetData)
+                    val action = if (item.targetData.startsWith("smsto:")) Intent.ACTION_SENDTO else Intent.ACTION_DIAL
+                    val intent = Intent(action, uri).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    launchIntent(intent)
+                } catch (e: Throwable) {
+                    showToast("Failed to open contact: ${e.message}")
+                }
+            }
+            TileType.SPLIT_APPS -> {
+                asyncTask = true
+                serviceScope.launch {
+                    try {
+                        if (item.collapseOnTap) {
+                            mainHandler.post { collapseShade() }
+                        }
+                        val result = AppHelper.launchSplitApps(this@BaseTileService, item.targetData)
+                        result.onFailure { e ->
+                            mainHandler.post { showToast("Failed to launch split apps: ${e.message}") }
+                        }
+                    } finally {
+                        ProcessManager.onTileTaskFinished()
+                    }
                 }
             }
         }

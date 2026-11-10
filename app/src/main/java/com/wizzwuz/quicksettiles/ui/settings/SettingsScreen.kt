@@ -542,6 +542,7 @@ fun SettingsScreen(
             var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
             var restoreTileCountPreview by remember { mutableStateOf(0) }
             var restoreIconCountPreview by remember { mutableStateOf(0) }
+            var restoreShellCountPreview by remember { mutableStateOf(0) }
 
             val exportBackupLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -568,6 +569,7 @@ fun SettingsScreen(
                             val preview = peekResult.getOrThrow()
                             restoreTileCountPreview = preview.tileCount
                             restoreIconCountPreview = preview.iconCount
+                            restoreShellCountPreview = preview.shellTileCount
                             pendingRestoreUri = uri
                             showRestoreConfirmDialog = true
                         } else {
@@ -649,7 +651,8 @@ fun SettingsScreen(
                     title = { Text("Restore Backup?") },
                     text = {
                         val iconText = if (restoreIconCountPreview > 0) " and $restoreIconCountPreview custom icons" else ""
-                        Text("This backup contains $restoreTileCountPreview tiles$iconText and application settings. Restoring will apply these settings and configure your tiles. Do you want to proceed?")
+                        val shellWarning = if (restoreShellCountPreview > 0) "\n\n⚠️ Caution: This backup contains $restoreShellCountPreview shell script tile(s). Only restore backups from trusted sources." else ""
+                        Text("This backup contains $restoreTileCountPreview tiles$iconText and application settings. Restoring will apply these settings and configure your tiles. Do you want to proceed?$shellWarning")
                     },
                     confirmButton = {
                         Button(

@@ -1000,6 +1000,8 @@ fun CategoriesPanel(
                 TileType.FILES -> Icons.Default.InsertDriveFile
                 TileType.FOLDERS -> Icons.Default.Folder
                 TileType.COLLECTION -> Icons.Default.Collections
+                TileType.CONTACTS -> Icons.Default.Call
+                TileType.SPLIT_APPS -> Icons.Default.ViewStream
             }
 
             FilterChip(
