@@ -8,6 +8,8 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
+import android.util.JsonReader
+import android.util.LruCache
 import androidx.core.content.ContextCompat
 import com.caverock.androidsvg.SVG
 import com.wizzwuz.quicktiles.R
@@ -20,6 +22,164 @@ import java.util.concurrent.ConcurrentHashMap
 object IconProcessor {
 
     private val elementCache = ConcurrentHashMap<String, Bitmap>()
+    private val presetBitmapCache = LruCache<String, Bitmap>(500)
+    private var allPresetIconsCache: List<Pair<String, String>>? = null
+    private var materialSvgMap: Map<String, String>? = null
+
+    fun clearCache() {
+        elementCache.values.forEach { bmp ->
+            if (!bmp.isRecycled) {
+                try { bmp.recycle() } catch (_: Throwable) {}
+            }
+        }
+        elementCache.clear()
+        synchronized(presetBitmapCache) {
+            presetBitmapCache.evictAll()
+        }
+    }
+
+    fun getPresetIcons(context: Context): List<Pair<String, String>> {
+        allPresetIconsCache?.let { return it }
+        ensureMaterialIconsLoaded(context)
+        val list = mutableListOf<Pair<String, String>>()
+        val popularKeys = listOf(
+            "apps" to "App",
+            "web" to "Website",
+            "terminal" to "Terminal/Shell",
+            "folder" to "Folder",
+            "description" to "File",
+            "settings" to "Settings",
+            "star" to "Star",
+            "music_note" to "Music",
+            "camera_alt" to "Camera",
+            "flashlight_on" to "Flashlight",
+            "wifi" to "Wi-Fi",
+            "bluetooth" to "Bluetooth",
+            "battery_full" to "Battery",
+            "alarm" to "Alarm",
+            "dark_mode" to "Dark Mode",
+            "sync" to "Sync",
+            "lock" to "Lock",
+            "volume_up" to "Volume",
+            "power_settings_new" to "Power"
+        )
+        val popularKeySet = popularKeys.map { it.first }.toSet()
+        popularKeys.forEach { (k, label) ->
+            list.add(k to label)
+        }
+
+        val sortedKeys = materialSvgMap?.keys?.sorted() ?: emptyList()
+        for (k in sortedKeys) {
+            if (!popularKeySet.contains(k)) {
+                list.add(k to formatIconLabel(k))
+            }
+        }
+        allPresetIconsCache = list
+        return list
+    }
+
+    private fun formatIconLabel(key: String): String {
+        return key.split('_', '-').joinToString(" ") { word ->
+            word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        }
+    }
+
+    private fun openIconsAsset(context: Context): java.io.InputStream? {
+        val candidates = listOf(
+            "material_icons.json",
+            "material_icons.json.gz",
+            "material_icons.bin",
+            "material_icons.dat"
+        )
+        for (name in candidates) {
+            try {
+                val rawStream = context.assets.open(name)
+                val bis = java.io.BufferedInputStream(rawStream, 65536)
+                bis.mark(4)
+                val b1 = bis.read()
+                val b2 = bis.read()
+                bis.reset()
+                return if (b1 == 0x1f && b2 == (0x8b and 0xff)) {
+                    java.util.zip.GZIPInputStream(bis)
+                } else {
+                    bis
+                }
+            } catch (_: java.io.FileNotFoundException) {
+                // Try next candidate
+            } catch (e: Throwable) {
+                android.util.Log.w("IconProcessor", "Failed opening asset $name: ${e.message}")
+            }
+        }
+        return null
+    }
+
+    private fun ensureMaterialIconsLoaded(context: Context) {
+        if (materialSvgMap != null && materialSvgMap!!.isNotEmpty()) return
+        synchronized(this) {
+            if (materialSvgMap != null && materialSvgMap!!.isNotEmpty()) return
+            val start = System.currentTimeMillis()
+            val map = HashMap<String, String>(65000)
+            try {
+                val stream = openIconsAsset(context)
+                if (stream == null) {
+                    android.util.Log.e("IconProcessor", "material_icons asset file not found in assets!")
+                    materialSvgMap = emptyMap()
+                    return
+                }
+                stream.use { s ->
+                    val reader = java.io.BufferedReader(java.io.InputStreamReader(s, Charsets.UTF_8), 65536)
+                    var c = reader.read()
+                    while (c != -1 && c != '{'.code) {
+                        c = reader.read()
+                    }
+                    val sb = StringBuilder(1024)
+                    while (c != -1) {
+                        while (c != -1 && c != '"'.code && c != '}'.code) {
+                            c = reader.read()
+                        }
+                        if (c == '}'.code || c == -1) break
+
+                        // Read key
+                        sb.setLength(0)
+                        while (true) {
+                            c = reader.read()
+                            if (c == -1 || c == '"'.code) break
+                            if (c == '\\'.code) {
+                                c = reader.read()
+                            }
+                            sb.append(c.toChar())
+                        }
+                        val key = sb.toString()
+
+                        // Skip to value start
+                        while (c != -1 && c != ':'.code) c = reader.read()
+                        while (c != -1 && c != '"'.code) c = reader.read()
+
+                        // Read value
+                        sb.setLength(0)
+                        while (true) {
+                            c = reader.read()
+                            if (c == -1 || c == '"'.code) break
+                            if (c == '\\'.code) {
+                                c = reader.read()
+                            }
+                            sb.append(c.toChar())
+                        }
+                        val value = sb.toString()
+                        map[key] = value
+
+                        while (c != -1 && c != ','.code && c != '}'.code) c = reader.read()
+                        if (c == '}'.code) break
+                    }
+                }
+                materialSvgMap = map
+                android.util.Log.i("IconProcessor", "Successfully loaded ${map.size} material icons in ${System.currentTimeMillis() - start} ms")
+            } catch (e: Throwable) {
+                android.util.Log.e("IconProcessor", "Error loading material icons: ${e.message}", e)
+                materialSvgMap = emptyMap()
+            }
+        }
+    }
 
     val PRESET_ICONS = listOf(
         "tile_default" to "Default Tile",
@@ -385,10 +545,22 @@ object IconProcessor {
         return outBmp
     }
 
-    fun loadRawBitmap(context: Context, config: IconConfig, isDarkTheme: Boolean = true): Bitmap {
+    fun loadRawBitmap(
+        context: Context,
+        config: IconConfig,
+        targetPixelSize: Int = 128,
+        isDarkTheme: Boolean = true
+    ): Bitmap {
         return when (config.sourceType) {
             IconSourceType.APP_ICON -> {
-                extractAppIconElement(context, config.sourceData)
+                try {
+                    val pm = context.packageManager
+                    val appInfo = pm.getApplicationInfo(config.sourceData, 0)
+                    val drawable = pm.getApplicationIcon(appInfo)
+                    drawableToBitmap(drawable, targetPixelSize, targetPixelSize)
+                } catch (e: Throwable) {
+                    extractAppIconElement(context, config.sourceData, targetSize = targetPixelSize)
+                }
             }
             IconSourceType.CUSTOM_FILE -> {
                 try {
@@ -447,15 +619,19 @@ object IconProcessor {
     ): Bitmap {
         val density = context.resources.displayMetrics.density
 
+        // Scale factor from iconSize (16dp to 160dp, base 32dp = 1.0x)
+        val scaleFactor = (config.iconSize / 32f).coerceIn(0.4f, 6.0f)
+        val scaledDim = ((targetPixelSize * 0.75f) * scaleFactor).toInt().coerceAtLeast(16)
+
         val rawElement: Bitmap = when (config.sourceType) {
             IconSourceType.APP_ICON -> {
-                extractAppIconElement(context, config.sourceData, targetSize = targetPixelSize)
+                extractAppIconElement(context, config.sourceData, targetSize = scaledDim)
             }
             IconSourceType.CUSTOM_FILE -> {
                 try {
                     val file = File(config.sourceData)
                     if (file.exists()) {
-                        loadBitmapFromFile(file, targetPixelSize) ?: getDefaultPresetBitmap(context, isDarkTheme)
+                        loadBitmapFromFile(file, scaledDim) ?: getDefaultPresetBitmap(context, isDarkTheme)
                     } else {
                         getDefaultPresetBitmap(context, isDarkTheme)
                     }
@@ -464,15 +640,15 @@ object IconProcessor {
                 }
             }
             IconSourceType.PRESET -> {
-                getPresetBitmap(context, config.sourceData, isDarkTheme)
+                getPresetBitmap(context, config.sourceData, isDarkTheme, targetDim = scaledDim)
             }
         }
 
-        // Scale factor from iconSize (16dp to 64dp, base 32dp)
-        val scaleFactor = (config.iconSize / 32f).coerceIn(0.5f, 2.0f)
-        val scaledDim = ((targetPixelSize * 0.75f) * scaleFactor).toInt().coerceIn(24, targetPixelSize)
-
-        val scaledElement = Bitmap.createScaledBitmap(rawElement, scaledDim, scaledDim, true)
+        val scaledElement = if (rawElement.width == scaledDim && rawElement.height == scaledDim) {
+            rawElement
+        } else {
+            Bitmap.createScaledBitmap(rawElement, scaledDim, scaledDim, true)
+        }
 
         val thicknessPx = config.outlineThickness * density
 
@@ -694,12 +870,69 @@ object IconProcessor {
         return drawableToBitmap(d)
     }
 
-    private fun getPresetBitmap(context: Context, key: String, isDarkTheme: Boolean = true): Bitmap {
-        // Draw crisp vector icon dynamically
-        val size = 96
+    fun getPresetBitmap(
+        context: Context,
+        key: String,
+        isDarkTheme: Boolean = true,
+        targetDim: Int = 96
+    ): Bitmap {
+        val isDefaultSize = (targetDim == 96)
+        val cacheKey = "${key}_$isDarkTheme"
+        if (isDefaultSize) {
+            val cached = synchronized(presetBitmapCache) { presetBitmapCache.get(cacheKey) }
+            if (cached != null && !cached.isRecycled) {
+                return cached
+            }
+        }
+
+        ensureMaterialIconsLoaded(context)
+
+        val effectiveKey = when (key) {
+            "tile_default" -> "widgets"
+            "file" -> "description"
+            "music" -> "music_note"
+            "flash" -> "flashlight_on"
+            else -> key
+        }
+
+        val svgContent = materialSvgMap?.get(effectiveKey)
+            ?: materialSvgMap?.get(effectiveKey.replace('_', '-'))
+            ?: materialSvgMap?.get(effectiveKey.replace('-', '_'))
+
+        val colorStr = if (isDarkTheme) "white" else "#111827"
+        val iconColor = if (isDarkTheme) Color.WHITE else 0xFF111827.toInt()
+
+        val bitmap = if (svgContent != null) {
+            try {
+                val resolvedContent = svgContent.replace("currentColor", colorStr)
+                val fullSvg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"$colorStr\">$resolvedContent</svg>"
+                val svg = SVG.getFromString(fullSvg)
+                svg.documentWidth = targetDim.toFloat()
+                svg.documentHeight = targetDim.toFloat()
+                val bmp = Bitmap.createBitmap(targetDim, targetDim, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bmp)
+                svg.renderToCanvas(canvas)
+                bmp
+            } catch (e: Throwable) {
+                renderFallbackPresetBitmap(context, key, isDarkTheme, iconColor, targetDim)
+            }
+        } else {
+            renderFallbackPresetBitmap(context, key, isDarkTheme, iconColor, targetDim)
+        }
+
+        if (isDefaultSize) {
+            synchronized(presetBitmapCache) {
+                presetBitmapCache.put(cacheKey, bitmap)
+            }
+        }
+        return bitmap
+    }
+
+    private fun renderFallbackPresetBitmap(context: Context, key: String, isDarkTheme: Boolean, iconColor: Int, size: Int = 96): Bitmap {
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val iconColor = if (isDarkTheme) Color.WHITE else 0xFF111827.toInt()
+        val scale = size / 96f
+        canvas.scale(scale, scale)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = iconColor
             style = Paint.Style.FILL
@@ -707,7 +940,6 @@ object IconProcessor {
 
         when (key) {
             "web" -> {
-                // Draw globe
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = 6f
                 canvas.drawCircle(48f, 48f, 36f, paint)
@@ -716,7 +948,6 @@ object IconProcessor {
                 canvas.drawOval(oval, paint)
             }
             "terminal" -> {
-                // Draw terminal prompt > _
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = 7f
                 paint.strokeCap = Paint.Cap.ROUND

@@ -1,8 +1,10 @@
-# QuickSetTiles
+<div align="center">
 
 <p align="center">
-  <img src="app/src/main/res/drawable/ic_launcher_foreground.xml" width="96" height="96" alt="QuickSetTiles Logo" />
+  <img src="icon.png" width="96" height="96" alt="QuickSetTiles Logo" />
 </p>
+
+# QuickSetTiles
 
 <p align="center">
   <b>A powerful, modern Android Quick Settings tile creator and manager built with Jetpack Compose & Material 3.</b>
@@ -16,7 +18,13 @@
   <img src="https://img.shields.io/badge/Shizuku-Enabled-red.svg" alt="Shizuku" />
 </p>
 
----
+<p align="center">
+  <a href="https://buymeacoffee.com/wizzwuz">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="60px">
+  </a>
+</p>
+
+</div>
 
 ## ✨ Features
 
@@ -70,17 +78,32 @@
 
 ## 🚀 Building & Releases
 
-Automated builds and releases are powered by **GitHub Actions**:
-
-1. **Workflow Artifacts**:
-   - Navigate to the **Actions** tab on GitHub: [QuickSetTiles Actions](https://github.com/wizzwuz/QuickSetTiles/actions).
-   - Click on the latest workflow run.
-   - Download `QuickSetTiles-release-apk` or `QuickSetTiles-debug-apk`. Both are signed with the permanent release keystore.
-2. **GitHub Releases**:
-   - Pushing any tag (e.g. `v1.0.0`) automatically publishes a GitHub Release with the signed APK attached.
-   - Can also be dispatched manually via the Actions UI (`create_release: true`).
-
 To build locally:
 ```bash
 ./gradlew assembleRelease assembleDebug
 ```
+
+---
+
+## 💖 Credits & Open Source Acknowledgements
+
+QuickSetTiles is built on top of and made possible by these incredible open-source projects, libraries, and design systems:
+
+| Project / Library | Maintainer / Author | License | Description & Purpose |
+| :--- | :--- | :--- | :--- |
+| **[Activity Launcher Shizuku Plugin](https://github.com/ActivityLauncher/ActivityLauncherShizukuPlugin)** | [ActivityLauncher](https://github.com/ActivityLauncher) | [GPL 3.0](https://www.gnu.org/licenses/gpl-3.0.html) | Inspiration for launching private (unexported) activities via Shizuku. |
+| **[Shizuku](https://github.com/RikkaApps/Shizuku)** | [RikkaApps](https://github.com/RikkaApps) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Provides the elevated permissions interface (UID 2000 shell / ADB / Root) enabling rootless shell execution and launching unexported activities. |
+| **[AndroidSVG](https://github.com/BigBadaboom/androidsvg)** | [Paul LeBeau (caverock)](https://github.com/BigBadaboom) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | High-performance SVG parsing and rendering engine used to rasterize all 57,000+ Material preset vector icons onto Android Canvases and Bitmaps. |
+| **[Coil](https://github.com/coil-kt/coil)** | [Coil Contributors](https://github.com/coil-kt) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Fast, lightweight, Kotlin coroutine-first image loading library. |
+| **[ProGuard](https://github.com/Guardsquare/proguard)** | [Guardsquare](https://github.com/Guardsquare) | [GPL 2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html) | Industry-standard optimizer, shrinker, and obfuscator used via `proguard-rules.pro` to minify release APK builds and strip unused bytecode. |
+| **[Material Symbols](https://icon-sets.iconify.design/material-symbols/)** | [Iconify](https://github.com/iconify) & [Google](https://github.com/google) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Extensive dataset of 57,000+ vector glyphs spanning Outlined, Rounded, and Sharp variants powering the preset icon catalog. |
+| **[Google Material Design Icons](https://github.com/google/material-design-icons)** | [Google LLC](https://github.com/google) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Official baseline Material Design vector icon specification and asset catalog. |
+| **[Kotlin & Coroutines](https://github.com/JetBrains/kotlin)** | [JetBrains](https://github.com/JetBrains) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Modern programming language, Compose compiler plugin, and `kotlinx.coroutines` powering asynchronous background loading and I/O tasks. |
+| **[Gradle](https://github.com/gradle/gradle)** | [Gradle Inc.](https://github.com/gradle) | [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0) | Build automation system and wrapper powering the continuous integration, dependency management, and APK assembly. |
+| **[Pillow (PIL)](https://github.com/python-pillow/Pillow)** | [Alex Clark and Contributors](https://github.com/python-pillow) | [HPND](https://github.com/python-pillow/Pillow/blob/main/LICENSE) | Python imaging library used in automated CI/CD workflows for adaptive foreground and mipmap launcher icon synthesis. |
+
+---
+
+## 📄 License
+
+This project is licensed under the **GNU General Public License v3.0** (GPLv3) - see the [LICENSE](LICENSE) file for details.

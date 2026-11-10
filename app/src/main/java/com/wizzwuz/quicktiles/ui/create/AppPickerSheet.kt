@@ -39,6 +39,13 @@ fun AppPickerSheet(
     var isLoading by remember { mutableStateOf(true) }
     var showSystemApps by remember { mutableStateOf(false) }
 
+    // Reclaim memory when the picker sheet closes
+    DisposableEffect(Unit) {
+        onDispose {
+            AppHelper.clearCaches()
+        }
+    }
+
     // Instant display from cache + background refresh every time user opens
     LaunchedEffect(Unit) {
         val cached = AppHelper.getCachedApps()

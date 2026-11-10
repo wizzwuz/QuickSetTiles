@@ -47,6 +47,18 @@ class MainActivity : ComponentActivity() {
         ShizukuHelper.updateStatus()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        com.wizzwuz.quicktiles.util.AppHelper.clearCaches()
+        com.wizzwuz.quicktiles.util.IconProcessor.clearCache()
+        if (isFinishing) {
+            try {
+                finishAndRemoveTask()
+            } catch (_: Throwable) {}
+            com.wizzwuz.quicktiles.util.ProcessManager.scheduleExitCheck(1000)
+        }
+    }
+
     private fun handleTileIntent(intent: Intent?) {
         if (intent?.action == TileService.ACTION_QS_TILE_PREFERENCES) {
             val component = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

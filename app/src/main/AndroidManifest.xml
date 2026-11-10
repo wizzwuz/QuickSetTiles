@@ -30,6 +30,7 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.QuickTiles"
+        android:largeHeap="true"
         tools:targetApi="35">
 
         <activity
@@ -37,6 +38,7 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:theme="@style/Theme.QuickTiles"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -51,12 +53,25 @@
         <activity
             android:name=".ui.InternalPluginActivity"
             android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="activitylauncher.intent.action.LAUNCH_ACTIVITY" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.CollectionPopupActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+            android:taskAffinity="" />
+
 
         <!-- Official Shizuku Provider: authority MUST be ${applicationId}.shizuku -->
         <provider

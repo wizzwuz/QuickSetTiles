@@ -75,6 +75,13 @@ object AppHelper {
     /** Returns cached shortcuts immediately if present, otherwise null. */
     fun getCachedShortcuts(): List<AppWithShortcuts>? = shortcutsCache["all"]
 
+    /** Clears all cached app items, shortcuts, and activities to reclaim memory. */
+    fun clearCaches() {
+        appsCache = null
+        shortcutsCache.clear()
+        activitiesCache.clear()
+    }
+
     /** Forces a background refresh of the app list. */
     suspend fun refreshInstalledApps(context: Context): List<AppItem> = withContext(Dispatchers.IO) {
         val pm = context.packageManager

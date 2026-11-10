@@ -26,6 +26,15 @@ class InternalPluginActivity : Activity() {
         const val ACTION_LAUNCH_ACTIVITY = "activitylauncher.intent.action.LAUNCH_ACTIVITY"
         const val EXTRA_INTENT = "intent"
         const val EXTRA_INTENT_ALT = "extra_intent"
+        const val ACTION_SHOW_POPUP = "com.wizzwuz.quicktiles.action.SHOW_POPUP"
+        const val EXTRA_MESSAGE = "extra_message"
+    }
+
+    private fun cleanFinish() {
+        if (!isFinishing && !isDestroyed) {
+            finishAndRemoveTask()
+            overridePendingTransition(0, 0)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,8 +43,26 @@ class InternalPluginActivity : Activity() {
         val action = intent.action
         if (action == ACTION_LAUNCH_ACTIVITY) {
             handleLaunchIntent()
+        } else if (action == ACTION_SHOW_POPUP) {
+            val msg = intent.getStringExtra(EXTRA_MESSAGE) ?: ""
+            if (msg.isNotBlank()) {
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
+            cleanFinish()
         } else {
-            finish()
+            cleanFinish()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == ACTION_SHOW_POPUP) {
+            val msg = intent.getStringExtra(EXTRA_MESSAGE) ?: ""
+            if (msg.isNotBlank()) {
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
+            cleanFinish()
         }
     }
 
@@ -45,7 +72,7 @@ class InternalPluginActivity : Activity() {
 
         if (intentUri.isNullOrBlank()) {
             Toast.makeText(this, "QuickSetTiles: No target intent specified", Toast.LENGTH_SHORT).show()
-            finish()
+            cleanFinish()
             return
         }
 
@@ -71,7 +98,7 @@ class InternalPluginActivity : Activity() {
                             ShizukuHelper.requestShizukuPermission()
                         }
                     }
-                    finish()
+                    cleanFinish()
                 }
             } else {
                 // Try direct startActivity if no component
@@ -81,11 +108,11 @@ class InternalPluginActivity : Activity() {
                 } catch (e: Throwable) {
                     Toast.makeText(this, "QuickSetTiles Error: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
-                finish()
+                cleanFinish()
             }
         } catch (e: Throwable) {
             Toast.makeText(this, "QuickSetTiles Parse Error: ${e.message}", Toast.LENGTH_SHORT).show()
-            finish()
+            cleanFinish()
         }
     }
 

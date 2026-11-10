@@ -2,9 +2,9 @@ name: Build QuickSetTiles APK
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "experiments", "experimentals*", "tile-redesign*" ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "experiments", "experimentals*", "tile-redesign*" ]
   workflow_dispatch:
 
 permissions:
@@ -12,28 +12,39 @@ permissions:
 
 jobs:
   build:
-    name: Build & Package APK
-    runs-on: ubuntu-latest
+    name: Build ${{ matrix.build_type }} APK
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build_type: Release
+            task: assembleRelease
+            artifact_name: QuickSetTiles-release-apk
+            artifact_path: app/build/outputs/apk/release/*.apk
+          - build_type: Debug
+            task: assembleDebug
+            artifact_name: QuickSetTiles-debug-apk
+            artifact_path: app/build/outputs/apk/debug/*.apk
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
-        fetch-depth: 0
+        fetch-depth: 1
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Setup Java 17
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v6
       with:
         distribution: 'temurin'
         java-version: '17'
-        cache: 'gradle'
 
-    - name: Ensure Persistent Release Keystore
+    - name: Ensure Release Keystore
       run: |
         mkdir -p keystore
         if [ ! -f keystore/release.jks ]; then
-          echo "Generating permanent release keystore..."
+          echo "Generating release keystore..."
           keytool -genkeypair -v \
             -keystore keystore/release.jks \
             -alias quicksettiles \
@@ -43,14 +54,10 @@ jobs:
             -storepass "quicksettiles_keystore_pass" \
             -keypass "quicksettiles_keystore_pass" \
             -dname "CN=QuickSetTiles, OU=Mobile, O=QuickSetTiles, L=World, ST=Global, C=US"
-          
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add keystore/release.jks
-          git commit -m "chore: persist release signing keystore for consistent APK releases [skip ci]" || true
-          git push origin HEAD:${{ github.ref_name }} || true
+          echo "Generated new RSA 2048-bit release keystore for APK signing."
         else
-          echo "Permanent release keystore already exists. Reusing existing key."
+          echo "Release keystore present."
+          echo "Using existing release keystore for APK signing."
         fi
 
     - name: Grant Execute Permission to Gradlew
@@ -65,7 +72,7 @@ jobs:
 
         icon_path = 'icon.png'
         if not os.path.exists(icon_path):
-            print('icon.png not found, skipping icon generation')
+            print('icon.png not found; default mipmap icons will be used.')
             exit(0)
 
         img = Image.open(icon_path).convert('RGBA')
@@ -97,32 +104,49 @@ jobs:
             os.remove(xml_fg)
         fg_canvas.save('app/src/main/res/drawable/ic_launcher_foreground.png')
         print('Generated ic_launcher_foreground.png (432x432)')
+        print('Successfully generated adaptive foreground (432x432) and mipmap launcher icons (mdpi-xxxhdpi) from icon.png.')
         "
 
-    - name: Build Release & Debug APKs
-      run: ./gradlew assembleRelease assembleDebug --stacktrace
+    - name: Build APK
+      run: ./gradlew ${{ matrix.task }} -x test --parallel --build-cache
 
-    - name: Upload Release APK Artifact
-      uses: actions/upload-artifact@v4
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v7
       with:
-        name: QuickSetTiles-release-apk
-        path: app/build/outputs/apk/release/*.apk
-        if-no-files-found: error
-        retention-days: 14
-
-    - name: Upload Debug APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: QuickSetTiles-debug-apk
-        path: app/build/outputs/apk/debug/*.apk
+        name: ${{ matrix.artifact_name }}
+        path: ${{ matrix.artifact_path }}
         if-no-files-found: error
         retention-days: 14
 
     - name: Add Build Summary
+      if: always()
       run: |
-        echo "### Build Complete! 🚀" >> $GITHUB_STEP_SUMMARY
-        echo "The **QuickSetTiles** APKs were compiled and signed with the permanent release keystore." >> $GITHUB_STEP_SUMMARY
-        echo "- **Release APK Artifact:** \`QuickSetTiles-release-apk\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Debug APK Artifact:** \`QuickSetTiles-debug-apk\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Consistent Signing:** Both APKs use the same release keystore (\`keystore/release.jks\`)." >> $GITHUB_STEP_SUMMARY
-        echo "- **Built on commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ job.status }}" = "success" ]; then
+          APK_FILE=$(ls ${{ matrix.artifact_path }} 2>/dev/null | head -n 1)
+          if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
+            APK_NAME=$(basename "$APK_FILE")
+            APK_SIZE_BYTES=$(wc -c < "$APK_FILE" | tr -d ' ')
+            APK_SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $APK_SIZE_BYTES / 1048576}")
+            
+            echo "QuickSetTiles ${{ matrix.build_type }} APK generated: $APK_NAME ($APK_SIZE_MB MB). Artifact: ${{ matrix.artifact_name }}"
+            
+            echo "### Build Complete! 🚀" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Build Type** | \`${{ matrix.build_type }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Package Name** | \`com.wizzwuz.quicktiles\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Version** | \`1.0.5\` (code \`6\`) |" >> $GITHUB_STEP_SUMMARY
+            echo "| **APK File** | \`$APK_NAME\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **APK Size** | \`$APK_SIZE_MB MB\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Artifact Name** | \`${{ matrix.artifact_name }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> [!NOTE]" >> $GITHUB_STEP_SUMMARY
+            echo "> The APK is signed with the release keystore and supports Android 7.0+ (API 24 to 35)." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Artifact Missing (${{ matrix.build_type }}): APK file was not found at ${{ matrix.artifact_path }}"
+          fi
+        else
+          echo "Build Failure (${{ matrix.build_type }}): QuickSetTiles ${{ matrix.build_type }} build failed. Check step logs for details."
+        fi

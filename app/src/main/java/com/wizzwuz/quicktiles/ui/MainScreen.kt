@@ -4,22 +4,21 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import org.json.JSONObject
 import com.wizzwuz.quicktiles.data.TileRepository
 import com.wizzwuz.quicktiles.model.IconConfig
 import com.wizzwuz.quicktiles.model.IconSourceType
@@ -30,7 +29,21 @@ import com.wizzwuz.quicktiles.ui.create.ActivityPickerScreen
 import com.wizzwuz.quicktiles.ui.create.CreateTileScreen
 import com.wizzwuz.quicktiles.ui.settings.SettingsScreen
 import com.wizzwuz.quicktiles.ui.tiles.TilesListScreen
+import android.widget.Toast
+import com.wizzwuz.quicktiles.util.QsTileManager
 import com.wizzwuz.quicktiles.util.TileEditChannel
+import kotlinx.coroutines.launch
+
+private val TileItemSaver: Saver<TileItem?, String> = Saver(
+    save = { it?.toJson()?.toString() },
+    restore = { str ->
+        try {
+            TileItem.fromJson(JSONObject(str))
+        } catch (_: Throwable) {
+            null
+        }
+    }
+)
 
 enum class MainDestination {
     LIST,
@@ -43,47 +56,65 @@ enum class MainDestination {
 @Composable
 fun MainScreen() {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val repository = remember { TileRepository.getInstance(context) }
     val allTiles by repository.tilesFlow.collectAsState()
     val sortOrder by repository.sortOrderFlow.collectAsState()
     val showCategories by repository.showCategoriesFlow.collectAsState()
+    val isGridViewEnabled by repository.gridViewFlow.collectAsState()
+    val isGridDynamic by repository.gridDynamicFlow.collectAsState()
+    val gridColumns by repository.gridColumnsFlow.collectAsState()
+    val gridRows by repository.gridRowsFlow.collectAsState()
 
-    var currentDestination by remember { mutableStateOf(MainDestination.LIST) }
-    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Active Tiles, 1 = Inactive Tiles
-    var editingTile by remember { mutableStateOf<TileItem?>(null) }
+    var currentDestination by rememberSaveable { mutableStateOf(MainDestination.LIST) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0 = Active Tiles, 1 = Inactive Tiles
+    var editingTile by rememberSaveable(stateSaver = TileItemSaver) { mutableStateOf<TileItem?>(null) }
     var selectedTileIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
-    var isSearching by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
-    val focusRequester = remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
+    var isSearchOpen by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
 
-    val sortedTiles = remember(allTiles, sortOrder) {
-        when (sortOrder) {
-            TileSortOrder.NAME_ASC -> allTiles.sortedBy { it.name.lowercase() }
-            TileSortOrder.NAME_DESC -> allTiles.sortedByDescending { it.name.lowercase() }
-            TileSortOrder.LAST_UPDATED -> allTiles.sortedByDescending { it.createdAt }
-        }
+    val activeListState = rememberLazyListState()
+    val inactiveListState = rememberLazyListState()
+    val activeGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val inactiveGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+
+    val collectionMemberIds = remember(allTiles) {
+        allTiles.filter { it.type == TileType.COLLECTION }.flatMap { it.collectionItemIds }.toSet()
     }
 
-    val searchedTiles = remember(sortedTiles, searchQuery) {
-        if (searchQuery.isBlank()) {
-            sortedTiles
+    val sortedTiles = remember(allTiles, sortOrder, collectionMemberIds, searchQuery) {
+        val nonMembers = allTiles.filter { it.id !in collectionMemberIds }
+        val filtered = if (searchQuery.isBlank()) {
+            nonMembers
         } else {
-            sortedTiles.filter { it.name.contains(searchQuery, ignoreCase = true) }
+            val q = searchQuery.trim().lowercase()
+            nonMembers.filter { it.name.lowercase().contains(q) }
+        }
+        when (sortOrder) {
+            TileSortOrder.NAME_ASC -> filtered.sortedBy { it.name.lowercase() }
+            TileSortOrder.NAME_DESC -> filtered.sortedByDescending { it.name.lowercase() }
+            TileSortOrder.LAST_UPDATED -> filtered.sortedByDescending { it.createdAt }
+            TileSortOrder.TILE_NUMBER_ASC -> filtered.sortedWith(
+                compareBy<TileItem> { if (it.slotNumber in 1..TileRepository.MAX_SLOTS) it.slotNumber else Int.MAX_VALUE }
+                    .thenBy { it.name.lowercase() }
+            )
+            TileSortOrder.TILE_NUMBER_DESC -> filtered.sortedWith(
+                compareByDescending<TileItem> { if (it.slotNumber in 1..TileRepository.MAX_SLOTS) it.slotNumber else -1 }
+                    .thenBy { it.name.lowercase() }
+            )
         }
     }
 
-    val activeTiles = remember(searchedTiles) { searchedTiles.filter { it.isActive } }
-    val inactiveTiles = remember(searchedTiles) { searchedTiles.filter { !it.isActive } }
+    val activeTiles = remember(sortedTiles) { sortedTiles.filter { it.isActive } }
+    val inactiveTiles = remember(sortedTiles) { sortedTiles.filter { !it.isActive } }
 
-    BackHandler(enabled = selectedTileIds.isNotEmpty() || currentDestination != MainDestination.LIST || selectedTab != 0 || isSearching) {
-        if (selectedTileIds.isNotEmpty()) {
-            selectedTileIds = emptySet()
-        } else if (isSearching) {
-            isSearching = false
+    BackHandler(enabled = isSearchOpen || selectedTileIds.isNotEmpty() || currentDestination != MainDestination.LIST || selectedTab != 0) {
+        if (isSearchOpen) {
+            isSearchOpen = false
             searchQuery = ""
-            keyboardController?.hide()
+        } else if (selectedTileIds.isNotEmpty()) {
+            selectedTileIds = emptySet()
         } else if (currentDestination != MainDestination.LIST) {
             currentDestination = MainDestination.LIST
         } else if (selectedTab != 0) {
@@ -99,13 +130,6 @@ fun MainScreen() {
                 currentDestination = MainDestination.CREATE_OR_EDIT
                 TileEditChannel.clear()
             }
-        }
-    }
-
-    LaunchedEffect(isSearching) {
-        if (isSearching) {
-            focusRequester.requestFocus()
-            keyboardController?.show()
         }
     }
 
@@ -126,6 +150,33 @@ fun MainScreen() {
                             }
                         },
                         actions = {
+                            // Disable / Enable icon (left side to select all icon)
+                            IconButton(onClick = {
+                                val targetIds = selectedTileIds.toList()
+                                coroutineScope.launch {
+                                    if (selectedTab == 0) {
+                                        targetIds.forEach { id ->
+                                            val tile = repository.getTileById(id)
+                                            if (tile != null) {
+                                                QsTileManager.removeTile(context, tile.slotNumber)
+                                                repository.inactivateTile(id)
+                                            }
+                                        }
+                                        Toast.makeText(context, "${targetIds.size} tile(s) disabled", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        targetIds.forEach { id ->
+                                            repository.activateTile(id)
+                                        }
+                                        Toast.makeText(context, "${targetIds.size} tile(s) enabled", Toast.LENGTH_SHORT).show()
+                                    }
+                                    selectedTileIds = emptySet()
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = if (selectedTab == 0) Icons.Default.PauseCircleOutline else Icons.Default.PlayCircleOutline,
+                                    contentDescription = if (selectedTab == 0) "Disable Selected" else "Enable Selected"
+                                )
+                            }
                             // Select All icon
                             IconButton(onClick = {
                                 val currentList = if (selectedTab == 0) activeTiles else inactiveTiles
@@ -150,74 +201,68 @@ fun MainScreen() {
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
                         )
                     )
-                } else if (isSearching) {
-                    TopAppBar(
-                        title = {
-                            TextField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                placeholder = { Text("Search tiles...") },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                keyboardActions = KeyboardActions(
-                                    onSearch = { keyboardController?.hide() }
-                                ),
-                                colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                                    focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-                                    unfocusedIndicatorColor = MaterialTheme.colorScheme.outline
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .focusRequester(focusRequester)
-                            )
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = {
-                                isSearching = false
-                                searchQuery = ""
-                                keyboardController?.hide()
-                            }) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Close search")
-                            }
-                        },
-                        actions = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
-                                }
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        )
-                    )
                 } else {
                     TopAppBar(
                         title = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.DashboardCustomize,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
+                            if (isSearchOpen) {
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    placeholder = {
+                                        Text("Search tiles...", fontSize = 14.sp)
+                                    },
+                                    singleLine = true,
+                                    trailingIcon = {
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { searchQuery = "" }) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = "Clear search",
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                                    )
                                 )
-                                Text(
-                                    text = "QuickSetTiles",
-                                    fontWeight = FontWeight.ExtraBold
-                                )
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.DashboardCustomize,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "QuickSetTiles",
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
                             }
                         },
                         actions = {
-                            IconButton(onClick = { 
-                                isSearching = true 
-                            }) {
-                                Icon(Icons.Default.Search, contentDescription = "Search tiles")
+                            if (isSearchOpen) {
+                                IconButton(onClick = {
+                                    isSearchOpen = false
+                                    searchQuery = ""
+                                }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close search")
+                                }
+                            } else {
+                                IconButton(onClick = { isSearchOpen = true }) {
+                                    Icon(Icons.Default.Search, contentDescription = "Search tiles by name")
+                                }
                             }
-                            
+
                             var showSortMenu by remember { mutableStateOf(false) }
 
                             Box {
@@ -241,6 +286,8 @@ fun MainScreen() {
                                                     TileSortOrder.NAME_ASC -> Icons.Default.ArrowUpward
                                                     TileSortOrder.NAME_DESC -> Icons.Default.ArrowDownward
                                                     TileSortOrder.LAST_UPDATED -> Icons.Default.Update
+                                                    TileSortOrder.TILE_NUMBER_ASC -> Icons.Default.ArrowUpward
+                                                    TileSortOrder.TILE_NUMBER_DESC -> Icons.Default.ArrowDownward
                                                 }
                                                 Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
                                             },
@@ -275,7 +322,7 @@ fun MainScreen() {
             }
         },
         bottomBar = {
-            if (currentDestination == MainDestination.LIST && !isSearching) {
+            if (currentDestination == MainDestination.LIST) {
                 BottomAppBar(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
                     contentColor = MaterialTheme.colorScheme.onSurface,
@@ -392,7 +439,14 @@ fun MainScreen() {
                             TilesListScreen(
                                 tiles = activeTiles,
                                 isActiveTab = true,
-                                showCategories = showCategories && !isSearching,
+                                isGridView = isGridViewEnabled,
+                                isGridDynamic = isGridDynamic,
+                                gridColumns = gridColumns,
+                                gridRows = gridRows,
+                                listState = activeListState,
+                                gridState = activeGridState,
+                                showCategories = showCategories,
+                                searchQuery = searchQuery,
                                 selectedTileIds = selectedTileIds,
                                 onTileClick = { tile ->
                                     editingTile = tile
@@ -409,8 +463,8 @@ fun MainScreen() {
                                         selectedTileIds + tile.id
                                     }
                                 },
-                                onAddToQs = { tile ->
-                                    repository.setTileAddedToQs(tile.id, true)
+                                onToggleAddToQs = { tile, added ->
+                                    repository.setTileAddedToQs(tile.id, added)
                                 },
                                 onInactivateTile = { tile ->
                                     repository.inactivateTile(tile.id)
@@ -431,7 +485,14 @@ fun MainScreen() {
                             TilesListScreen(
                                 tiles = inactiveTiles,
                                 isActiveTab = false,
-                                showCategories = showCategories && !isSearching,
+                                isGridView = isGridViewEnabled,
+                                isGridDynamic = isGridDynamic,
+                                gridColumns = gridColumns,
+                                gridRows = gridRows,
+                                listState = inactiveListState,
+                                gridState = inactiveGridState,
+                                showCategories = showCategories,
+                                searchQuery = searchQuery,
                                 selectedTileIds = selectedTileIds,
                                 onTileClick = { tile ->
                                     editingTile = tile
@@ -448,8 +509,8 @@ fun MainScreen() {
                                         selectedTileIds + tile.id
                                     }
                                 },
-                                onAddToQs = { tile ->
-                                    repository.setTileAddedToQs(tile.id, true)
+                                onToggleAddToQs = { tile, added ->
+                                    repository.setTileAddedToQs(tile.id, added)
                                 },
                                 onInactivateTile = { tile ->
                                     repository.inactivateTile(tile.id)
