@@ -5,15 +5,15 @@ plugins {
 }
 
 android {
-    namespace = "com.wizzwuz.quicktiles"
+    namespace = "com.wizzwuz.quicksettiles"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.wizzwuz.quicktiles"
+        applicationId = "com.wizzwuz.quicksettiles"
         minSdk = 24
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.0.5"
+        versionCode = 1
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

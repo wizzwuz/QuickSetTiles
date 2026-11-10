@@ -3,6 +3,7 @@ name: Build QuickSetTiles APK
 on:
   push:
     branches: [ "main", "master", "experiments", "experimentals*", "tile-redesign*", "tab-redesign*" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main", "master", "experiments", "experimentals*", "tile-redesign*", "tab-redesign*" ]
   workflow_dispatch:
@@ -135,8 +136,8 @@ jobs:
             echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
             echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
             echo "| **Build Type** | \`${{ matrix.build_type }}\` |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Package Name** | \`com.wizzwuz.quicktiles\` |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Version** | \`1.0.5\` (code \`6\`) |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Package Name** | \`com.wizzwuz.quicksettiles\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Version** | \`1.0.0\` (code \`1\`) |" >> $GITHUB_STEP_SUMMARY
             echo "| **APK File** | \`$APK_NAME\` |" >> $GITHUB_STEP_SUMMARY
             echo "| **APK Size** | \`$APK_SIZE_MB MB\` |" >> $GITHUB_STEP_SUMMARY
             echo "| **Artifact Name** | \`${{ matrix.artifact_name }}\` |" >> $GITHUB_STEP_SUMMARY
@@ -150,3 +151,120 @@ jobs:
         else
           echo "Build Failure (${{ matrix.build_type }}): QuickSetTiles ${{ matrix.build_type }} build failed. Check step logs for details."
         fi
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Release APK
+        uses: actions/download-artifact@v7
+        with:
+          name: QuickSetTiles-release-apk
+          path: release-apk
+
+      - name: Download Debug APK
+        uses: actions/download-artifact@v7
+        with:
+          name: QuickSetTiles-debug-apk
+          path: debug-apk
+
+      - name: Prepare Release Assets & PGP Signature
+        run: |
+          mkdir -p dist
+
+          # Copy release APK to canonical release name
+          REL_APK=$(find release-apk -name "*.apk" | head -n 1)
+          if [ -n "$REL_APK" ] && [ -f "$REL_APK" ]; then
+            cp "$REL_APK" dist/QuickSetTiles-1.0.0.apk
+          else
+            echo "Error: Release APK not found!"
+            exit 1
+          fi
+
+          # Copy debug APK if present
+          DBG_APK=$(find debug-apk -name "*.apk" | head -n 1)
+          if [ -n "$DBG_APK" ] && [ -f "$DBG_APK" ]; then
+            cp "$DBG_APK" dist/QuickSetTiles-1.0.0-debug.apk
+          fi
+
+          # Generate GPG Key for PGP Signing (.asc)
+          cat <<EOF > gpg-gen-key.conf
+          %no-protection
+          Key-Type: RSA
+          Key-Length: 4096
+          Subkey-Type: RSA
+          Subkey-Length: 4096
+          Name-Real: QuickSetTiles Signer
+          Name-Email: release@quicksettiles.wizzwuz.com
+          Expire-Date: 0
+          EOF
+          gpg --batch --generate-key gpg-gen-key.conf
+          rm -f gpg-gen-key.conf
+
+          # Create detached ASCII-armored PGP signature (.asc) for the APK
+          gpg --armor --detach-sign --output dist/QuickSetTiles-1.0.0.apk.asc dist/QuickSetTiles-1.0.0.apk
+
+          # Export public key for verification
+          gpg --armor --export release@quicksettiles.wizzwuz.com > dist/QuickSetTiles-public-key.asc
+
+          # Verify signature
+          gpg --verify dist/QuickSetTiles-1.0.0.apk.asc dist/QuickSetTiles-1.0.0.apk
+
+          # Generate SHA256 checksums
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+
+          echo "Prepared release assets:"
+          ls -la dist/
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          if [ -z "$TAG_NAME" ] || [ "$TAG_NAME" = "main" ]; then
+            TAG_NAME="v1.0.0"
+          fi
+
+          gh release create "$TAG_NAME" dist/* \
+            --title "QuickSetTiles $TAG_NAME" \
+            --notes-file - << 'EOF'
+          ## QuickSetTiles v1.0.0 — Official First Stable Release 🎉
+
+          A powerful, modern Android Quick Settings tile creator and manager built with Jetpack Compose & Material 3.
+
+          ### 📦 Release Assets
+          - **QuickSetTiles-1.0.0.apk**: Official signed release APK (optimized with ProGuard/R8)
+          - **QuickSetTiles-1.0.0.apk.asc**: Detached ASCII-armored PGP signature (.asc)
+          - **QuickSetTiles-public-key.asc**: Public PGP signing key for verifying authenticity
+          - **QuickSetTiles-1.0.0-debug.apk**: Debug build with log exporter
+          - **SHA256SUMS.txt**: SHA256 verification checksums
+          - **Source code (.zip & .tar.gz)**: Full project source code (attached automatically by GitHub)
+
+          ### ✨ Key Features
+          - **8 Tile Types**: Apps, Web links, Shortcuts, Activities (including Private/unexported activities via Shizuku/Root), Intents, Shell scripts, Files, and Folders.
+          - **Tile Grid & Classic Card Views**: Responsive dynamic grid arrangement or customizable rows/columns with circular QS preview icons.
+          - **Inbuilt Shizuku & Root Support**: Zero external plugin required to launch private system activities.
+          - **57,000+ Icons & Full Customization**: Material Symbols with threshold, thickness, and sizing controls.
+          - **Backup & Restore**: Full JSON backup and restore including tiles, custom icons, theme, and grid arrangement.
+          - **Privacy & Security**: 100% offline, zero trackers, open source under GNU GPLv3.
+
+          ### 🔐 PGP Signature Verification
+          To verify the authenticity of the release APK:
+          ```bash
+          # 1. Import the public key
+          gpg --import QuickSetTiles-public-key.asc
+
+          # 2. Verify the release APK signature
+          gpg --verify QuickSetTiles-1.0.0.apk.asc QuickSetTiles-1.0.0.apk
+          ```
+          EOF

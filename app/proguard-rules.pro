@@ -16,12 +16,12 @@
 -keep class coil.** { *; }
 
 # QuickSetTiles Core packages
--keep class com.wizzwuz.quicktiles.QuickTilesApp { *; }
--keep class com.wizzwuz.quicktiles.model.** { *; }
--keep class com.wizzwuz.quicktiles.data.** { *; }
--keep class com.wizzwuz.quicktiles.service.** { *; }
--keep class com.wizzwuz.quicktiles.ui.** { *; }
--keep class com.wizzwuz.quicktiles.util.** { *; }
+-keep class com.wizzwuz.quicksettiles.QuickTilesApp { *; }
+-keep class com.wizzwuz.quicksettiles.model.** { *; }
+-keep class com.wizzwuz.quicksettiles.data.** { *; }
+-keep class com.wizzwuz.quicksettiles.service.** { *; }
+-keep class com.wizzwuz.quicksettiles.ui.** { *; }
+-keep class com.wizzwuz.quicksettiles.util.** { *; }
 
 # Suppress warnings from third-party libraries so R8 doesn't abort
 -dontwarn **
