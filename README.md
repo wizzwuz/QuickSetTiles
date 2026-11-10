@@ -78,16 +78,6 @@
 
 ## 🚀 Building & Releases
 
-Automated builds and releases are powered by **GitHub Actions**:
-
-1. **Workflow Artifacts**:
-   - Navigate to the **Actions** tab on GitHub: [QuickSetTiles Actions](https://github.com/wizzwuz/QuickSetTiles/actions).
-   - Click on the latest workflow run.
-   - Download `QuickSetTiles-release-apk` or `QuickSetTiles-debug-apk`. Both are signed with the permanent release keystore.
-2. **GitHub Releases**:
-   - Pushing any tag (e.g. `v1.0.0`) automatically publishes a GitHub Release with the signed APK attached.
-   - Can also be dispatched manually via the Actions UI (`create_release: true`).
-
 To build locally:
 ```bash
 ./gradlew assembleRelease assembleDebug
