@@ -104,7 +104,11 @@ class LaunchSplitActivity : Activity() {
         Handler(Looper.getMainLooper()).postDelayed({
             try {
                 if (bottomOptions != null) {
-                    startActivity(intent2, bottomOptions)
+                    try {
+                        startActivity(intent2, bottomOptions)
+                    } catch (_: Throwable) {
+                        startActivity(intent2)
+                    }
                 } else {
                     startActivity(intent2)
                 }
