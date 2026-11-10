@@ -14,7 +14,8 @@ import java.io.File
 data class RestoreResult(
     val tileCount: Int,
     val hasTheme: Boolean,
-    val hasPrivateLaunchable: Boolean
+    val hasPrivateLaunchable: Boolean,
+    val hasGridView: Boolean = false
 )
 
 object BackupRestoreManager {
@@ -27,13 +28,17 @@ object BackupRestoreManager {
         root.put("timestamp", System.currentTimeMillis())
 
         // 1. Settings
+        val repo = TileRepository.getInstance(context)
         val settingsObj = JSONObject()
         settingsObj.put("theme", ThemeManager.getTheme().name)
-        settingsObj.put("privateActivityLaunchable", TileRepository.getInstance(context).isPrivateActivityLaunchable())
+        settingsObj.put("privateActivityLaunchable", repo.isPrivateActivityLaunchable())
+        settingsObj.put("isGridView", repo.isGridViewEnabled())
+        settingsObj.put("isGridDynamic", repo.isGridDynamic())
+        settingsObj.put("gridColumns", repo.getGridColumns())
+        settingsObj.put("gridRows", repo.getGridRows())
         root.put("settings", settingsObj)
 
         // 2. Tiles
-        val repo = TileRepository.getInstance(context)
         val tiles = repo.loadTiles()
         val tilesArray = JSONArray()
         val customIconFiles = mutableSetOf<File>()
@@ -96,8 +101,10 @@ object BackupRestoreManager {
             }
 
             // 2. Restore Settings
+            val repo = TileRepository.getInstance(context)
             var hasTheme = false
             var hasPrivate = false
+            var hasGridView = false
             if (root.has("settings")) {
                 val settingsObj = root.getJSONObject("settings")
                 if (settingsObj.has("theme")) {
@@ -112,13 +119,29 @@ object BackupRestoreManager {
                 }
                 if (settingsObj.has("privateActivityLaunchable")) {
                     val privateLaunchable = settingsObj.getBoolean("privateActivityLaunchable")
-                    TileRepository.getInstance(context).setPrivateActivityLaunchable(privateLaunchable)
+                    repo.setPrivateActivityLaunchable(privateLaunchable)
                     hasPrivate = true
+                }
+                if (settingsObj.has("isGridView")) {
+                    val isGrid = settingsObj.getBoolean("isGridView")
+                    repo.setGridViewEnabled(isGrid)
+                    hasGridView = true
+                }
+                if (settingsObj.has("isGridDynamic")) {
+                    val isDynamic = settingsObj.getBoolean("isGridDynamic")
+                    repo.setGridDynamic(isDynamic)
+                }
+                if (settingsObj.has("gridColumns")) {
+                    val columns = settingsObj.getInt("gridColumns")
+                    repo.setGridColumns(columns)
+                }
+                if (settingsObj.has("gridRows")) {
+                    val rows = settingsObj.getInt("gridRows")
+                    repo.setGridRows(rows)
                 }
             }
 
             // 3. Restore Tiles
-            val repo = TileRepository.getInstance(context)
             val restoredTiles = mutableListOf<TileItem>()
             if (root.has("tiles")) {
                 val tilesArray = root.getJSONArray("tiles")
@@ -161,7 +184,8 @@ object BackupRestoreManager {
                 RestoreResult(
                     tileCount = restoredTiles.size,
                     hasTheme = hasTheme,
-                    hasPrivateLaunchable = hasPrivate
+                    hasPrivateLaunchable = hasPrivate,
+                    hasGridView = hasGridView
                 )
             )
         } catch (e: Throwable) {
