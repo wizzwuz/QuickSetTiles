@@ -539,19 +539,19 @@ fun SettingsScreen(
 
             // 4. Backup & Restore Card
             var showRestoreConfirmDialog by remember { mutableStateOf(false) }
-            var pendingRestoreJson by remember { mutableStateOf<String?>(null) }
+            var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
             var restoreTileCountPreview by remember { mutableStateOf(0) }
+            var restoreIconCountPreview by remember { mutableStateOf(0) }
 
             val exportBackupLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.CreateDocument("application/json")
+                contract = ActivityResultContracts.CreateDocument("application/octet-stream")
             ) { uri ->
                 if (uri != null) {
                     try {
-                        val jsonString = BackupRestoreManager.createBackup(context)
                         context.contentResolver.openOutputStream(uri)?.use { output ->
-                            output.write(jsonString.toByteArray(Charsets.UTF_8))
+                            BackupRestoreManager.createBackup(context, output)
                         }
-                        Toast.makeText(context, "Backup exported successfully!", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Backup exported successfully (.bak)!", Toast.LENGTH_LONG).show()
                     } catch (e: Throwable) {
                         Toast.makeText(context, "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
                     }
@@ -563,15 +563,15 @@ fun SettingsScreen(
             ) { uri ->
                 if (uri != null) {
                     try {
-                        val jsonString = context.contentResolver.openInputStream(uri)?.use { input ->
-                            input.bufferedReader().use { it.readText() }
-                        }
-                        if (jsonString != null) {
-                            val root = JSONObject(jsonString)
-                            val count = root.optJSONArray("tiles")?.length() ?: 0
-                            restoreTileCountPreview = count
-                            pendingRestoreJson = jsonString
+                        val peekResult = BackupRestoreManager.peekBackup(context, uri)
+                        if (peekResult.isSuccess) {
+                            val preview = peekResult.getOrThrow()
+                            restoreTileCountPreview = preview.tileCount
+                            restoreIconCountPreview = preview.iconCount
+                            pendingRestoreUri = uri
                             showRestoreConfirmDialog = true
+                        } else {
+                            Toast.makeText(context, "Failed to read backup: ${peekResult.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                         }
                     } catch (e: Throwable) {
                         Toast.makeText(context, "Failed to read backup: ${e.message}", Toast.LENGTH_LONG).show()
@@ -603,7 +603,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Export or restore your quick settings tiles and application settings.",
+                                text = "Export or restore your quick settings tiles, custom icons, and application settings (.bak).",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -617,7 +617,7 @@ fun SettingsScreen(
                         FilledTonalButton(
                             onClick = {
                                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                                exportBackupLauncher.launch("QuickSetTiles_backup_$timestamp.json")
+                                exportBackupLauncher.launch("QuickSetTiles_backup_$timestamp.bak")
                             },
                             modifier = Modifier.weight(1f)
                         ) {
@@ -628,7 +628,7 @@ fun SettingsScreen(
 
                         OutlinedButton(
                             onClick = {
-                                importBackupLauncher.launch(arrayOf("application/json", "*/*"))
+                                importBackupLauncher.launch(arrayOf("*/*", "application/octet-stream", "application/zip", "application/json"))
                             },
                             modifier = Modifier.weight(1f)
                         ) {
@@ -640,29 +640,31 @@ fun SettingsScreen(
                 }
             }
 
-            if (showRestoreConfirmDialog && pendingRestoreJson != null) {
+            if (showRestoreConfirmDialog && pendingRestoreUri != null) {
                 AlertDialog(
                     onDismissRequest = {
                         showRestoreConfirmDialog = false
-                        pendingRestoreJson = null
+                        pendingRestoreUri = null
                     },
                     title = { Text("Restore Backup?") },
                     text = {
-                        Text("This backup contains $restoreTileCountPreview tiles and application settings. Restoring will apply these settings and configure your tiles. Do you want to proceed?")
+                        val iconText = if (restoreIconCountPreview > 0) " and $restoreIconCountPreview custom icons" else ""
+                        Text("This backup contains $restoreTileCountPreview tiles$iconText and application settings. Restoring will apply these settings and configure your tiles. Do you want to proceed?")
                     },
                     confirmButton = {
                         Button(
                             onClick = {
-                                val json = pendingRestoreJson
+                                val uri = pendingRestoreUri
                                 showRestoreConfirmDialog = false
-                                pendingRestoreJson = null
-                                if (json != null) {
-                                    val result = BackupRestoreManager.restoreBackup(context, json)
+                                pendingRestoreUri = null
+                                if (uri != null) {
+                                    val result = BackupRestoreManager.restoreBackup(context, uri)
                                     if (result.isSuccess) {
                                         val summary = result.getOrNull()
+                                        val iconsSummary = if ((summary?.restoredIconsCount ?: 0) > 0) " (${summary?.restoredIconsCount} icons restored)" else ""
                                         Toast.makeText(
                                             context,
-                                            "Restored ${summary?.tileCount ?: 0} tiles and settings successfully!",
+                                            "Restored ${summary?.tileCount ?: 0} tiles$iconsSummary and settings successfully!",
                                             Toast.LENGTH_LONG
                                         ).show()
                                     } else {
@@ -682,7 +684,7 @@ fun SettingsScreen(
                         TextButton(
                             onClick = {
                                 showRestoreConfirmDialog = false
-                                pendingRestoreJson = null
+                                pendingRestoreUri = null
                             }
                         ) {
                             Text("Cancel")
