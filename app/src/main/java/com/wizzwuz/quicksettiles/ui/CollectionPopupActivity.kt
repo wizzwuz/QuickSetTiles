@@ -527,7 +527,7 @@ private fun executeCollectionItem(context: android.content.Context, repo: TileRe
                 context.startActivity(intent)
             }
             TileType.SPLIT_APPS -> {
-                scope.launch {
+                collectionScope.launch {
                     val res = AppHelper.launchSplitApps(context, item.targetData)
                     res.onFailure { e ->
                         Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_SHORT).show()

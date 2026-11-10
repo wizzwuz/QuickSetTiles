@@ -452,7 +452,7 @@ fun ShortcutDialog(
                                                         }
                                                         if (shortcut.isShortcutProvider) {
                                                             Icon(
-                                                                imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward,
+                                                                imageVector = androidx.compose.material.icons.Icons.Filled.OpenInNew,
                                                                 contentDescription = null,
                                                                 modifier = androidx.compose.ui.Modifier
                                                                     .size(12.dp)

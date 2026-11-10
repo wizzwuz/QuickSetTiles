@@ -17,11 +17,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import com.wizzwuz.quicksettiles.util.AppHelper
 import com.wizzwuz.quicksettiles.util.AppItem
+import com.wizzwuz.quicksettiles.util.IconProcessor
 
 @Composable
 fun SplitAppsDialog(
@@ -127,11 +128,14 @@ fun SplitAppsDialog(
                             verticalArrangement = Arrangement.Center
                         ) {
                             if (app1 != null) {
-                                Image(
-                                    painter = rememberDrawablePainter(drawable = app1!!.icon),
-                                    contentDescription = app1!!.label,
-                                    modifier = Modifier.size(28.dp)
-                                )
+                                val bmp1 = remember(app1!!.packageName) { IconProcessor.drawableToBitmap(app1!!.icon) }
+                                if (bmp1 != null) {
+                                    Image(
+                                        bitmap = bmp1.asImageBitmap(),
+                                        contentDescription = app1!!.label,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = app1!!.label,
@@ -172,11 +176,14 @@ fun SplitAppsDialog(
                             verticalArrangement = Arrangement.Center
                         ) {
                             if (app2 != null) {
-                                Image(
-                                    painter = rememberDrawablePainter(drawable = app2!!.icon),
-                                    contentDescription = app2!!.label,
-                                    modifier = Modifier.size(28.dp)
-                                )
+                                val bmp2 = remember(app2!!.packageName) { IconProcessor.drawableToBitmap(app2!!.icon) }
+                                if (bmp2 != null) {
+                                    Image(
+                                        bitmap = bmp2.asImageBitmap(),
+                                        contentDescription = app2!!.label,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = app2!!.label,

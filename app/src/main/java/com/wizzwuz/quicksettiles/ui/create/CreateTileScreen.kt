@@ -112,6 +112,7 @@ fun CreateTileScreen(
     onSaveTile: (TileItem) -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     var tileName by rememberSaveable { mutableStateOf(initialTile?.name ?: "") }
     var selectedType by rememberSaveable { mutableStateOf<TileType?>(initialTile?.type) }
