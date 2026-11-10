@@ -2302,7 +2302,7 @@ fun CollectionCreatorScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Hold & drag to rearrange • Tap to edit",
+                            text = "Tap to edit",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

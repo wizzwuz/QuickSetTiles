@@ -662,7 +662,7 @@ object AppHelper {
         sorted
     }
 
-    suspend fun launchSplitApps(context: Context, targetData: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun launchSplitApps(context: Context, targetData: String): Result<String> = withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
         val parts = targetData.split("|")
         if (parts.size < 2) {
             return@withContext Result.failure(IllegalArgumentException("Invalid split apps data"))
@@ -688,27 +688,28 @@ object AppHelper {
 
                     // 2. Launch first app in full screen / primary
                     ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "-n", comp1, "-f", "0x10000000"))
-                    delay(300)
+                    delay(350)
 
                     // 3. Trigger split-screen toggle via SystemUI
                     val toggleRes = ShizukuHelper.executePrivilegedCommand("cmd statusbar toggle-split-screen")
-                    delay(350)
+                    delay(400)
 
                     // 4. Launch second app into secondary adjacent window
                     ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "-n", comp2, "-f", "0x10001000", "--windowingMode", "4", "--activity-multiple-task"))
-                    delay(200)
+                    delay(250)
 
                     // 5. Fallback if toggle-split-screen was unsupported on this OEM
                     if (toggleRes.exitCode != 0) {
-                        ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "--windowingMode", "3", "-n", comp1, "-f", "0x10001000"))
-                        delay(250)
+                        ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "--windowingMode", "3", "-n", comp1, "-f", "0x10000000"))
+                        delay(300)
                         ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "--windowingMode", "4", "-n", comp2, "-f", "0x10001000", "--activity-multiple-task"))
                     }
 
                     return@withContext Result.success("Launched split apps in split screen mode")
                 }
             } catch (e: Throwable) {
-                // Fall back to standard launch
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                LogManager.logError("AppHelper", "Privileged split screen launch error", e)
             }
         }
 

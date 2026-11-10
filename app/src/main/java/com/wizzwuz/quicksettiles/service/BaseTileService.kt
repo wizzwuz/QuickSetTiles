@@ -364,12 +364,9 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
             }
             TileType.COLLECTION -> {
                 try {
-                    if (item.collapseOnTap) {
-                        mainHandler.post { collapseShade() }
-                    }
                     val intent = Intent(this, com.wizzwuz.quicksettiles.ui.CollectionPopupActivity::class.java).apply {
                         putExtra("collectionId", item.id)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     }
                     launchIntent(intent)
                 } catch (e: Throwable) {
@@ -461,10 +458,11 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
     }
 
     private fun launchIntent(intent: Intent) {
+        val reqCode = (slotNumber * 1000 + (System.currentTimeMillis() % 1000)).toInt()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             val pendingIntent = PendingIntent.getActivity(
                 this,
-                slotNumber,
+                reqCode,
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )

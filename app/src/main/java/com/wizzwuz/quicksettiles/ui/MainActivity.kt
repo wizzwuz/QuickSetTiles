@@ -33,11 +33,21 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         handleTileIntent(intent)
 
+        val repo = com.wizzwuz.quicksettiles.data.TileRepository.getInstance(this)
         setContent {
             val themeMode by ThemeManager.themeFlow.collectAsState()
             QuickTilesTheme(themeMode = themeMode) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    MainScreen()
+                    val onboardingCompleted by repo.onboardingCompletedFlow.collectAsState()
+                    if (!onboardingCompleted) {
+                        com.wizzwuz.quicksettiles.ui.permissions.PermissionsScreen(
+                            onComplete = {
+                                repo.setOnboardingCompleted(true)
+                            }
+                        )
+                    } else {
+                        MainScreen()
+                    }
                 }
             }
         }

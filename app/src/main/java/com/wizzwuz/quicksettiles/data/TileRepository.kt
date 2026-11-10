@@ -39,6 +39,18 @@ class TileRepository(private val context: Context) {
     )
     val sortOrderFlow: StateFlow<TileSortOrder> = _sortOrderFlow.asStateFlow()
 
+    private val _onboardingCompletedFlow = MutableStateFlow(
+        prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
+    )
+    val onboardingCompletedFlow: StateFlow<Boolean> = _onboardingCompletedFlow.asStateFlow()
+
+    fun isOnboardingCompleted(): Boolean = _onboardingCompletedFlow.value
+
+    fun setOnboardingCompleted(completed: Boolean) {
+        prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, completed).apply()
+        _onboardingCompletedFlow.value = completed
+    }
+
     private val _gridViewFlow = MutableStateFlow(
         prefs.getBoolean(KEY_GRID_VIEW, false)
     )
@@ -355,6 +367,7 @@ class TileRepository(private val context: Context) {
         const val KEY_GRID_COLUMNS = "pref_grid_columns"
         const val KEY_GRID_ROWS = "pref_grid_rows"
         private const val KEY_MIGRATED_MANUAL_QS = "migrated_manual_qs_v3"
+        const val KEY_ONBOARDING_COMPLETED = "key_onboarding_completed"
 
         @Volatile
         private var INSTANCE: TileRepository? = null

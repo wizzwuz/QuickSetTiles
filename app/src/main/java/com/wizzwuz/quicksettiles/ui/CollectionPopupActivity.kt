@@ -68,14 +68,28 @@ class CollectionPopupActivity : ComponentActivity() {
         return super.dispatchTouchEvent(ev)
     }
 
+    private val collectionIdState = mutableStateOf("")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
         ThemeManager.init(this)
+        collectionIdState.value = intent?.getStringExtra("collectionId") ?: ""
         setContent {
             val themeMode by ThemeManager.themeFlow.collectAsState()
             QuickTilesTheme(themeMode = themeMode) {
                 CollectionPopupScreen(
-                    collectionId = intent?.extras?.getString("collectionId") ?: "",
+                    collectionId = collectionIdState.value,
                     onDismiss = {
                         finishAndRemoveTask()
                         overridePendingTransition(0, android.R.anim.fade_out)
@@ -88,6 +102,7 @@ class CollectionPopupActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        collectionIdState.value = intent.getStringExtra("collectionId") ?: ""
     }
 }
 
@@ -104,11 +119,11 @@ fun CollectionPopupScreen(
         collection?.collectionItemIds?.mapNotNull { id -> tiles.find { it.id == id } } ?: emptyList()
     }
 
-    var visible by remember { mutableStateOf(false) }
+    var visible by remember(collectionId) { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
-        delay(40)
+    LaunchedEffect(collectionId) {
+        delay(30)
         visible = true
     }
 

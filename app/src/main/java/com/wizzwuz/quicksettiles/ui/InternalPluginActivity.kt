@@ -62,15 +62,23 @@ class InternalPluginActivity : Activity() {
             cleanFinish()
         } else if (action == "launch_split_apps") {
             val splitData = intent.getStringExtra("split_data") ?: ""
-            scope.launch {
+            com.wizzwuz.quicksettiles.QuickTilesApp.applicationScope.launch {
                 try {
-                    AppHelper.launchSplitApps(this@InternalPluginActivity, splitData)
+                    val result = AppHelper.launchSplitApps(applicationContext, splitData)
+                    result.onFailure { err ->
+                        kotlinx.coroutines.withContext(Dispatchers.Main) {
+                            Toast.makeText(applicationContext, "Failed to launch split apps: ${err.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 } catch (e: Throwable) {
-                    Toast.makeText(this@InternalPluginActivity, "Failed to launch split apps: ${e.message}", Toast.LENGTH_SHORT).show()
-                } finally {
-                    cleanFinish()
+                    if (e !is kotlinx.coroutines.CancellationException) {
+                        kotlinx.coroutines.withContext(Dispatchers.Main) {
+                            Toast.makeText(applicationContext, "Failed to launch split apps: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
+            cleanFinish()
         } else {
             cleanFinish()
         }
