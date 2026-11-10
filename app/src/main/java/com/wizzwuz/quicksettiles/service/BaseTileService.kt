@@ -38,6 +38,17 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                 }
             }
         }
+
+        fun refreshAllActiveTiles(context: android.content.Context) {
+            val repo = TileRepository.getInstance(context)
+            val tiles = repo.tilesFlow.value
+            for (tile in tiles) {
+                if (tile.isActive && tile.slotNumber in 1..TileRepository.MAX_SLOTS) {
+                    refreshSlot(tile.slotNumber)
+                    TileRepository.requestTileUpdate(context, tile.slotNumber)
+                }
+            }
+        }
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -66,7 +77,22 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
         val repo = TileRepository.getInstance(this)
         val item = repo.getTileBySlot(slotNumber)
 
+        val isDeviceLocked = try { isLocked } catch (e: Throwable) { false }
+
         if (item != null && item.isActive) {
+            if (isDeviceLocked && !item.allowOnLockScreen && item.hideFromLockScreen) {
+                // When "Hide from lock screen" is enabled:
+                // Custom quick tile should not show in lock screen and unlocking the screen it should show in quick settings panel
+                tile.state = Tile.STATE_UNAVAILABLE
+                tile.label = ""
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    tile.subtitle = null
+                }
+                tile.icon = Icon.createWithBitmap(android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888))
+                tile.updateTile()
+                return
+            }
+
             if (item.multiShellSteps.isNotEmpty()) {
                 val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
                 val step = item.multiShellSteps[stepIndex]
@@ -135,6 +161,20 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             launchIntent(intent)
+            return
+        }
+
+        val isDeviceLocked = try { isLocked } catch (e: Throwable) { false }
+        if (isDeviceLocked && !item.allowOnLockScreen) {
+            unlockAndRun {
+                // Device is unlocked now by user entering password/PIN/pattern/fingerprint.
+                // Re-evaluate and show tile in unlocked state:
+                mainHandler.post {
+                    updateTileState()
+                }
+                // The tile action intentionally does NOT run here.
+                // It will only run if it has been tapped again.
+            }
             return
         }
 

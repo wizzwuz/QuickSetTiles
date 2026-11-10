@@ -125,7 +125,9 @@ data class TileItem(
     val tilesPerRow: Int = 3,
     val showPopups: Boolean = false,
     val multiShellSteps: List<ShellStep> = emptyList(),
-    val currentMultiShellIndex: Int = 0
+    val currentMultiShellIndex: Int = 0,
+    val allowOnLockScreen: Boolean = true,
+    val hideFromLockScreen: Boolean = false
 ) {
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -157,6 +159,8 @@ data class TileItem(
             multiShellSteps.forEach { stepsArray.put(it.toJson()) }
             put("multiShellSteps", stepsArray)
             put("currentMultiShellIndex", currentMultiShellIndex)
+            put("allowOnLockScreen", allowOnLockScreen)
+            put("hideFromLockScreen", hideFromLockScreen)
         }
     }
 
@@ -200,7 +204,9 @@ data class TileItem(
                 tilesPerRow = json.optInt("tilesPerRow", 3),
                 showPopups = json.optBoolean("showPopups", false),
                 multiShellSteps = stepsList,
-                currentMultiShellIndex = json.optInt("currentMultiShellIndex", 0)
+                currentMultiShellIndex = json.optInt("currentMultiShellIndex", 0),
+                allowOnLockScreen = json.optBoolean("allowOnLockScreen", true),
+                hideFromLockScreen = json.optBoolean("hideFromLockScreen", false)
             )
         }
     }

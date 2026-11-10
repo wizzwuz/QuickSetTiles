@@ -4,8 +4,11 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -127,6 +130,9 @@ fun CreateTileScreen(
         )
     }
     var collapseOnTap by rememberSaveable { mutableStateOf(initialTile?.collapseOnTap ?: true) }
+    var allowOnLockScreen by rememberSaveable { mutableStateOf(initialTile?.allowOnLockScreen ?: true) }
+    var hideFromLockScreen by rememberSaveable { mutableStateOf(initialTile?.hideFromLockScreen ?: false) }
+    var isLockScreenOptionsExpanded by rememberSaveable { mutableStateOf(false) }
     var currentToggleOn by rememberSaveable { mutableStateOf(initialTile?.currentToggleOn ?: true) }
     var onTileName by rememberSaveable { mutableStateOf(initialTile?.onTileName ?: "") }
     var offTileName by rememberSaveable { mutableStateOf(initialTile?.offTileName ?: "") }
@@ -164,6 +170,8 @@ fun CreateTileScreen(
                 if (initialTile.type == TileType.SHELL && initialTile.visualState == TileVisualState.DISABLED) initialTile.targetData else ""
             }
             collapseOnTap = initialTile.collapseOnTap
+            allowOnLockScreen = initialTile.allowOnLockScreen
+            hideFromLockScreen = initialTile.hideFromLockScreen
             currentToggleOn = initialTile.currentToggleOn
             onTileName = initialTile.onTileName
             offTileName = initialTile.offTileName
@@ -275,7 +283,9 @@ fun CreateTileScreen(
                     onIconConfig = onIconConfig,
                     offIconConfig = offIconConfig,
                     showPopups = showPopups,
-                    multiShellSteps = multiShellSteps
+                    multiShellSteps = multiShellSteps,
+                    allowOnLockScreen = allowOnLockScreen,
+                    hideFromLockScreen = hideFromLockScreen
                 )).copy(
                     name = finalName,
                     type = selectedType!!,
@@ -288,6 +298,8 @@ fun CreateTileScreen(
                     collapseOnTap = collapseOnTap,
                     showPopups = showPopups,
                     multiShellSteps = multiShellSteps,
+                    allowOnLockScreen = allowOnLockScreen,
+                    hideFromLockScreen = hideFromLockScreen,
                     onTileName = when (visualState) {
                         TileVisualState.TOGGLE -> if (onTileName.isNotBlank() && onTileName != initialTile?.name) onTileName.trim() else finalName
                         else -> finalName
@@ -772,6 +784,122 @@ fun CreateTileScreen(
                         checked = collapseOnTap,
                         onCheckedChange = { collapseOnTap = it }
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // --- ALLOW ON LOCK SCREEN (BELOW COLLAPSE PANEL ON CLICK) ---
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (!allowOnLockScreen) {
+                                    isLockScreenOptionsExpanded = !isLockScreenOptionsExpanded
+                                } else {
+                                    allowOnLockScreen = false
+                                    isLockScreenOptionsExpanded = true
+                                }
+                            }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Allow on lock screen",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                if (!allowOnLockScreen) {
+                                    Icon(
+                                        imageVector = if (isLockScreenOptionsExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (allowOnLockScreen) {
+                                    "Custom quick tile can be accessed from lock screen"
+                                } else {
+                                    "Tile cannot be accessed from lock screen without unlocking"
+                                },
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = allowOnLockScreen,
+                            onCheckedChange = { isChecked ->
+                                allowOnLockScreen = isChecked
+                                if (isChecked) {
+                                    isLockScreenOptionsExpanded = false
+                                    hideFromLockScreen = false
+                                } else {
+                                    isLockScreenOptionsExpanded = true
+                                }
+                            }
+                        )
+                    }
+
+                    // Dropdown menu option: "Hide from lock screen"
+                    AnimatedVisibility(
+                        visible = !allowOnLockScreen && isLockScreenOptionsExpanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(bottom = 12.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { hideFromLockScreen = !hideFromLockScreen },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                    Text(
+                                        text = "Hide from lock screen",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Custom quick tile will not show in lock screen and unlocking the screen it should show in quick settings panel",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = hideFromLockScreen,
+                                    onCheckedChange = { hideFromLockScreen = it }
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1511,6 +1639,9 @@ fun CollectionCreatorScreen(
     val context = LocalContext.current
     var collectionName by rememberSaveable { mutableStateOf(initialTile?.name ?: "My Collection") }
     var collapseOnTap by rememberSaveable { mutableStateOf(initialTile?.collapseOnTap ?: true) }
+    var allowOnLockScreen by rememberSaveable { mutableStateOf(initialTile?.allowOnLockScreen ?: true) }
+    var hideFromLockScreen by rememberSaveable { mutableStateOf(initialTile?.hideFromLockScreen ?: false) }
+    var isLockScreenOptionsExpanded by rememberSaveable { mutableStateOf(false) }
     var tilesPerRow by rememberSaveable { mutableIntStateOf(initialTile?.tilesPerRow ?: 3) }
     var tilesPerRowInput by rememberSaveable { mutableStateOf((initialTile?.tilesPerRow ?: 3).toString()) }
     var isCollectionCustomizeExpanded by rememberSaveable { mutableStateOf(false) }
@@ -1649,7 +1780,9 @@ fun CollectionCreatorScreen(
                 collectionItemIds = collectionItems.map { it.id },
                 collapseOnTap = collapseOnTap,
                 tilesPerRow = tilesPerRow,
-                visualState = collectionVisualState
+                visualState = collectionVisualState,
+                allowOnLockScreen = allowOnLockScreen,
+                hideFromLockScreen = hideFromLockScreen
             )).copy(
                 name = collectionName.ifBlank { "My Collection" },
                 type = TileType.COLLECTION,
@@ -1658,7 +1791,9 @@ fun CollectionCreatorScreen(
                 collectionItemIds = collectionItems.map { it.id },
                 collapseOnTap = collapseOnTap,
                 tilesPerRow = tilesPerRow,
-                visualState = collectionVisualState
+                visualState = collectionVisualState,
+                allowOnLockScreen = allowOnLockScreen,
+                hideFromLockScreen = hideFromLockScreen
             )
             onSaveCollection(collectionTile, collectionItems.toList())
         }
@@ -2206,6 +2341,122 @@ fun CollectionCreatorScreen(
                         checked = collapseOnTap,
                         onCheckedChange = { collapseOnTap = it }
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // --- ALLOW ON LOCK SCREEN (BELOW COLLAPSE PANEL ON CLICK) ---
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (!allowOnLockScreen) {
+                                    isLockScreenOptionsExpanded = !isLockScreenOptionsExpanded
+                                } else {
+                                    allowOnLockScreen = false
+                                    isLockScreenOptionsExpanded = true
+                                }
+                            }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Allow on lock screen",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                if (!allowOnLockScreen) {
+                                    Icon(
+                                        imageVector = if (isLockScreenOptionsExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (allowOnLockScreen) {
+                                    "Custom collection tile can be accessed from lock screen"
+                                } else {
+                                    "Collection tile cannot be accessed from lock screen without unlocking"
+                                },
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = allowOnLockScreen,
+                            onCheckedChange = { isChecked ->
+                                allowOnLockScreen = isChecked
+                                if (isChecked) {
+                                    isLockScreenOptionsExpanded = false
+                                    hideFromLockScreen = false
+                                } else {
+                                    isLockScreenOptionsExpanded = true
+                                }
+                            }
+                        )
+                    }
+
+                    // Dropdown menu option: "Hide from lock screen"
+                    AnimatedVisibility(
+                        visible = !allowOnLockScreen && isLockScreenOptionsExpanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(bottom = 12.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { hideFromLockScreen = !hideFromLockScreen },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                    Text(
+                                        text = "Hide from lock screen",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Custom collection tile will not show in lock screen and unlocking the screen it should show in quick settings panel",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = hideFromLockScreen,
+                                    onCheckedChange = { hideFromLockScreen = it }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

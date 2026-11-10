@@ -72,6 +72,14 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
             android:taskAffinity="" />
 
+        <receiver
+            android:name=".service.LockScreenReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
+        </receiver>
+
 
         <!-- Official Shizuku Provider: authority MUST be ${applicationId}.shizuku -->
         <provider
