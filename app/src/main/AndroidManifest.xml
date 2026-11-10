@@ -82,6 +82,13 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
             android:taskAffinity="" />
 
+        <activity
+            android:name=".ui.split.LaunchSplitActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:taskAffinity=""
+            android:excludeFromRecents="true" />
+
         <receiver
             android:name=".service.LockScreenReceiver"
             android:exported="true">

@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         ShizukuHelper.updateStatus()
+        com.wizzwuz.quicksettiles.data.TileRepository.getInstance(this).syncComponentStates(this)
     }
 
     override fun onDestroy() {

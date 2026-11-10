@@ -662,78 +662,14 @@ object AppHelper {
         sorted
     }
 
-    suspend fun launchSplitApps(context: Context, targetData: String): Result<String> = withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
-        val parts = targetData.split("|")
-        if (parts.size < 2) {
-            return@withContext Result.failure(IllegalArgumentException("Invalid split apps data"))
-        }
-        val pkg1 = parts[0].trim()
-        val pkg2 = parts[1].trim()
-
-        val pm = context.packageManager
-
-        // Strategy 1: Privileged launch via Shizuku / Root with statusbar toggle & windowingMode
-        if ((ShizukuHelper.isShizukuRunning() && ShizukuHelper.hasShizukuPermission()) || ShizukuHelper.isRootBinaryPresent()) {
-            try {
-                val launchIntent1 = pm.getLaunchIntentForPackage(pkg1)
-                val launchIntent2 = pm.getLaunchIntentForPackage(pkg2)
-
-                val comp1 = launchIntent1?.component?.flattenToString()
-                val comp2 = launchIntent2?.component?.flattenToString()
-
-                if (comp1 != null && comp2 != null) {
-                    // 1. Collapse shade first
-                    ShizukuHelper.executePrivilegedCommand("cmd statusbar collapse")
-                    delay(150)
-
-                    // 2. Launch first app in full screen / primary
-                    ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "-n", comp1, "-f", "0x10000000"))
-                    delay(350)
-
-                    // 3. Trigger split-screen toggle via SystemUI
-                    val toggleRes = ShizukuHelper.executePrivilegedCommand("cmd statusbar toggle-split-screen")
-                    delay(400)
-
-                    // 4. Launch second app into secondary adjacent window
-                    ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "-n", comp2, "-f", "0x10001000", "--windowingMode", "4", "--activity-multiple-task"))
-                    delay(250)
-
-                    // 5. Fallback if toggle-split-screen was unsupported on this OEM
-                    if (toggleRes.exitCode != 0) {
-                        ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "--windowingMode", "3", "-n", comp1, "-f", "0x10000000"))
-                        delay(300)
-                        ShizukuHelper.executePrivilegedRaw(arrayOf("am", "start", "--windowingMode", "4", "-n", comp2, "-f", "0x10001000", "--activity-multiple-task"))
-                    }
-
-                    return@withContext Result.success("Launched split apps in split screen mode")
-                }
-            } catch (e: Throwable) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                LogManager.logError("AppHelper", "Privileged split screen launch error", e)
+    fun launchSplitApps(context: Context, targetData: String): Result<String> {
+        return try {
+            val intent = Intent(context, com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity::class.java).apply {
+                putExtra("split_data", targetData)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
             }
-        }
-
-        // Strategy 2: Standard Android launch with FLAG_ACTIVITY_LAUNCH_ADJACENT
-        try {
-            val intent1 = pm.getLaunchIntentForPackage(pkg1)?.apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            val intent2 = pm.getLaunchIntentForPackage(pkg2)?.apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
-            }
-
-            if (intent1 != null && intent2 != null) {
-                withContext(Dispatchers.Main) {
-                    context.startActivity(intent1)
-                }
-                delay(300)
-                withContext(Dispatchers.Main) {
-                    context.startActivity(intent2)
-                }
-                Result.success("Launched split apps")
-            } else {
-                Result.failure(Exception("Could not find launch intent for split apps"))
-            }
+            context.startActivity(intent)
+            Result.success("Launched split apps in split screen mode")
         } catch (e: Throwable) {
             Result.failure(e)
         }

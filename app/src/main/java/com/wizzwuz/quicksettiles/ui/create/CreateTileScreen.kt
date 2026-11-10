@@ -1236,19 +1236,6 @@ fun CreateTileScreen(
         )
     }
 
-    if (showCollectionCreator) {
-        CollectionCreatorScreen(
-            onBack = { showCollectionCreator = false },
-            onSaveCollection = { collectionTile, memberTiles ->
-                showCollectionCreator = false
-                // Save all collection member tiles first
-                memberTiles.forEach { onSaveTile(it) }
-                selectedType = TileType.COLLECTION
-                onSaveTile(collectionTile)
-            }
-        )
-    }
-
     if (showPresetsDialog) {
         IconPresetsDialog(
             currentKey = iconConfig.sourceData,
@@ -2028,7 +2015,8 @@ fun CollectionCreatorScreen(
                 Button(
                     onClick = {
                         val repo = TileRepository.getInstance(context)
-                        repo.deleteTile(initialTile.id)
+                        val toDelete = (setOf(initialTile.id) + initialTile.collectionItemIds).toSet()
+                        repo.deleteTiles(toDelete)
                         showDeleteConfirmation = false
                         onBack()
                     },
