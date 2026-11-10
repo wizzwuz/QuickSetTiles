@@ -86,8 +86,13 @@
             android:name=".ui.split.LaunchSplitActivity"
             android:exported="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
-            android:taskAffinity=""
-            android:excludeFromRecents="true" />
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="shortcutmaker.intent.action.SPLIT" />
+                <action android:name="com.wizzwuz.quicksettiles.intent.action.SPLIT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
         <receiver
             android:name=".service.LockScreenReceiver"
