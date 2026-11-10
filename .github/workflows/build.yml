@@ -136,8 +136,10 @@ jobs:
             echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
             echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
             echo "| **Build Type** | \`${{ matrix.build_type }}\` |" >> $GITHUB_STEP_SUMMARY
+            APP_VERSION=$(grep 'versionName' app/build.gradle.kts | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+            APP_CODE=$(grep 'versionCode' app/build.gradle.kts | head -n 1 | tr -cd '0-9')
             echo "| **Package Name** | \`com.wizzwuz.quicksettiles\` |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Version** | \`1.0.0\` (code \`1\`) |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Version** | \`$APP_VERSION\` (code \`$APP_CODE\`) |" >> $GITHUB_STEP_SUMMARY
             echo "| **APK File** | \`$APK_NAME\` |" >> $GITHUB_STEP_SUMMARY
             echo "| **APK Size** | \`$APK_SIZE_MB MB\` |" >> $GITHUB_STEP_SUMMARY
             echo "| **Artifact Name** | \`${{ matrix.artifact_name }}\` |" >> $GITHUB_STEP_SUMMARY
@@ -182,10 +184,16 @@ jobs:
         run: |
           mkdir -p dist
 
+          TAG_NAME="${{ github.ref_name }}"
+          if [ -z "$TAG_NAME" ] || [ "$TAG_NAME" = "main" ]; then
+            TAG_NAME="v1.0.1"
+          fi
+          VERSION="${TAG_NAME#v}"
+
           # Copy release APK to canonical release name
           REL_APK=$(find release-apk -name "*.apk" | head -n 1)
           if [ -n "$REL_APK" ] && [ -f "$REL_APK" ]; then
-            cp "$REL_APK" dist/QuickSetTiles-1.0.0.apk
+            cp "$REL_APK" "dist/QuickSetTiles-${VERSION}.apk"
           else
             echo "Error: Release APK not found!"
             exit 1
@@ -194,7 +202,7 @@ jobs:
           # Copy debug APK if present
           DBG_APK=$(find debug-apk -name "*.apk" | head -n 1)
           if [ -n "$DBG_APK" ] && [ -f "$DBG_APK" ]; then
-            cp "$DBG_APK" dist/QuickSetTiles-1.0.0-debug.apk
+            cp "$DBG_APK" "dist/QuickSetTiles-${VERSION}-debug.apk"
           fi
 
           # Generate GPG Key for PGP Signing (.asc)
@@ -212,13 +220,13 @@ jobs:
           rm -f gpg-gen-key.conf
 
           # Create detached ASCII-armored PGP signature (.asc) for the APK
-          gpg --armor --detach-sign --output dist/QuickSetTiles-1.0.0.apk.asc dist/QuickSetTiles-1.0.0.apk
+          gpg --armor --detach-sign --output "dist/QuickSetTiles-${VERSION}.apk.asc" "dist/QuickSetTiles-${VERSION}.apk"
 
           # Export public key for verification
           gpg --armor --export release@quicksettiles.wizzwuz.com > dist/QuickSetTiles-public-key.asc
 
           # Verify signature
-          gpg --verify dist/QuickSetTiles-1.0.0.apk.asc dist/QuickSetTiles-1.0.0.apk
+          gpg --verify "dist/QuickSetTiles-${VERSION}.apk.asc" "dist/QuickSetTiles-${VERSION}.apk"
 
           # Generate SHA256 checksums
           (cd dist && sha256sum * > SHA256SUMS.txt)
@@ -232,39 +240,15 @@ jobs:
         run: |
           TAG_NAME="${{ github.ref_name }}"
           if [ -z "$TAG_NAME" ] || [ "$TAG_NAME" = "main" ]; then
-            TAG_NAME="v1.0.0"
+            TAG_NAME="v1.0.1"
           fi
 
-          gh release create "$TAG_NAME" dist/* \
-            --title "QuickSetTiles $TAG_NAME" \
-            --notes-file - << 'EOF'
-          ## QuickSetTiles v1.0.0 — Official First Stable Release 🎉
-
-          A powerful, modern Android Quick Settings tile creator and manager built with Jetpack Compose & Material 3.
-
-          ### 📦 Release Assets
-          - **QuickSetTiles-1.0.0.apk**: Official signed release APK (optimized with ProGuard/R8)
-          - **QuickSetTiles-1.0.0.apk.asc**: Detached ASCII-armored PGP signature (.asc)
-          - **QuickSetTiles-public-key.asc**: Public PGP signing key for verifying authenticity
-          - **QuickSetTiles-1.0.0-debug.apk**: Debug build with log exporter
-          - **SHA256SUMS.txt**: SHA256 verification checksums
-          - **Source code (.zip & .tar.gz)**: Full project source code (attached automatically by GitHub)
-
-          ### ✨ Key Features
-          - **8 Tile Types**: Apps, Web links, Shortcuts, Activities (including Private/unexported activities via Shizuku/Root), Intents, Shell scripts, Files, and Folders.
-          - **Tile Grid & Classic Card Views**: Responsive dynamic grid arrangement or customizable rows/columns with circular QS preview icons.
-          - **Inbuilt Shizuku & Root Support**: Zero external plugin required to launch private system activities.
-          - **57,000+ Icons & Full Customization**: Material Symbols with threshold, thickness, and sizing controls.
-          - **Backup & Restore**: Full JSON backup and restore including tiles, custom icons, theme, and grid arrangement.
-          - **Privacy & Security**: 100% offline, zero trackers, open source under GNU GPLv3.
-
-          ### 🔐 PGP Signature Verification
-          To verify the authenticity of the release APK:
-          ```bash
-          # 1. Import the public key
-          gpg --import QuickSetTiles-public-key.asc
-
-          # 2. Verify the release APK signature
-          gpg --verify QuickSetTiles-1.0.0.apk.asc QuickSetTiles-1.0.0.apk
-          ```
-          EOF
+          if [ -f RELEASE_NOTES.md ]; then
+            gh release create "$TAG_NAME" dist/* \
+              --title "QuickSetTiles $TAG_NAME" \
+              --notes-file RELEASE_NOTES.md
+          else
+            gh release create "$TAG_NAME" dist/* \
+              --title "QuickSetTiles $TAG_NAME" \
+              --generate-notes
+          fi
