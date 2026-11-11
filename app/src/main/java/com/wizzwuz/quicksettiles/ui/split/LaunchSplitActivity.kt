@@ -14,15 +14,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Dedicated transparent trampoline activity to launch dual applications in split-screen mode
- * without requiring any Android Accessibility permission.
+ * Transparent trampoline activity that launches two apps in split-screen mode.
  *
- * Utilizes the proven multi-window home-clearing and adjacent docking technique:
- * 1. Clears launcher state by bringing Home forward.
- * 2. Launches App 1 with FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TOP | FLAG_ACTIVITY_MULTIPLE_TASK.
- * 3. Optionally triggers toggle-split-screen if Shizuku / root is available.
- * 4. Launches App 2 with FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_LAUNCH_ADJACENT | FLAG_ACTIVITY_CLEAR_TOP | FLAG_ACTIVITY_MULTIPLE_TASK | FLAG_ACTIVITY_REORDER_TO_FRONT.
- * 5. Cleanly terminates and removes its task.
+ * Flow:
+ * 1. Launch app 1 in a new task.
+ * 2. If Shizuku/root available, try to enter split-screen mode.
+ * 3. Launch app 2 with FLAG_ACTIVITY_LAUNCH_ADJACENT.
  */
 class LaunchSplitActivity : Activity() {
 
@@ -69,75 +66,59 @@ class LaunchSplitActivity : Activity() {
             return
         }
 
-        // Apply multi-window launch flags
-        // App 1 (Primary / Top): FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TOP | FLAG_ACTIVITY_MULTIPLE_TASK
         intent1.addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK or
-            Intent.FLAG_ACTIVITY_CLEAR_TOP or
-            Intent.FLAG_ACTIVITY_MULTIPLE_TASK
+            Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
+            Intent.FLAG_ACTIVITY_NO_ANIMATION
         )
 
-        // App 2 (Adjacent / Bottom): FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_LAUNCH_ADJACENT | FLAG_ACTIVITY_CLEAR_TOP | FLAG_ACTIVITY_MULTIPLE_TASK | FLAG_ACTIVITY_REORDER_TO_FRONT
         intent2.addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK or
-            Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or
-            Intent.FLAG_ACTIVITY_CLEAR_TOP or
             Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
-            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or
+            Intent.FLAG_ACTIVITY_NO_ANIMATION
         )
 
         val mainHandler = Handler(Looper.getMainLooper())
 
-        // 1. Send Home intent first to ensure launcher state is clean and ready for adjacent window docking
         try {
-            val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_HOME)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(homeIntent)
+            startActivity(intent1)
         } catch (e: Throwable) {
-            LogManager.logError("LaunchSplitActivity", "Home intent error", e)
+            LogManager.logError("LaunchSplitActivity", "App 1 launch error", e)
+            Toast.makeText(this, "QuickSetTiles: Failed to launch first app", Toast.LENGTH_SHORT).show()
+            finishAndRemoveTask()
+            return
         }
 
-        // 2. Launch App 1 after short delay (450ms)
+        // Best-effort: enter split-screen mode on devices where privileged command is available.
+        if ((ShizukuHelper.isShizukuRunning() && ShizukuHelper.hasShizukuPermission()) || ShizukuHelper.isRootBinaryPresent()) {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    delay(250)
+                    ShizukuHelper.executePrivilegedCommand("cmd statusbar toggle-split-screen")
+                } catch (e: Throwable) {
+                    LogManager.logError("LaunchSplitActivity", "toggle-split-screen error", e)
+                }
+            }
+        }
+
         mainHandler.postDelayed({
             if (isFinishing || isDestroyed) return@postDelayed
             try {
-                startActivity(intent1)
+                startActivity(intent2)
             } catch (e: Throwable) {
-                LogManager.logError("LaunchSplitActivity", "App 1 launch error", e)
+                LogManager.logError("LaunchSplitActivity", "App 2 launch error", e)
+                Toast.makeText(this, "QuickSetTiles: Failed to launch second app", Toast.LENGTH_SHORT).show()
             }
 
-            // If Shizuku or root is available, trigger toggle-split-screen to enforce multi-window mode
-            if ((ShizukuHelper.isShizukuRunning() && ShizukuHelper.hasShizukuPermission()) || ShizukuHelper.isRootBinaryPresent()) {
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        delay(200)
-                        ShizukuHelper.executePrivilegedCommand("cmd statusbar toggle-split-screen")
-                    } catch (e: Throwable) {
-                        LogManager.logError("LaunchSplitActivity", "toggle-split-screen error", e)
-                    }
-                }
-            }
-
-            // 3. Launch App 2 adjacent after 300ms
             mainHandler.postDelayed({
-                if (isFinishing || isDestroyed) return@postDelayed
                 try {
-                    startActivity(intent2)
-                } catch (e: Throwable) {
-                    LogManager.logError("LaunchSplitActivity", "App 2 launch error", e)
+                    finishAndRemoveTask()
+                    overridePendingTransition(0, 0)
+                } catch (_: Throwable) {
                 }
-
-                // 4. Cleanly finish and remove task
-                mainHandler.postDelayed({
-                    try {
-                        finishAndRemoveTask()
-                        overridePendingTransition(0, 0)
-                    } catch (e: Throwable) {}
-                }, 250)
             }, 300)
-        }, 450)
+        }, 700)
     }
 
     private fun createTargetIntent(target: String): Intent? {
@@ -145,10 +126,13 @@ class LaunchSplitActivity : Activity() {
             try {
                 Intent.parseUri(target, Intent.URI_INTENT_SCHEME)
             } catch (e: Throwable) {
+                LogManager.logError("LaunchSplitActivity", "Intent parse error: $target", e)
                 null
             }
         } else {
-            packageManager.getLaunchIntentForPackage(target)
+            packageManager.getLaunchIntentForPackage(target)?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+            }
         }
     }
 }
