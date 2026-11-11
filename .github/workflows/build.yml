@@ -211,9 +211,6 @@ jobs:
           # Create detached ASCII-armored PGP signature (.asc) for the APK
           gpg --armor --detach-sign --output "dist/QuickSetTiles-${VERSION}.apk.asc" "dist/QuickSetTiles-${VERSION}.apk"
 
-          # Export public key for verification
-          gpg --armor --export release@quicksettiles.wizzwuz.com > dist/QuickSetTiles-public-key.asc
-
           # Verify signature
           gpg --verify "dist/QuickSetTiles-${VERSION}.apk.asc" "dist/QuickSetTiles-${VERSION}.apk"
 
