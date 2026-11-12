@@ -1,0 +1,12 @@
+QuickSetTiles enables you to create and customize Android Quick Settings tiles.
+
+Key Features:
+- Apps & Shortcuts: Launch any installed application or deep app shortcut directly from the Quick Settings panel.
+- Split Screen: Pair two apps and launch them side-by-side in dual split-screen mode without accessibility services.
+- Contacts: Direct call or SMS conversation tiles with SIM chooser.
+- Shell Commands: Execute root (su) or Shizuku privileged shell commands with output popups.
+- Collections: Group multiple tiles into a compact popup launcher tray.
+- Websites & Files: Fast access to bookmarks, folders, and files.
+- Lock Screen Privacy: Automatically hide tiles while the device is locked.
+
+QuickSetTiles is free and open-source (GPLv3), contains zero analytics or trackers, and displays no advertisements.

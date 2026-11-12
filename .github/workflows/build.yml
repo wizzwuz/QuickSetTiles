@@ -27,6 +27,10 @@ jobs:
             task: assembleDebug
             artifact_name: QuickSetTiles-debug-apk
             artifact_path: app/build/outputs/apk/debug/*.apk
+          - build_type: FDroid
+            task: assembleRelease
+            artifact_name: QuickSetTiles-fdroid-apk
+            artifact_path: app/build/outputs/apk/release/*.apk
 
     steps:
     - name: Checkout Code
@@ -43,12 +47,17 @@ jobs:
 
     - name: Ensure Release Keystore
       run: |
-        mkdir -p keystore
-        if [ ! -f keystore/release.jks ]; then
-          echo "Restoring permanent release keystore from embedded signature..."
-          echo "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" | base64 -d > keystore/release.jks
+        if [ "${{ matrix.build_type }}" = "FDroid" ]; then
+          echo "Building for F-Droid: removing release keystore to output clean unsigned APK..."
+          rm -rf keystore
+        else
+          mkdir -p keystore
+          if [ ! -f keystore/release.jks ]; then
+            echo "Restoring permanent release keystore from embedded signature..."
+            echo "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" | base64 -d > keystore/release.jks
+          fi
+          echo "Permanent release keystore verified for APK signing."
         fi
-        echo "Permanent release keystore verified for APK signing."
 
     - name: Grant Execute Permission to Gradlew
       run: chmod +x gradlew
@@ -169,6 +178,13 @@ jobs:
           name: QuickSetTiles-debug-apk
           path: debug-apk
 
+      - name: Download FDroid APK
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          name: QuickSetTiles-fdroid-apk
+          path: fdroid-apk
+
       - name: Prepare Release Assets & PGP Signature
         run: |
           mkdir -p dist
@@ -192,6 +208,12 @@ jobs:
           DBG_APK=$(find debug-apk -name "*.apk" | head -n 1)
           if [ -n "$DBG_APK" ] && [ -f "$DBG_APK" ]; then
             cp "$DBG_APK" "dist/QuickSetTiles-${VERSION}-debug.apk"
+          fi
+
+          # Copy F-Droid unsigned APK if present
+          FDR_APK=$(find fdroid-apk -name "*.apk" 2>/dev/null | head -n 1)
+          if [ -n "$FDR_APK" ] && [ -f "$FDR_APK" ]; then
+            cp "$FDR_APK" "dist/QuickSetTiles-${VERSION}-fdroid-unsigned.apk"
           fi
 
           # Generate GPG Key for PGP Signing (.asc)
@@ -232,9 +254,9 @@ jobs:
           if [ -f RELEASE_NOTES.md ]; then
             gh release create "$TAG_NAME" dist/* \
               --title "QuickSetTiles $TAG_NAME" \
-              --notes-file RELEASE_NOTES.md
+              --notes-file RELEASE_NOTES.md || gh release upload "$TAG_NAME" dist/* --clobber
           else
             gh release create "$TAG_NAME" dist/* \
               --title "QuickSetTiles $TAG_NAME" \
-              --generate-notes
+              --generate-notes || gh release upload "$TAG_NAME" dist/* --clobber
           fi
