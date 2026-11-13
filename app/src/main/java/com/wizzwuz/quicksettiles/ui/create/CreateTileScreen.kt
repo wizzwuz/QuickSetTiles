@@ -1,17 +1,24 @@
 package com.wizzwuz.quicksettiles.ui.create
 
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.ContactsContract
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -41,7 +48,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -106,6 +116,7 @@ fun CreateTileScreen(
     onSaveTile: (TileItem) -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     var tileName by rememberSaveable { mutableStateOf(initialTile?.name ?: "") }
     var selectedType by rememberSaveable { mutableStateOf<TileType?>(initialTile?.type) }
@@ -127,6 +138,9 @@ fun CreateTileScreen(
         )
     }
     var collapseOnTap by rememberSaveable { mutableStateOf(initialTile?.collapseOnTap ?: true) }
+    var allowOnLockScreen by rememberSaveable { mutableStateOf(initialTile?.allowOnLockScreen ?: true) }
+    var hideFromLockScreen by rememberSaveable { mutableStateOf(initialTile?.hideFromLockScreen ?: false) }
+    var isLockScreenOptionsExpanded by rememberSaveable { mutableStateOf(false) }
     var currentToggleOn by rememberSaveable { mutableStateOf(initialTile?.currentToggleOn ?: true) }
     var onTileName by rememberSaveable { mutableStateOf(initialTile?.onTileName ?: "") }
     var offTileName by rememberSaveable { mutableStateOf(initialTile?.offTileName ?: "") }
@@ -150,6 +164,9 @@ fun CreateTileScreen(
     var showMultipleShellDialog by rememberSaveable { mutableStateOf(false) }
     var showPresetsDialog by rememberSaveable { mutableStateOf(false) }
     var showCollectionCreator by rememberSaveable { mutableStateOf(initialTile?.type == TileType.COLLECTION) }
+    var showSplitAppsDialog by rememberSaveable { mutableStateOf(initialTile?.type == TileType.SPLIT_APPS) }
+    var showContactsDialog by rememberSaveable { mutableStateOf(false) }
+    var contactPickerMode by rememberSaveable { mutableStateOf("dial") }
 
     LaunchedEffect(initialTile) {
         if (initialTile != null) {
@@ -164,6 +181,8 @@ fun CreateTileScreen(
                 if (initialTile.type == TileType.SHELL && initialTile.visualState == TileVisualState.DISABLED) initialTile.targetData else ""
             }
             collapseOnTap = initialTile.collapseOnTap
+            allowOnLockScreen = initialTile.allowOnLockScreen
+            hideFromLockScreen = initialTile.hideFromLockScreen
             currentToggleOn = initialTile.currentToggleOn
             onTileName = initialTile.onTileName
             offTileName = initialTile.offTileName
@@ -232,6 +251,72 @@ fun CreateTileScreen(
         }
     }
 
+    val callPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { /* result */ }
+
+    val contactPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK && result.data?.data != null) {
+            val contactUri = result.data!!.data!!
+            val projection = arrayOf(
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ContactsContract.CommonDataKinds.Phone.NUMBER,
+                ContactsContract.CommonDataKinds.Phone.PHOTO_URI
+            )
+            try {
+                context.contentResolver.query(contactUri, projection, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                        val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                        val photoIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.PHOTO_URI)
+
+                        val name = if (nameIndex >= 0) cursor.getString(nameIndex) ?: "" else ""
+                        val number = if (numberIndex >= 0) cursor.getString(numberIndex) ?: "" else ""
+                        val photoUriStr = if (photoIndex >= 0) cursor.getString(photoIndex) else null
+
+                        tileName = name.ifBlank { number }
+                        selectedType = TileType.CONTACTS
+                        val mode = contactPickerMode
+                        targetData = if (mode == "dial") "tel:$number" else "smsto:$number"
+
+                        coroutineScope.launch(Dispatchers.IO) {
+                            var photoLoaded = false
+                            if (!photoUriStr.isNullOrBlank()) {
+                                try {
+                                    val photoUri = Uri.parse(photoUriStr)
+                                    context.contentResolver.openInputStream(photoUri)?.use { stream ->
+                                        val bmp = BitmapFactory.decodeStream(stream)
+                                        if (bmp != null) {
+                                            val savedPath = IconProcessor.saveBitmapToFile(context, bmp, "contact_${System.currentTimeMillis()}")
+                                            if (savedPath != null) {
+                                                iconConfig = iconConfig.copy(
+                                                    sourceType = IconSourceType.CUSTOM_FILE,
+                                                    sourceData = savedPath
+                                                )
+                                                photoLoaded = true
+                                            }
+                                        }
+                                    }
+                                } catch (e: Throwable) {}
+                            }
+                            if (!photoLoaded) {
+                                val presetName = if (mode == "dial") "phone" else "chat"
+                                iconConfig = iconConfig.copy(
+                                    sourceType = IconSourceType.PRESET,
+                                    sourceData = presetName
+                                )
+                            }
+                        }
+                    }
+                }
+            } catch (e: Throwable) {
+                Toast.makeText(context, "Error picking contact: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     // Dynamic Icon Bitmap Preview
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val previewBitmap = remember(iconConfig, isDark) {
@@ -275,7 +360,9 @@ fun CreateTileScreen(
                     onIconConfig = onIconConfig,
                     offIconConfig = offIconConfig,
                     showPopups = showPopups,
-                    multiShellSteps = multiShellSteps
+                    multiShellSteps = multiShellSteps,
+                    allowOnLockScreen = allowOnLockScreen,
+                    hideFromLockScreen = hideFromLockScreen
                 )).copy(
                     name = finalName,
                     type = selectedType!!,
@@ -288,6 +375,8 @@ fun CreateTileScreen(
                     collapseOnTap = collapseOnTap,
                     showPopups = showPopups,
                     multiShellSteps = multiShellSteps,
+                    allowOnLockScreen = allowOnLockScreen,
+                    hideFromLockScreen = hideFromLockScreen,
                     onTileName = when (visualState) {
                         TileVisualState.TOGGLE -> if (onTileName.isNotBlank() && onTileName != initialTile?.name) onTileName.trim() else finalName
                         else -> finalName
@@ -589,11 +678,17 @@ fun CreateTileScreen(
                 ) {
                     TileTypeButton(
                         modifier = Modifier.weight(1f),
-                        title = "Apps",
-                        subtitle = "Select any app",
-                        icon = Icons.Default.Apps,
-                        isSelected = selectedType == TileType.APPS,
-                        onClick = { showAppPicker = true }
+                        title = if (selectedType == TileType.SPLIT_APPS) "Split Apps" else "Apps",
+                        subtitle = if (selectedType == TileType.SPLIT_APPS) "Dual split screen apps" else "Select any app",
+                        icon = if (selectedType == TileType.SPLIT_APPS) Icons.Default.ViewStream else Icons.Default.Apps,
+                        isSelected = selectedType == TileType.APPS || selectedType == TileType.SPLIT_APPS,
+                        onClick = {
+                            if (selectedType == TileType.SPLIT_APPS) {
+                                showSplitAppsDialog = true
+                            } else {
+                                showAppPicker = true
+                            }
+                        }
                     )
 
                     TileTypeButton(
@@ -685,7 +780,16 @@ fun CreateTileScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     TileTypeButton(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.weight(1f),
+                        title = "Contacts",
+                        subtitle = "Dial or message",
+                        icon = Icons.Default.Call,
+                        isSelected = selectedType == TileType.CONTACTS,
+                        onClick = { showContactsDialog = true }
+                    )
+
+                    TileTypeButton(
+                        modifier = Modifier.weight(1f),
                         title = "Collections",
                         subtitle = "Create a collection",
                         icon = Icons.Default.Collections,
@@ -775,6 +879,122 @@ fun CreateTileScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // --- ALLOW ON LOCK SCREEN (BELOW COLLAPSE PANEL ON CLICK) ---
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (!allowOnLockScreen) {
+                                    isLockScreenOptionsExpanded = !isLockScreenOptionsExpanded
+                                } else {
+                                    allowOnLockScreen = false
+                                    isLockScreenOptionsExpanded = true
+                                }
+                            }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Allow on lock screen",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                if (!allowOnLockScreen) {
+                                    Icon(
+                                        imageVector = if (isLockScreenOptionsExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (allowOnLockScreen) {
+                                    "Custom quick tile can be accessed from lock screen"
+                                } else {
+                                    "Tile cannot be accessed from lock screen without unlocking"
+                                },
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = allowOnLockScreen,
+                            onCheckedChange = { isChecked ->
+                                allowOnLockScreen = isChecked
+                                if (isChecked) {
+                                    isLockScreenOptionsExpanded = false
+                                    hideFromLockScreen = false
+                                } else {
+                                    isLockScreenOptionsExpanded = true
+                                }
+                            }
+                        )
+                    }
+
+                    // Dropdown menu option: "Hide from lock screen"
+                    AnimatedVisibility(
+                        visible = !allowOnLockScreen && isLockScreenOptionsExpanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(bottom = 12.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { hideFromLockScreen = !hideFromLockScreen },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                    Text(
+                                        text = "Hide from lock screen",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Custom quick tile will not show in lock screen and unlocking the screen it should show in quick settings panel",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = hideFromLockScreen,
+                                    onCheckedChange = { hideFromLockScreen = it }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
@@ -809,6 +1029,67 @@ fun CreateTileScreen(
                     iconSize = 32f,
                     outlineStyle = "OUTLINE"
                 )
+            },
+            onOpenSplit = {
+                showAppPicker = false
+                showSplitAppsDialog = true
+            }
+        )
+    }
+
+    if (showSplitAppsDialog) {
+        val splitParts = targetData.split("|")
+        val initP1 = if (selectedType == TileType.SPLIT_APPS && splitParts.isNotEmpty()) splitParts[0] else null
+        val initP2 = if (selectedType == TileType.SPLIT_APPS && splitParts.size > 1) splitParts[1] else null
+
+        SplitAppsDialog(
+            initialPkg1 = initP1,
+            initialPkg2 = initP2,
+            onBack = {
+                showSplitAppsDialog = false
+                showAppPicker = true
+            },
+            onDismiss = {
+                showSplitAppsDialog = false
+            },
+            onConfirm = { p1, p2, l1, l2, icon1, icon2 ->
+                showSplitAppsDialog = false
+                selectedType = TileType.SPLIT_APPS
+                targetData = "$p1|$p2"
+                tileName = "$l1 | $l2"
+                iconConfig = IconConfig(
+                    sourceType = IconSourceType.APP_ICON,
+                    sourceData = p1,
+                    outlineThickness = 2.5f,
+                    outlineThreshold = 0.4f,
+                    iconSize = 32f,
+                    outlineStyle = "OUTLINE"
+                )
+            }
+        )
+    }
+
+    if (showContactsDialog) {
+        ContactsChoiceDialog(
+            onDismiss = { showContactsDialog = false },
+            onSelectPhoneDial = {
+                contactPickerMode = "dial"
+                if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CALL_PHONE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    callPermissionLauncher.launch(android.Manifest.permission.CALL_PHONE)
+                }
+                try {
+                    contactPickerLauncher.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
+                } catch (e: Throwable) {
+                    Toast.makeText(context, "Could not open contacts: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onSelectMessage = {
+                contactPickerMode = "message"
+                try {
+                    contactPickerLauncher.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
+                } catch (e: Throwable) {
+                    Toast.makeText(context, "Could not open contacts: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         )
     }
@@ -951,19 +1232,6 @@ fun CreateTileScreen(
                     visualState = first.visualState
                     iconConfig = first.iconConfig
                 }
-            }
-        )
-    }
-
-    if (showCollectionCreator) {
-        CollectionCreatorScreen(
-            onBack = { showCollectionCreator = false },
-            onSaveCollection = { collectionTile, memberTiles ->
-                showCollectionCreator = false
-                // Save all collection member tiles first
-                memberTiles.forEach { onSaveTile(it) }
-                selectedType = TileType.COLLECTION
-                onSaveTile(collectionTile)
             }
         )
     }
@@ -1511,6 +1779,9 @@ fun CollectionCreatorScreen(
     val context = LocalContext.current
     var collectionName by rememberSaveable { mutableStateOf(initialTile?.name ?: "My Collection") }
     var collapseOnTap by rememberSaveable { mutableStateOf(initialTile?.collapseOnTap ?: true) }
+    var allowOnLockScreen by rememberSaveable { mutableStateOf(initialTile?.allowOnLockScreen ?: true) }
+    var hideFromLockScreen by rememberSaveable { mutableStateOf(initialTile?.hideFromLockScreen ?: false) }
+    var isLockScreenOptionsExpanded by rememberSaveable { mutableStateOf(false) }
     var tilesPerRow by rememberSaveable { mutableIntStateOf(initialTile?.tilesPerRow ?: 3) }
     var tilesPerRowInput by rememberSaveable { mutableStateOf((initialTile?.tilesPerRow ?: 3).toString()) }
     var isCollectionCustomizeExpanded by rememberSaveable { mutableStateOf(false) }
@@ -1543,6 +1814,73 @@ fun CollectionCreatorScreen(
     var showIntentDialog by remember { mutableStateOf(false) }
     var showActivityPicker by remember { mutableStateOf(false) }
     var showCollectionPresetsDialog by remember { mutableStateOf(false) }
+    var showCollectionContactsDialog by remember { mutableStateOf(false) }
+    var collectionContactPickerMode by remember { mutableStateOf("dial") }
+
+    val callPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { /* result */ }
+
+    val collectionContactPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK && result.data?.data != null) {
+            val contactUri = result.data!!.data!!
+            val projection = arrayOf(
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ContactsContract.CommonDataKinds.Phone.NUMBER,
+                ContactsContract.CommonDataKinds.Phone.PHOTO_URI
+            )
+            try {
+                context.contentResolver.query(contactUri, projection, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                        val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                        val photoIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.PHOTO_URI)
+
+                        val name = if (nameIndex >= 0) cursor.getString(nameIndex) ?: "" else ""
+                        val number = if (numberIndex >= 0) cursor.getString(numberIndex) ?: "" else ""
+                        val photoUriStr = if (photoIndex >= 0) cursor.getString(photoIndex) else null
+
+                        val finalTileName = name.ifBlank { number }
+                        val mode = collectionContactPickerMode
+                        val target = if (mode == "dial") "tel:$number" else "smsto:$number"
+                        val presetName = if (mode == "dial") "phone" else "chat"
+                        var iconCfg = IconConfig(sourceType = IconSourceType.PRESET, sourceData = presetName)
+
+                        if (!photoUriStr.isNullOrBlank()) {
+                            try {
+                                val photoUri = Uri.parse(photoUriStr)
+                                context.contentResolver.openInputStream(photoUri)?.use { stream ->
+                                    val bmp = BitmapFactory.decodeStream(stream)
+                                    if (bmp != null) {
+                                        val savedPath = IconProcessor.saveBitmapToFile(context, bmp, "contact_${System.currentTimeMillis()}")
+                                        if (savedPath != null) {
+                                            iconCfg = IconConfig(sourceType = IconSourceType.CUSTOM_FILE, sourceData = savedPath)
+                                        }
+                                    }
+                                }
+                            } catch (e: Throwable) {}
+                        }
+
+                        val item = TileItem(
+                            id = UUID.randomUUID().toString(),
+                            name = finalTileName,
+                            type = TileType.CONTACTS,
+                            targetData = target,
+                            iconConfig = iconCfg,
+                            isActive = false,
+                            slotNumber = -1,
+                            collapseCollectionOnClick = collapseOnTap
+                        )
+                        collectionItems.add(item)
+                    }
+                }
+            } catch (e: Throwable) {
+                Toast.makeText(context, "Error reading contact: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     // File pickers
     val customImagePicker = rememberLauncherForActivityResult(
@@ -1649,7 +1987,9 @@ fun CollectionCreatorScreen(
                 collectionItemIds = collectionItems.map { it.id },
                 collapseOnTap = collapseOnTap,
                 tilesPerRow = tilesPerRow,
-                visualState = collectionVisualState
+                visualState = collectionVisualState,
+                allowOnLockScreen = allowOnLockScreen,
+                hideFromLockScreen = hideFromLockScreen
             )).copy(
                 name = collectionName.ifBlank { "My Collection" },
                 type = TileType.COLLECTION,
@@ -1658,7 +1998,9 @@ fun CollectionCreatorScreen(
                 collectionItemIds = collectionItems.map { it.id },
                 collapseOnTap = collapseOnTap,
                 tilesPerRow = tilesPerRow,
-                visualState = collectionVisualState
+                visualState = collectionVisualState,
+                allowOnLockScreen = allowOnLockScreen,
+                hideFromLockScreen = hideFromLockScreen
             )
             onSaveCollection(collectionTile, collectionItems.toList())
         }
@@ -1673,7 +2015,8 @@ fun CollectionCreatorScreen(
                 Button(
                     onClick = {
                         val repo = TileRepository.getInstance(context)
-                        repo.deleteTile(initialTile.id)
+                        val toDelete = (setOf(initialTile.id) + initialTile.collectionItemIds).toSet()
+                        repo.deleteTiles(toDelete)
                         showDeleteConfirmation = false
                         onBack()
                     },
@@ -1947,7 +2290,7 @@ fun CollectionCreatorScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Tap a tile to edit",
+                            text = "Tap to edit",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1969,6 +2312,11 @@ fun CollectionCreatorScreen(
                             )
                         }
                     } else {
+                        var draggedTileId by remember { mutableStateOf<String?>(null) }
+                        var dragOffsetX by remember { mutableFloatStateOf(0f) }
+                        val density = androidx.compose.ui.platform.LocalDensity.current
+                        val itemSlotPx = remember(density) { with(density) { 94.dp.toPx() } }
+
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -1984,15 +2332,60 @@ fun CollectionCreatorScreen(
                                         IconProcessor.loadRawBitmap(context, item.iconConfig, targetPixelSize = 96, isDarkTheme = isDark)
                                     }
                                 }
+                                val isDragging = draggedTileId == item.id
                                 Card(
                                     modifier = Modifier
                                         .width(84.dp)
+                                        .zIndex(if (isDragging) 10f else 1f)
+                                        .graphicsLayer {
+                                            translationX = if (isDragging) dragOffsetX else 0f
+                                            scaleX = if (isDragging) 1.08f else 1.0f
+                                            scaleY = if (isDragging) 1.08f else 1.0f
+                                            shadowElevation = if (isDragging) 12.dp.toPx() else 2.dp.toPx()
+                                        }
+                                        .pointerInput(item.id) {
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart = {
+                                                    draggedTileId = item.id
+                                                    dragOffsetX = 0f
+                                                },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    dragOffsetX += dragAmount.x
+                                                    val currentIdx = collectionItems.indexOfFirst { it.id == draggedTileId }
+                                                    if (currentIdx != -1) {
+                                                        val threshold = itemSlotPx * 0.6f
+                                                        if (dragOffsetX > threshold && currentIdx < collectionItems.size - 1) {
+                                                            val targetIdx = currentIdx + 1
+                                                            val moved = collectionItems.removeAt(currentIdx)
+                                                            collectionItems.add(targetIdx, moved)
+                                                            dragOffsetX -= itemSlotPx
+                                                        } else if (dragOffsetX < -threshold && currentIdx > 0) {
+                                                            val targetIdx = currentIdx - 1
+                                                            val moved = collectionItems.removeAt(currentIdx)
+                                                            collectionItems.add(targetIdx, moved)
+                                                            dragOffsetX += itemSlotPx
+                                                        }
+                                                    }
+                                                },
+                                                onDragEnd = {
+                                                    draggedTileId = null
+                                                    dragOffsetX = 0f
+                                                },
+                                                onDragCancel = {
+                                                    draggedTileId = null
+                                                    dragOffsetX = 0f
+                                                }
+                                            )
+                                        }
                                         .clip(RoundedCornerShape(14.dp))
                                         .clickable {
-                                            if (item.type == TileType.SHELL && item.multiShellSteps.isNotEmpty()) {
-                                                selectedMultiShellItemForEdit = item
-                                            } else {
-                                                selectedItemForEdit = item
+                                            if (draggedTileId == null) {
+                                                if (item.type == TileType.SHELL && item.multiShellSteps.isNotEmpty()) {
+                                                    selectedMultiShellItemForEdit = item
+                                                } else {
+                                                    selectedItemForEdit = item
+                                                }
                                             }
                                         },
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -2129,6 +2522,21 @@ fun CollectionCreatorScreen(
                 )
             }
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TileTypeButton(
+                    modifier = Modifier.weight(1f),
+                    title = "Contacts",
+                    subtitle = "Dial or message",
+                    icon = Icons.Default.Call,
+                    isSelected = false,
+                    onClick = { showCollectionContactsDialog = true }
+                )
+                Spacer(modifier = Modifier.weight(1f))
+            }
+
             // --- TILE BEHAVIOR & APPEARANCE ---
             Card(
                 colors = CardDefaults.cardColors(
@@ -2206,6 +2614,122 @@ fun CollectionCreatorScreen(
                         checked = collapseOnTap,
                         onCheckedChange = { collapseOnTap = it }
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // --- ALLOW ON LOCK SCREEN (BELOW COLLAPSE PANEL ON CLICK) ---
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (!allowOnLockScreen) {
+                                    isLockScreenOptionsExpanded = !isLockScreenOptionsExpanded
+                                } else {
+                                    allowOnLockScreen = false
+                                    isLockScreenOptionsExpanded = true
+                                }
+                            }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Allow on lock screen",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                if (!allowOnLockScreen) {
+                                    Icon(
+                                        imageVector = if (isLockScreenOptionsExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (allowOnLockScreen) {
+                                    "Custom collection tile can be accessed from lock screen"
+                                } else {
+                                    "Collection tile cannot be accessed from lock screen without unlocking"
+                                },
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = allowOnLockScreen,
+                            onCheckedChange = { isChecked ->
+                                allowOnLockScreen = isChecked
+                                if (isChecked) {
+                                    isLockScreenOptionsExpanded = false
+                                    hideFromLockScreen = false
+                                } else {
+                                    isLockScreenOptionsExpanded = true
+                                }
+                            }
+                        )
+                    }
+
+                    // Dropdown menu option: "Hide from lock screen"
+                    AnimatedVisibility(
+                        visible = !allowOnLockScreen && isLockScreenOptionsExpanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(bottom = 12.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { hideFromLockScreen = !hideFromLockScreen },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                    Text(
+                                        text = "Hide from lock screen",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Custom collection tile will not show in lock screen and unlocking the screen it should show in quick settings panel",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = hideFromLockScreen,
+                                    onCheckedChange = { hideFromLockScreen = it }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2414,6 +2938,32 @@ fun CollectionCreatorScreen(
             onSelectAppIcon = { pkg ->
                 showCollectionPresetsDialog = false
                 collectionIconConfig = IconConfig(sourceType = IconSourceType.APP_ICON, sourceData = pkg)
+            }
+        )
+    }
+
+    // Contacts Dialog for Collection
+    if (showCollectionContactsDialog) {
+        ContactsChoiceDialog(
+            onDismiss = { showCollectionContactsDialog = false },
+            onSelectPhoneDial = {
+                collectionContactPickerMode = "dial"
+                if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CALL_PHONE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    callPermissionLauncher.launch(android.Manifest.permission.CALL_PHONE)
+                }
+                try {
+                    collectionContactPickerLauncher.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
+                } catch (e: Throwable) {
+                    Toast.makeText(context, "Could not open contacts: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onSelectMessage = {
+                collectionContactPickerMode = "message"
+                try {
+                    collectionContactPickerLauncher.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
+                } catch (e: Throwable) {
+                    Toast.makeText(context, "Could not open contacts: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         )
     }

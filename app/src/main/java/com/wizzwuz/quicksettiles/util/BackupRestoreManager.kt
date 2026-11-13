@@ -32,7 +32,8 @@ data class BackupPreview(
     val timestamp: Long,
     val hasTheme: Boolean,
     val hasGridView: Boolean,
-    val iconCount: Int
+    val iconCount: Int,
+    val shellTileCount: Int = 0
 )
 
 object BackupRestoreManager {
@@ -197,13 +198,26 @@ object BackupRestoreManager {
                 val hasGridView = settings?.has("isGridView") == true
                 val timestamp = root.optLong("timestamp", System.currentTimeMillis())
 
+                var shellTileCount = 0
+                if (tilesArray != null) {
+                    for (i in 0 until tilesArray.length()) {
+                        val t = tilesArray.optJSONObject(i)
+                        val type = t?.optString("type")
+                        val steps = t?.optJSONArray("multiShellSteps")
+                        if (type == "SHELL" || (steps != null && steps.length() > 0)) {
+                            shellTileCount++
+                        }
+                    }
+                }
+
                 Result.success(
                     BackupPreview(
                         tileCount = tileCount,
                         timestamp = timestamp,
                         hasTheme = hasTheme,
                         hasGridView = hasGridView,
-                        iconCount = iconCount
+                        iconCount = iconCount,
+                        shellTileCount = shellTileCount
                     )
                 )
             } else {
@@ -219,13 +233,26 @@ object BackupRestoreManager {
                 val hasGridView = settings?.has("isGridView") == true
                 val timestamp = root.optLong("timestamp", System.currentTimeMillis())
 
+                var shellTileCount = 0
+                if (tilesArray != null) {
+                    for (i in 0 until tilesArray.length()) {
+                        val t = tilesArray.optJSONObject(i)
+                        val type = t?.optString("type")
+                        val steps = t?.optJSONArray("multiShellSteps")
+                        if (type == "SHELL" || (steps != null && steps.length() > 0)) {
+                            shellTileCount++
+                        }
+                    }
+                }
+
                 Result.success(
                     BackupPreview(
                         tileCount = tileCount,
                         timestamp = timestamp,
                         hasTheme = hasTheme,
                         hasGridView = hasGridView,
-                        iconCount = iconCount
+                        iconCount = iconCount,
+                        shellTileCount = shellTileCount
                     )
                 )
             }
@@ -260,6 +287,7 @@ object BackupRestoreManager {
 
             val isZip = read >= 4 && header[0] == 0x50.toByte() && header[1] == 0x4B.toByte()
             val iconsDir = File(context.filesDir, "icons").apply { if (!exists()) mkdirs() }
+            val canonicalIconsDir = iconsDir.canonicalPath
             var restoredIconsCount = 0
 
             val jsonString = if (isZip) {
@@ -270,13 +298,16 @@ object BackupRestoreManager {
                         if (entry.name == BACKUP_JSON_ENTRY) {
                             json = zis.bufferedReader(Charsets.UTF_8).readText()
                         } else if (entry.name.startsWith(ICONS_DIR_ENTRY) && !entry.isDirectory) {
-                            val fileName = entry.name.substringAfterLast('/')
-                            if (fileName.isNotEmpty()) {
-                                val targetFile = File(iconsDir, fileName)
-                                targetFile.outputStream().use { out ->
-                                    zis.copyTo(out)
+                            val rawFileName = entry.name.substringAfterLast('/')
+                            val safeName = File(rawFileName).name
+                            if (safeName.isNotEmpty() && !safeName.contains("..")) {
+                                val targetFile = File(iconsDir, safeName)
+                                if (targetFile.canonicalPath.startsWith(canonicalIconsDir + File.separator)) {
+                                    targetFile.outputStream().use { out ->
+                                        zis.copyTo(out)
+                                    }
+                                    restoredIconsCount++
                                 }
-                                restoredIconsCount++
                             }
                         }
                         zis.closeEntry()
@@ -286,22 +317,27 @@ object BackupRestoreManager {
                 json ?: return Result.failure(Exception("Invalid .bak archive: missing $BACKUP_JSON_ENTRY"))
             } else {
                 val rawJson = buffered.bufferedReader(Charsets.UTF_8).readText()
-                // Extract any Base64 icons from legacy JSON
+                // Extract any Base64 icons from legacy JSON with strict path sanitization
                 try {
                     val root = JSONObject(rawJson)
                     if (root.has("icons")) {
                         val iconsObj = root.getJSONObject("icons")
                         val keys = iconsObj.keys()
                         while (keys.hasNext()) {
-                            val fileName = keys.next()
-                            val b64 = iconsObj.getString(fileName)
-                            try {
-                                val bytes = Base64.decode(b64, Base64.DEFAULT)
-                                val targetFile = File(iconsDir, fileName)
-                                targetFile.writeBytes(bytes)
-                                restoredIconsCount++
-                            } catch (e: Throwable) {
-                                e.printStackTrace()
+                            val rawKey = keys.next()
+                            val safeName = File(rawKey).name
+                            if (safeName.isNotEmpty() && !safeName.contains("..")) {
+                                val b64 = iconsObj.getString(rawKey)
+                                try {
+                                    val bytes = Base64.decode(b64, Base64.DEFAULT)
+                                    val targetFile = File(iconsDir, safeName)
+                                    if (targetFile.canonicalPath.startsWith(canonicalIconsDir + File.separator)) {
+                                        targetFile.writeBytes(bytes)
+                                        restoredIconsCount++
+                                    }
+                                } catch (e: Throwable) {
+                                    e.printStackTrace()
+                                }
                             }
                         }
                     }
@@ -323,21 +359,27 @@ object BackupRestoreManager {
     fun restoreBackup(context: Context, jsonString: String): Result<RestoreResult> {
         return try {
             val iconsDir = File(context.filesDir, "icons").apply { if (!exists()) mkdirs() }
+            val canonicalIconsDir = iconsDir.canonicalPath
             var restoredIconsCount = 0
             val root = JSONObject(jsonString)
             if (root.has("icons")) {
                 val iconsObj = root.getJSONObject("icons")
                 val keys = iconsObj.keys()
                 while (keys.hasNext()) {
-                    val fileName = keys.next()
-                    val b64 = iconsObj.getString(fileName)
-                    try {
-                        val bytes = Base64.decode(b64, Base64.DEFAULT)
-                        val targetFile = File(iconsDir, fileName)
-                        targetFile.writeBytes(bytes)
-                        restoredIconsCount++
-                    } catch (e: Throwable) {
-                        e.printStackTrace()
+                    val rawKey = keys.next()
+                    val safeName = File(rawKey).name
+                    if (safeName.isNotEmpty() && !safeName.contains("..")) {
+                        val b64 = iconsObj.getString(rawKey)
+                        try {
+                            val bytes = Base64.decode(b64, Base64.DEFAULT)
+                            val targetFile = File(iconsDir, safeName)
+                            if (targetFile.canonicalPath.startsWith(canonicalIconsDir + File.separator)) {
+                                targetFile.writeBytes(bytes)
+                                restoredIconsCount++
+                            }
+                        } catch (e: Throwable) {
+                            e.printStackTrace()
+                        }
                     }
                 }
             }

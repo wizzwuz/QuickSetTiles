@@ -20,17 +20,34 @@ import com.wizzwuz.quicksettiles.util.TileEditChannel
 
 class MainActivity : ComponentActivity() {
 
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
+        if (ev != null && ev.pointerCount > 2) {
+            return true
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.init(this)
         enableEdgeToEdge()
         handleTileIntent(intent)
 
+        val repo = com.wizzwuz.quicksettiles.data.TileRepository.getInstance(this)
         setContent {
             val themeMode by ThemeManager.themeFlow.collectAsState()
             QuickTilesTheme(themeMode = themeMode) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    MainScreen()
+                    val onboardingCompleted by repo.onboardingCompletedFlow.collectAsState()
+                    if (!onboardingCompleted) {
+                        com.wizzwuz.quicksettiles.ui.permissions.PermissionsScreen(
+                            onComplete = {
+                                repo.setOnboardingCompleted(true)
+                            }
+                        )
+                    } else {
+                        MainScreen()
+                    }
                 }
             }
         }
@@ -45,6 +62,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         ShizukuHelper.updateStatus()
+        com.wizzwuz.quicksettiles.data.TileRepository.getInstance(this).syncComponentStates(this)
     }
 
     override fun onDestroy() {

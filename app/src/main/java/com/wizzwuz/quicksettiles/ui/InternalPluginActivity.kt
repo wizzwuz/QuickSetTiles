@@ -42,12 +42,38 @@ class InternalPluginActivity : Activity() {
 
         val action = intent.action
         if (action == ACTION_LAUNCH_ACTIVITY) {
+            val repo = com.wizzwuz.quicksettiles.data.TileRepository.getInstance(this)
+            val caller = callingPackage ?: (if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                try { launchedFromPackage } catch (e: Throwable) { null }
+            } else null)
+
+            val isInternal = caller == null || caller == packageName
+            if (!isInternal && !repo.isPrivateActivityLaunchable()) {
+                Toast.makeText(this, "QuickSetTiles: External launching of private activities is disabled in settings.", Toast.LENGTH_LONG).show()
+                cleanFinish()
+                return
+            }
             handleLaunchIntent()
         } else if (action == ACTION_SHOW_POPUP) {
             val msg = intent.getStringExtra(EXTRA_MESSAGE) ?: ""
             if (msg.isNotBlank()) {
                 Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             }
+            cleanFinish()
+        } else if (action == "launch_split_apps") {
+            val splitData = intent.getStringExtra("split_data") ?: ""
+            val parts = splitData.split("|")
+            val launchIntent = Intent(this, com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity::class.java).apply {
+                putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_DATA, splitData)
+                if (parts.size >= 2) {
+                    val uri1 = packageManager.getLaunchIntentForPackage(parts[0].trim())?.toUri(0) ?: parts[0].trim()
+                    val uri2 = packageManager.getLaunchIntentForPackage(parts[1].trim())?.toUri(0) ?: parts[1].trim()
+                    putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_TOP, uri1)
+                    putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_BOTTOM, uri2)
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            }
+            startActivity(launchIntent)
             cleanFinish()
         } else {
             cleanFinish()

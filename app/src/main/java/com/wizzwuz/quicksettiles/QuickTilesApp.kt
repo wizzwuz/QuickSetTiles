@@ -38,6 +38,23 @@ class QuickTilesApp : Application() {
         applicationScope.launch(Dispatchers.IO) {
             IconProcessor.getPresetIcons(this@QuickTilesApp)
         }
+        // Listen for screen lock and unlock events to refresh tile lock screen visibility
+        try {
+            val lockFilter = android.content.IntentFilter().apply {
+                addAction(android.content.Intent.ACTION_USER_PRESENT)
+                addAction(android.content.Intent.ACTION_SCREEN_OFF)
+            }
+            registerReceiver(object : android.content.BroadcastReceiver() {
+                override fun onReceive(context: android.content.Context, intent: android.content.Intent?) {
+                    when (intent?.action) {
+                        android.content.Intent.ACTION_SCREEN_OFF -> com.wizzwuz.quicksettiles.service.LockScreenReceiver.onScreenOff(context)
+                        android.content.Intent.ACTION_USER_PRESENT -> com.wizzwuz.quicksettiles.service.LockScreenReceiver.onUserPresent(context)
+                    }
+                }
+            }, lockFilter)
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
     }
 
     override fun onTrimMemory(level: Int) {

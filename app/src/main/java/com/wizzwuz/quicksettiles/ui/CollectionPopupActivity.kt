@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -60,14 +61,36 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class CollectionPopupActivity : ComponentActivity() {
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
+        if (ev != null && ev.pointerCount > 2) {
+            return true
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private val collectionIdState = mutableStateOf("")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
         ThemeManager.init(this)
+        collectionIdState.value = intent?.getStringExtra("collectionId") ?: ""
         setContent {
             val themeMode by ThemeManager.themeFlow.collectAsState()
             QuickTilesTheme(themeMode = themeMode) {
                 CollectionPopupScreen(
-                    collectionId = intent?.extras?.getString("collectionId") ?: "",
+                    collectionId = collectionIdState.value,
                     onDismiss = {
                         finishAndRemoveTask()
                         overridePendingTransition(0, android.R.anim.fade_out)
@@ -80,6 +103,7 @@ class CollectionPopupActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        collectionIdState.value = intent.getStringExtra("collectionId") ?: ""
     }
 }
 
@@ -96,11 +120,11 @@ fun CollectionPopupScreen(
         collection?.collectionItemIds?.mapNotNull { id -> tiles.find { it.id == id } } ?: emptyList()
     }
 
-    var visible by remember { mutableStateOf(false) }
+    var visible by remember(collectionId) { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
-        delay(40)
+    LaunchedEffect(collectionId) {
+        delay(30)
         visible = true
     }
 
@@ -192,7 +216,8 @@ fun CollectionPopupScreen(
                                                 executeCollectionItem(context, repo, item)
                                                 val isLaunchable = when (item.type) {
                                                     TileType.APPS, TileType.WEBSITE, TileType.SHORTCUT,
-                                                    TileType.ACTIVITY, TileType.INTENT, TileType.FILES, TileType.FOLDERS -> true
+                                                    TileType.ACTIVITY, TileType.INTENT, TileType.FILES,
+                                                    TileType.FOLDERS, TileType.CONTACTS, TileType.SPLIT_APPS -> true
                                                     TileType.SHELL -> {
                                                         val cmd = if (item.multiShellSteps.isNotEmpty()) {
                                                             val stepIndex = item.currentMultiShellIndex.coerceAtLeast(0) % item.multiShellSteps.size
@@ -506,6 +531,41 @@ private fun executeCollectionItem(context: android.content.Context, repo: TileRe
                     putExtra("collectionId", item.id)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+                context.startActivity(intent)
+            }
+            TileType.CONTACTS -> {
+                val uri = android.net.Uri.parse(item.targetData)
+                if (item.targetData.startsWith("smsto:")) {
+                    val intent = Intent(Intent.ACTION_SENDTO, uri).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                } else {
+                    try {
+                        val callIntent = Intent(Intent.ACTION_CALL, uri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(callIntent)
+                    } catch (e: SecurityException) {
+                        val dialIntent = Intent(Intent.ACTION_DIAL, uri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(dialIntent)
+                    }
+                }
+            }
+            TileType.SPLIT_APPS -> {
+                val parts = item.targetData.split("|")
+                val intent = Intent(context, com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity::class.java).apply {
+                    putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_DATA, item.targetData)
+                    if (parts.size >= 2) {
+                        val uri1 = context.packageManager.getLaunchIntentForPackage(parts[0].trim())?.toUri(0) ?: parts[0].trim()
+                        val uri2 = context.packageManager.getLaunchIntentForPackage(parts[1].trim())?.toUri(0) ?: parts[1].trim()
+                        putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_TOP, uri1)
+                        putExtra(com.wizzwuz.quicksettiles.ui.split.LaunchSplitActivity.EXTRA_SPLIT_BOTTOM, uri2)
+                    }
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION)
                 }
                 context.startActivity(intent)
             }

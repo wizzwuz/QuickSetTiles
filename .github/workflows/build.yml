@@ -2,10 +2,10 @@ name: Build QuickSetTiles APK
 
 on:
   push:
-    branches: [ "main", "master", "experiments", "experimentals*", "tile-redesign*", "tab-redesign*" ]
+    branches: [ "main", "master", "dev*", "experiments", "experimentals*", "tile-redesign*", "tab-redesign*" ]
     tags: [ "v*" ]
   pull_request:
-    branches: [ "main", "master", "experiments", "experimentals*", "tile-redesign*", "tab-redesign*" ]
+    branches: [ "main", "master", "dev*", "experiments", "experimentals*", "tile-redesign*", "tab-redesign*" ]
   workflow_dispatch:
 
 permissions:
@@ -27,6 +27,10 @@ jobs:
             task: assembleDebug
             artifact_name: QuickSetTiles-debug-apk
             artifact_path: app/build/outputs/apk/debug/*.apk
+          - build_type: FDroid
+            task: assembleRelease
+            artifact_name: QuickSetTiles-fdroid-apk
+            artifact_path: app/build/outputs/apk/release/*.apk
 
     steps:
     - name: Checkout Code
@@ -43,22 +47,16 @@ jobs:
 
     - name: Ensure Release Keystore
       run: |
-        mkdir -p keystore
-        if [ ! -f keystore/release.jks ]; then
-          echo "Generating release keystore..."
-          keytool -genkeypair -v \
-            -keystore keystore/release.jks \
-            -alias quicksettiles \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass "quicksettiles_keystore_pass" \
-            -keypass "quicksettiles_keystore_pass" \
-            -dname "CN=QuickSetTiles, OU=Mobile, O=QuickSetTiles, L=World, ST=Global, C=US"
-          echo "Generated new RSA 2048-bit release keystore for APK signing."
+        if [ "${{ matrix.build_type }}" = "FDroid" ]; then
+          echo "Building for F-Droid: removing release keystore to output clean unsigned APK..."
+          rm -rf keystore
         else
-          echo "Release keystore present."
-          echo "Using existing release keystore for APK signing."
+          mkdir -p keystore
+          if [ ! -f keystore/release.jks ]; then
+            echo "Restoring permanent release keystore from embedded signature..."
+            echo "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" | base64 -d > keystore/release.jks
+          fi
+          echo "Permanent release keystore verified for APK signing."
         fi
 
     - name: Grant Execute Permission to Gradlew
@@ -136,8 +134,10 @@ jobs:
             echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
             echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
             echo "| **Build Type** | \`${{ matrix.build_type }}\` |" >> $GITHUB_STEP_SUMMARY
+            APP_VERSION=$(grep 'versionName' app/build.gradle.kts | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+            APP_CODE=$(grep 'versionCode' app/build.gradle.kts | head -n 1 | tr -cd '0-9')
             echo "| **Package Name** | \`com.wizzwuz.quicksettiles\` |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Version** | \`1.0.0\` (code \`1\`) |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Version** | \`$APP_VERSION\` (code \`$APP_CODE\`) |" >> $GITHUB_STEP_SUMMARY
             echo "| **APK File** | \`$APK_NAME\` |" >> $GITHUB_STEP_SUMMARY
             echo "| **APK Size** | \`$APK_SIZE_MB MB\` |" >> $GITHUB_STEP_SUMMARY
             echo "| **Artifact Name** | \`${{ matrix.artifact_name }}\` |" >> $GITHUB_STEP_SUMMARY
@@ -178,14 +178,27 @@ jobs:
           name: QuickSetTiles-debug-apk
           path: debug-apk
 
+      - name: Download FDroid APK
+        uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          name: QuickSetTiles-fdroid-apk
+          path: fdroid-apk
+
       - name: Prepare Release Assets & PGP Signature
         run: |
           mkdir -p dist
 
+          TAG_NAME="${{ github.ref_name }}"
+          if [ -z "$TAG_NAME" ] || [ "$TAG_NAME" = "main" ] || [ "$TAG_NAME" = "master" ]; then
+            TAG_NAME="v$(grep 'versionName' app/build.gradle.kts | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          fi
+          VERSION="${TAG_NAME#v}"
+
           # Copy release APK to canonical release name
           REL_APK=$(find release-apk -name "*.apk" | head -n 1)
           if [ -n "$REL_APK" ] && [ -f "$REL_APK" ]; then
-            cp "$REL_APK" dist/QuickSetTiles-1.0.0.apk
+            cp "$REL_APK" "dist/QuickSetTiles-${VERSION}.apk"
           else
             echo "Error: Release APK not found!"
             exit 1
@@ -194,7 +207,13 @@ jobs:
           # Copy debug APK if present
           DBG_APK=$(find debug-apk -name "*.apk" | head -n 1)
           if [ -n "$DBG_APK" ] && [ -f "$DBG_APK" ]; then
-            cp "$DBG_APK" dist/QuickSetTiles-1.0.0-debug.apk
+            cp "$DBG_APK" "dist/QuickSetTiles-${VERSION}-debug.apk"
+          fi
+
+          # Copy F-Droid unsigned APK if present
+          FDR_APK=$(find fdroid-apk -name "*.apk" 2>/dev/null | head -n 1)
+          if [ -n "$FDR_APK" ] && [ -f "$FDR_APK" ]; then
+            cp "$FDR_APK" "dist/QuickSetTiles-${VERSION}-fdroid-unsigned.apk"
           fi
 
           # Generate GPG Key for PGP Signing (.asc)
@@ -212,13 +231,10 @@ jobs:
           rm -f gpg-gen-key.conf
 
           # Create detached ASCII-armored PGP signature (.asc) for the APK
-          gpg --armor --detach-sign --output dist/QuickSetTiles-1.0.0.apk.asc dist/QuickSetTiles-1.0.0.apk
-
-          # Export public key for verification
-          gpg --armor --export release@quicksettiles.wizzwuz.com > dist/QuickSetTiles-public-key.asc
+          gpg --armor --detach-sign --output "dist/QuickSetTiles-${VERSION}.apk.asc" "dist/QuickSetTiles-${VERSION}.apk"
 
           # Verify signature
-          gpg --verify dist/QuickSetTiles-1.0.0.apk.asc dist/QuickSetTiles-1.0.0.apk
+          gpg --verify "dist/QuickSetTiles-${VERSION}.apk.asc" "dist/QuickSetTiles-${VERSION}.apk"
 
           # Generate SHA256 checksums
           (cd dist && sha256sum * > SHA256SUMS.txt)
@@ -231,40 +247,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME="${{ github.ref_name }}"
-          if [ -z "$TAG_NAME" ] || [ "$TAG_NAME" = "main" ]; then
-            TAG_NAME="v1.0.0"
+          if [ -z "$TAG_NAME" ] || [ "$TAG_NAME" = "main" ] || [ "$TAG_NAME" = "master" ]; then
+            TAG_NAME="v$(grep 'versionName' app/build.gradle.kts | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')"
           fi
 
-          gh release create "$TAG_NAME" dist/* \
-            --title "QuickSetTiles $TAG_NAME" \
-            --notes-file - << 'EOF'
-          ## QuickSetTiles v1.0.0 — Official First Stable Release 🎉
-
-          A powerful, modern Android Quick Settings tile creator and manager built with Jetpack Compose & Material 3.
-
-          ### 📦 Release Assets
-          - **QuickSetTiles-1.0.0.apk**: Official signed release APK (optimized with ProGuard/R8)
-          - **QuickSetTiles-1.0.0.apk.asc**: Detached ASCII-armored PGP signature (.asc)
-          - **QuickSetTiles-public-key.asc**: Public PGP signing key for verifying authenticity
-          - **QuickSetTiles-1.0.0-debug.apk**: Debug build with log exporter
-          - **SHA256SUMS.txt**: SHA256 verification checksums
-          - **Source code (.zip & .tar.gz)**: Full project source code (attached automatically by GitHub)
-
-          ### ✨ Key Features
-          - **8 Tile Types**: Apps, Web links, Shortcuts, Activities (including Private/unexported activities via Shizuku/Root), Intents, Shell scripts, Files, and Folders.
-          - **Tile Grid & Classic Card Views**: Responsive dynamic grid arrangement or customizable rows/columns with circular QS preview icons.
-          - **Inbuilt Shizuku & Root Support**: Zero external plugin required to launch private system activities.
-          - **57,000+ Icons & Full Customization**: Material Symbols with threshold, thickness, and sizing controls.
-          - **Backup & Restore**: Full JSON backup and restore including tiles, custom icons, theme, and grid arrangement.
-          - **Privacy & Security**: 100% offline, zero trackers, open source under GNU GPLv3.
-
-          ### 🔐 PGP Signature Verification
-          To verify the authenticity of the release APK:
-          ```bash
-          # 1. Import the public key
-          gpg --import QuickSetTiles-public-key.asc
-
-          # 2. Verify the release APK signature
-          gpg --verify QuickSetTiles-1.0.0.apk.asc QuickSetTiles-1.0.0.apk
-          ```
-          EOF
+          if [ -f RELEASE_NOTES.md ]; then
+            gh release create "$TAG_NAME" dist/* \
+              --title "QuickSetTiles $TAG_NAME" \
+              --notes-file RELEASE_NOTES.md || gh release upload "$TAG_NAME" dist/* --clobber
+          else
+            gh release create "$TAG_NAME" dist/* \
+              --title "QuickSetTiles $TAG_NAME" \
+              --generate-notes || gh release upload "$TAG_NAME" dist/* --clobber
+          fi

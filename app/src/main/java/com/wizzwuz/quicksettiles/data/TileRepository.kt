@@ -39,6 +39,18 @@ class TileRepository(private val context: Context) {
     )
     val sortOrderFlow: StateFlow<TileSortOrder> = _sortOrderFlow.asStateFlow()
 
+    private val _onboardingCompletedFlow = MutableStateFlow(
+        prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
+    )
+    val onboardingCompletedFlow: StateFlow<Boolean> = _onboardingCompletedFlow.asStateFlow()
+
+    fun isOnboardingCompleted(): Boolean = _onboardingCompletedFlow.value
+
+    fun setOnboardingCompleted(completed: Boolean) {
+        prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, completed).apply()
+        _onboardingCompletedFlow.value = completed
+    }
+
     private val _gridViewFlow = MutableStateFlow(
         prefs.getBoolean(KEY_GRID_VIEW, false)
     )
@@ -112,11 +124,18 @@ class TileRepository(private val context: Context) {
 
     init {
         val loaded = loadTiles()
-        val migrated = prefs.getBoolean(KEY_MIGRATED_MANUAL_QS, false)
-        if (!migrated) {
-            val updated = loaded.map { it.copy(isAddedToQs = false) }
-            persistTiles(updated)
-            prefs.edit().putBoolean(KEY_MIGRATED_MANUAL_QS, true).apply()
+        val allCollectionItemIds = loaded.flatMap { it.collectionItemIds }.toSet()
+        var modified = false
+        val cleaned = loaded.map { tile ->
+            if (tile.id in allCollectionItemIds && (tile.isActive || tile.slotNumber != -1 || tile.isAddedToQs)) {
+                modified = true
+                tile.copy(isActive = false, slotNumber = -1, isAddedToQs = false)
+            } else {
+                tile
+            }
+        }
+        if (modified) {
+            persistTiles(cleaned)
         }
         syncComponentStates(context)
     }
@@ -157,9 +176,9 @@ class TileRepository(private val context: Context) {
     }
 
     fun getTileBySlot(slot: Int): TileItem? {
-        val cached = _tilesFlow.value.find { it.isActive && it.slotNumber == slot }
+        val cached = _tilesFlow.value.find { it.isActive && it.isAddedToQs && it.slotNumber == slot }
         if (cached != null) return cached
-        return loadTiles().find { it.isActive && it.slotNumber == slot }
+        return loadTiles().find { it.isActive && it.isAddedToQs && it.slotNumber == slot }
     }
 
     fun getTileById(id: String): TileItem? {
@@ -202,7 +221,6 @@ class TileRepository(private val context: Context) {
         // Disable old slot if slot changed or tile became inactive or un-added
         if (oldSlot in 1..MAX_SLOTS && (oldSlot != finalTile.slotNumber || !finalTile.isActive || !finalTile.isAddedToQs)) {
             setComponentEnabled(context, oldSlot, false)
-            requestTileUpdate(context, oldSlot)
         }
 
         // Enable component ONLY if tile is active AND manually added to QS
@@ -212,6 +230,8 @@ class TileRepository(private val context: Context) {
         } else if (finalTile.slotNumber in 1..MAX_SLOTS) {
             setComponentEnabled(context, finalTile.slotNumber, false)
         }
+
+        syncComponentStates(context)
     }
 
     @Synchronized
@@ -227,8 +247,8 @@ class TileRepository(private val context: Context) {
                 requestTileUpdate(context, slot)
             } else if (!added && slot in 1..MAX_SLOTS) {
                 setComponentEnabled(context, slot, false)
-                requestTileUpdate(context, slot)
             }
+            syncComponentStates(context)
         }
     }
 
@@ -242,8 +262,8 @@ class TileRepository(private val context: Context) {
             persistTiles(current)
             if (oldSlot in 1..MAX_SLOTS) {
                 setComponentEnabled(context, oldSlot, false)
-                requestTileUpdate(context, oldSlot)
             }
+            syncComponentStates(context)
         }
     }
 
@@ -258,6 +278,7 @@ class TileRepository(private val context: Context) {
             if (freeSlot in 1..MAX_SLOTS) {
                 setComponentEnabled(context, freeSlot, false)
             }
+            syncComponentStates(context)
         }
     }
 
@@ -271,8 +292,8 @@ class TileRepository(private val context: Context) {
             persistTiles(current)
             if (oldSlot in 1..MAX_SLOTS) {
                 setComponentEnabled(context, oldSlot, false)
-                requestTileUpdate(context, oldSlot)
             }
+            syncComponentStates(context)
         }
     }
 
@@ -294,8 +315,8 @@ class TileRepository(private val context: Context) {
         persistTiles(current)
         for (slot in oldSlots) {
             setComponentEnabled(context, slot, false)
-            requestTileUpdate(context, slot)
         }
+        syncComponentStates(context)
     }
 
     @Synchronized
@@ -321,7 +342,7 @@ class TileRepository(private val context: Context) {
 
     fun syncComponentStates(context: Context) {
         val enabledSlots = _tilesFlow.value
-            .filter { it.isActive && it.isAddedToQs }
+            .filter { it.isActive && it.isAddedToQs && it.slotNumber in 1..MAX_SLOTS }
             .map { it.slotNumber }
             .toSet()
         val pm = context.packageManager
@@ -355,6 +376,7 @@ class TileRepository(private val context: Context) {
         const val KEY_GRID_COLUMNS = "pref_grid_columns"
         const val KEY_GRID_ROWS = "pref_grid_rows"
         private const val KEY_MIGRATED_MANUAL_QS = "migrated_manual_qs_v3"
+        const val KEY_ONBOARDING_COMPLETED = "key_onboarding_completed"
 
         @Volatile
         private var INSTANCE: TileRepository? = null

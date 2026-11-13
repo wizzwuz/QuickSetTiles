@@ -1,0 +1,3 @@
+- Improved split-screen mode: 4-tier intent resolution so all supported apps launch reliably.
+- Faster split-screen docking with zero-animation transitions.
+- Renamed internal intent constants and cleaned manifest actions.

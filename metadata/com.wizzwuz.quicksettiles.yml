@@ -1,0 +1,25 @@
+Categories:
+  - System
+License: GPL-3.0-or-later
+AuthorName: wizzwuz
+SourceCode: https://github.com/wizzwuz/QuickSetTiles
+IssueTracker: https://github.com/wizzwuz/QuickSetTiles/issues
+Changelog: https://github.com/wizzwuz/QuickSetTiles/releases
+
+AutoUpdateMode: Version v%v
+UpdateCheckMode: Tags
+
+CurrentVersion: 1.0.3
+CurrentVersionCode: 4
+
+AntiFeatures:
+  - Root
+
+Builds:
+  - versionName: 1.0.3
+    versionCode: 4
+    commit: v1.0.3
+    subdir: app
+    gradle:
+      - yes
+    prebuild: rm -rf keystore

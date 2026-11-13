@@ -34,7 +34,7 @@ object QsTileManager {
         withContext(Dispatchers.IO) {
             try {
                 if (ShizukuHelper.isShizukuRunning() || ShizukuHelper.isRootBinaryPresent()) {
-                    ShizukuHelper.executeCommand("pm grant $PKG android.permission.WRITE_SECURE_SETTINGS")
+                    ShizukuHelper.executePrivilegedRaw(arrayOf("pm", "grant", PKG, "android.permission.WRITE_SECURE_SETTINGS"))
                 }
             } catch (e: Throwable) {
                 // Ignore
@@ -55,7 +55,7 @@ object QsTileManager {
 
         return withContext(Dispatchers.IO) {
             try {
-                val cmdRes = ShizukuHelper.executeCommand("settings get secure $SECURE_KEY")
+                val cmdRes = ShizukuHelper.executePrivilegedRaw(arrayOf("settings", "get", "secure", SECURE_KEY))
                 if (cmdRes.exitCode == 0 && cmdRes.output.isNotBlank() && !cmdRes.output.contains("null")) {
                     cmdRes.output.trim()
                 } else {
@@ -82,7 +82,7 @@ object QsTileManager {
 
         return withContext(Dispatchers.IO) {
             try {
-                val cmdRes = ShizukuHelper.executeCommand("settings put secure $SECURE_KEY \"$newString\"")
+                val cmdRes = ShizukuHelper.executePrivilegedRaw(arrayOf("settings", "put", "secure", SECURE_KEY, newString))
                 cmdRes.exitCode == 0
             } catch (e: Throwable) {
                 false
@@ -166,7 +166,6 @@ object QsTileManager {
         }
 
         TileRepository.setComponentEnabled(context, slot, false)
-        TileRepository.requestTileUpdate(context, slot)
         return true
     }
 }
