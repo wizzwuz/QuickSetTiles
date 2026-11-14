@@ -6,25 +6,13 @@ SourceCode: https://github.com/wizzwuz/QuickSetTiles
 IssueTracker: https://github.com/wizzwuz/QuickSetTiles/issues
 Changelog: https://github.com/wizzwuz/QuickSetTiles/releases
 
-AutoName: QuickSetTiles
-Summary: Custom Quick Settings tiles manager for Android
-Description: |-
-  A powerful Android Quick Settings tile creator and manager built with
-  Jetpack Compose and Material 3.
-
-  Features:
-  * 8 Tile Types: Apps, Web links, Shortcuts, Activities (including Private activities via Shizuku/Root), Intents, Shell scripts, Files, and Folders
-  * Split Apps: Launch app pairs in split-screen mode directly from QS
-  * Dynamic grid layout and classic card list view
-  * Privacy-focused: 100% offline, zero trackers, open source under GNU GPLv3
-
 RepoType: git
 Repo: https://github.com/wizzwuz/QuickSetTiles.git
 
 Builds:
   - versionName: 1.0.4
     versionCode: 5
-    commit: v1.0.4
+    commit: 697926fb1cbe33451907b061d7a94708b2be385f
     subdir: app
     gradle:
       - yes
