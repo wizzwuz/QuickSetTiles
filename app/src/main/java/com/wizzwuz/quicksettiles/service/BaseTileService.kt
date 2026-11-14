@@ -4,6 +4,7 @@ import android.app.ActivityOptions
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
@@ -242,25 +243,43 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                 TileType.ACTIVITY -> {
                     try {
                         val comp = ComponentName.unflattenFromString(item.targetData)
-                        if (comp != null) {
-                            asyncTask = true
-                            serviceScope.launch {
-                                try {
-                                    if (item.collapseOnTap) {
-                                        mainHandler.post { collapseShade() }
-                                    }
-                                    AppHelper.launchActivityPrivileged(
-                                        this@BaseTileService,
-                                        comp.packageName,
-                                        comp.className
-                                    )
-                                } finally {
-                                    ProcessManager.onTileTaskFinished()
+                        if (comp == null) {
+                            showToast("Invalid activity component: ${item.targetData}")
+                        } else {
+                            val isExported = try {
+                                val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    packageManager.getActivityInfo(comp, PackageManager.ComponentInfoFlags.of(0))
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    packageManager.getActivityInfo(comp, 0)
                                 }
+                                info.exported
+                            } catch (e: Throwable) {
+                                false
+                            }
+
+                            val canLaunchDirectly = isExported || comp.packageName == packageName
+                            if (canLaunchDirectly) {
+                                val intent = Intent(Intent.ACTION_MAIN).apply {
+                                    component = comp
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                launchIntent(intent)
+                            } else {
+                                val launchIntent = Intent(this, com.wizzwuz.quicksettiles.ui.InternalPluginActivity::class.java).apply {
+                                    action = com.wizzwuz.quicksettiles.ui.InternalPluginActivity.ACTION_LAUNCH_ACTIVITY
+                                    val targetIntent = Intent(Intent.ACTION_MAIN).apply {
+                                        component = comp
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    putExtra(com.wizzwuz.quicksettiles.ui.InternalPluginActivity.EXTRA_INTENT, targetIntent.toUri(Intent.URI_INTENT_SCHEME))
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                                }
+                                launchIntent(launchIntent)
                             }
                         }
                     } catch (e: Throwable) {
-                        // Silent failure
+                        showToast("Failed to launch activity: ${e.message}")
                     }
                 }
                 TileType.INTENT -> {

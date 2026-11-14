@@ -235,6 +235,12 @@ object AppHelper {
             if (rootRes2.exitCode == 0 && !rootRes2.output.contains("Error: Activity class")) {
                 return@withContext Result.success("Launched via Root (su)")
             }
+
+            // Fallback with user 0
+            val rootRes3 = ShizukuHelper.executeCommand("am start --user 0 -n $escapedForShell", mode = ShellMode.ROOT)
+            if (rootRes3.exitCode == 0 && !rootRes3.output.contains("Error: Activity class")) {
+                return@withContext Result.success("Launched via Root (su)")
+            }
         }
 
         // 4. Strategy: Shizuku Direct Raw am process (bypasses shell, preserves inner class names)
@@ -267,7 +273,7 @@ object AppHelper {
                 return@withContext Result.success("Launched via Shizuku (--user 0)")
             }
 
-            // Try simple -n componentStr
+            // Try simple -n componentStr (crucial for private activities without ACTION_MAIN)
             val rawRes3 = ShizukuHelper.executePrivilegedRaw(
                 arrayOf("am", "start", "-n", componentStr)
             )
@@ -279,6 +285,20 @@ object AppHelper {
 
             if (rawRes3.exitCode == 0 && !hasDenial3) {
                 return@withContext Result.success("Launched via Shizuku")
+            }
+
+            // Try simple --user 0 -n componentStr
+            val rawRes3User = ShizukuHelper.executePrivilegedRaw(
+                arrayOf("am", "start", "--user", "0", "-n", componentStr)
+            )
+            val hasDenial3User = rawRes3User.output.contains("SecurityException") ||
+                    rawRes3User.output.contains("Permission Denial") ||
+                    rawRes3User.output.contains("not exported") ||
+                    rawRes3User.output.contains("requires permission") ||
+                    rawRes3User.output.contains("Error:")
+
+            if (rawRes3User.exitCode == 0 && !hasDenial3User) {
+                return@withContext Result.success("Launched via Shizuku (--user 0)")
             }
 
             // Try cmd activity start (direct system service command)
@@ -305,6 +325,19 @@ object AppHelper {
                     rawRes5.output.contains("Error:")
 
             if (rawRes5.exitCode == 0 && !hasDenial5) {
+                return@withContext Result.success("Launched via Shizuku (cmd activity)")
+            }
+
+            val rawRes5User = ShizukuHelper.executePrivilegedRaw(
+                arrayOf("cmd", "activity", "start", "--user", "0", "-n", componentStr)
+            )
+            val hasDenial5User = rawRes5User.output.contains("SecurityException") ||
+                    rawRes5User.output.contains("Permission Denial") ||
+                    rawRes5User.output.contains("not exported") ||
+                    rawRes5User.output.contains("requires permission") ||
+                    rawRes5User.output.contains("Error:")
+
+            if (rawRes5User.exitCode == 0 && !hasDenial5User) {
                 return@withContext Result.success("Launched via Shizuku (cmd activity)")
             }
 

@@ -438,7 +438,10 @@ private fun executeCollectionItem(context: android.content.Context, repo: TileRe
                 val comp = ComponentName.unflattenFromString(item.targetData)
                 if (comp != null) {
                     collectionScope.launch {
-                        AppHelper.launchActivityPrivileged(context, comp.packageName, comp.className)
+                        val res = AppHelper.launchActivityPrivileged(context, comp.packageName, comp.className)
+                        res.onFailure { err ->
+                            Toast.makeText(context, "Failed: ${err.message}", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             }

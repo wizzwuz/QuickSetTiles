@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -116,14 +117,18 @@ class InternalPluginActivity : Activity() {
                     )
 
                     result.onSuccess { msg ->
-                        Toast.makeText(applicationContext, "QuickSetTiles: $msg", Toast.LENGTH_SHORT).show()
+                        if (intent.getBooleanExtra("show_toast", false)) {
+                            Toast.makeText(applicationContext, "QuickSetTiles: $msg", Toast.LENGTH_SHORT).show()
+                        }
                     }.onFailure { err ->
-                        Toast.makeText(applicationContext, "QuickSetTiles Error: ${err.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(applicationContext, "QuickSetTiles: ${err.message}", Toast.LENGTH_LONG).show()
                         // If Shizuku permission is needed and Shizuku is running, prompt for permission
                         if (ShizukuHelper.isShizukuRunning() && !ShizukuHelper.hasShizukuPermission()) {
-                            ShizukuHelper.requestShizukuPermission()
+                            ShizukuHelper.requestShizukuPermission(this@InternalPluginActivity)
+                            return@launch
                         }
                     }
+                    delay(150)
                     cleanFinish()
                 }
             } else {
