@@ -23,20 +23,26 @@ object IconProcessor {
 
     private val elementCache = ConcurrentHashMap<String, Bitmap>()
     private val presetBitmapCache = LruCache<String, Bitmap>(500)
+    private val tileIconCache = ConcurrentHashMap<IconConfig, Icon>()
     private var allPresetIconsCache: List<Pair<String, String>>? = null
     private var materialSvgMap: Map<String, String>? = null
 
-    fun clearCache() {
+    fun clearCache(clearTileIcons: Boolean = false) {
         elementCache.values.forEach { bmp ->
             if (!bmp.isRecycled) {
                 try { bmp.recycle() } catch (_: Throwable) {}
             }
         }
         elementCache.clear()
+        if (clearTileIcons) {
+            tileIconCache.clear()
+        }
         synchronized(presetBitmapCache) {
             presetBitmapCache.evictAll()
         }
     }
+
+    fun getCachedPresetIcons(): List<Pair<String, String>>? = allPresetIconsCache
 
     fun getPresetIcons(context: Context): List<Pair<String, String>> {
         allPresetIconsCache?.let { return it }
@@ -119,6 +125,29 @@ object IconProcessor {
             if (materialSvgMap != null && materialSvgMap!!.isNotEmpty()) return
             val start = System.currentTimeMillis()
             val map = HashMap<String, String>(65000)
+
+            // 1. Try reading fast binary cache if it exists on disk (~50 ms)
+            val binFile = File(context.filesDir, "material_icons.bin")
+            if (binFile.exists() && binFile.length() > 10000L) {
+                try {
+                    java.io.DataInputStream(java.io.BufferedInputStream(java.io.FileInputStream(binFile), 65536)).use { dis ->
+                        val count = dis.readInt()
+                        for (i in 0 until count) {
+                            val k = dis.readUTF()
+                            val v = dis.readUTF()
+                            map[k] = v
+                        }
+                    }
+                    materialSvgMap = map
+                    android.util.Log.i("IconProcessor", "Loaded ${map.size} material icons from binary cache in ${System.currentTimeMillis() - start} ms")
+                    return
+                } catch (e: Throwable) {
+                    binFile.delete()
+                    map.clear()
+                }
+            }
+
+            // 2. Parse using Android's native streaming JsonReader
             try {
                 val stream = openIconsAsset(context)
                 if (stream == null) {
@@ -127,53 +156,30 @@ object IconProcessor {
                     return
                 }
                 stream.use { s ->
-                    val reader = java.io.BufferedReader(java.io.InputStreamReader(s, Charsets.UTF_8), 65536)
-                    var c = reader.read()
-                    while (c != -1 && c != '{'.code) {
-                        c = reader.read()
-                    }
-                    val sb = StringBuilder(1024)
-                    while (c != -1) {
-                        while (c != -1 && c != '"'.code && c != '}'.code) {
-                            c = reader.read()
-                        }
-                        if (c == '}'.code || c == -1) break
-
-                        // Read key
-                        sb.setLength(0)
-                        while (true) {
-                            c = reader.read()
-                            if (c == -1 || c == '"'.code) break
-                            if (c == '\\'.code) {
-                                c = reader.read()
-                            }
-                            sb.append(c.toChar())
-                        }
-                        val key = sb.toString()
-
-                        // Skip to value start
-                        while (c != -1 && c != ':'.code) c = reader.read()
-                        while (c != -1 && c != '"'.code) c = reader.read()
-
-                        // Read value
-                        sb.setLength(0)
-                        while (true) {
-                            c = reader.read()
-                            if (c == -1 || c == '"'.code) break
-                            if (c == '\\'.code) {
-                                c = reader.read()
-                            }
-                            sb.append(c.toChar())
-                        }
-                        val value = sb.toString()
+                    val jsonReader = android.util.JsonReader(java.io.InputStreamReader(s, Charsets.UTF_8))
+                    jsonReader.beginObject()
+                    while (jsonReader.hasNext()) {
+                        val key = jsonReader.nextName()
+                        val value = jsonReader.nextString()
                         map[key] = value
-
-                        while (c != -1 && c != ','.code && c != '}'.code) c = reader.read()
-                        if (c == '}'.code) break
                     }
+                    jsonReader.endObject()
                 }
                 materialSvgMap = map
-                android.util.Log.i("IconProcessor", "Successfully loaded ${map.size} material icons in ${System.currentTimeMillis() - start} ms")
+                android.util.Log.i("IconProcessor", "Parsed ${map.size} material icons in ${System.currentTimeMillis() - start} ms")
+
+                // Write to binary cache file for future instant startup
+                try {
+                    val tempFile = File(context.filesDir, "material_icons.bin.tmp")
+                    java.io.DataOutputStream(java.io.BufferedOutputStream(java.io.FileOutputStream(tempFile), 65536)).use { dos ->
+                        dos.writeInt(map.size)
+                        for ((k, v) in map) {
+                            dos.writeUTF(k)
+                            dos.writeUTF(v)
+                        }
+                    }
+                    tempFile.renameTo(binFile)
+                } catch (_: Throwable) {}
             } catch (e: Throwable) {
                 android.util.Log.e("IconProcessor", "Error loading material icons: ${e.message}", e)
                 materialSvgMap = emptyMap()
@@ -680,10 +686,55 @@ object IconProcessor {
         return resultBitmap
     }
 
+    private fun getTileIconDiskFile(context: Context, config: IconConfig): File {
+        val dir = File(context.cacheDir, "tile_icons").apply { if (!exists()) mkdirs() }
+        val key = "${config.sourceType}_${config.sourceData}_${config.iconSize}_${config.outlineThickness}_${config.outlineThreshold}_${config.outlineStyle}"
+        return File(dir, "tile_${key.hashCode()}.png")
+    }
+
+    fun getCachedTileIcon(context: Context, config: IconConfig): Icon? {
+        tileIconCache[config]?.let { return it }
+        try {
+            val file = getTileIconDiskFile(context, config)
+            if (file.exists() && file.length() > 0) {
+                val bmp = BitmapFactory.decodeFile(file.absolutePath)
+                if (bmp != null) {
+                    val icon = Icon.createWithBitmap(bmp)
+                    tileIconCache[config] = icon
+                    return icon
+                }
+            }
+        } catch (_: Throwable) {}
+        return null
+    }
+
+    private fun saveCachedTileBitmap(context: Context, config: IconConfig, bitmap: Bitmap) {
+        try {
+            val file = getTileIconDiskFile(context, config)
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+        } catch (_: Throwable) {}
+    }
+
+    fun invalidateTileIcon(context: Context, config: IconConfig) {
+        tileIconCache.remove(config)
+        try {
+            val file = getTileIconDiskFile(context, config)
+            if (file.exists()) file.delete()
+        } catch (_: Throwable) {}
+    }
+
     fun createTileIcon(context: Context, config: IconConfig): Icon {
+        val cached = getCachedTileIcon(context, config)
+        if (cached != null) return cached
+
         // Quick Settings tiles on Android use monochrome white mask for SystemUI tinting
         val bmp = processIconBitmap(context, config, targetPixelSize = 192, isDarkTheme = true)
-        return Icon.createWithBitmap(bmp)
+        saveCachedTileBitmap(context, config, bmp)
+        val icon = Icon.createWithBitmap(bmp)
+        tileIconCache[config] = icon
+        return icon
     }
 
     fun saveCustomImage(context: Context, uri: Uri): String? {
@@ -885,8 +936,6 @@ object IconProcessor {
             }
         }
 
-        ensureMaterialIconsLoaded(context)
-
         val effectiveKey = when (key) {
             "tile_default" -> "widgets"
             "file" -> "description"
@@ -895,12 +944,29 @@ object IconProcessor {
             else -> key
         }
 
+        val iconColor = if (isDarkTheme) Color.WHITE else 0xFF111827.toInt()
+
+        // Fast-path: canvas-drawn fallback presets bypass parsing 57k material icons completely
+        val isFallbackPreset = when (key) {
+            "web", "terminal", "folder", "file", "settings", "star", "flash" -> true
+            else -> false
+        }
+        if (isFallbackPreset) {
+            val bmp = renderFallbackPresetBitmap(context, key, isDarkTheme, iconColor, targetDim)
+            if (isDefaultSize) {
+                synchronized(presetBitmapCache) { presetBitmapCache.put(cacheKey, bmp) }
+            }
+            return bmp
+        }
+
+        // Only load material icons if the requested key actually needs SVG extraction
+        ensureMaterialIconsLoaded(context)
+
         val svgContent = materialSvgMap?.get(effectiveKey)
             ?: materialSvgMap?.get(effectiveKey.replace('_', '-'))
             ?: materialSvgMap?.get(effectiveKey.replace('-', '_'))
 
         val colorStr = if (isDarkTheme) "white" else "#111827"
-        val iconColor = if (isDarkTheme) Color.WHITE else 0xFF111827.toInt()
 
         val bitmap = if (svgContent != null) {
             try {

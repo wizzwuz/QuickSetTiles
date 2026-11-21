@@ -68,7 +68,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         com.wizzwuz.quicksettiles.util.AppHelper.clearCaches()
-        com.wizzwuz.quicksettiles.util.IconProcessor.clearCache()
+        com.wizzwuz.quicksettiles.util.IconProcessor.clearCache(clearTileIcons = false)
         if (isFinishing) {
             try {
                 finishAndRemoveTask()

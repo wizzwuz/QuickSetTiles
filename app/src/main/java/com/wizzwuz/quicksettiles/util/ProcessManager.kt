@@ -45,7 +45,7 @@ object ProcessManager {
                 // When UI goes to background or user is in a file/folder/icon picker,
                 // aggressively trim heavy memory caches WITHOUT killing the process
                 AppHelper.clearCaches()
-                IconProcessor.clearCache()
+                IconProcessor.clearCache(clearTileIcons = false)
             }
 
             override fun onActivityDestroyed(activity: Activity) {
@@ -54,7 +54,7 @@ object ProcessManager {
                     aliveActivities.set(0)
                 }
                 AppHelper.clearCaches()
-                IconProcessor.clearCache()
+                IconProcessor.clearCache(clearTileIcons = false)
                 // Only if ALL activities are destroyed and this activity was finishing
                 if (aliveActivities.get() <= 0 && activity.isFinishing) {
                     scheduleExitCheck(delayMs = 1500)
@@ -103,11 +103,11 @@ object ProcessManager {
     fun scheduleExitCheck(delayMs: Long = 1500) {
         cancelPendingExit()
         val runnable = Runnable {
-            // NEVER kill the process if any activity is still alive (e.g. backgrounded or waiting for file picker)
+            // Trim transient memory caches when idle, but keep the process warm in RAM
+            // so Quick Settings tiles open immediately without cold-boot latency.
             if (aliveActivities.get() <= 0 && runningTasks.get() == 0 && activeTileListeners.get() == 0) {
                 AppHelper.clearCaches()
-                IconProcessor.clearCache()
-                Process.killProcess(Process.myPid())
+                IconProcessor.clearCache(clearTileIcons = false)
             }
         }
         exitRunnable = runnable

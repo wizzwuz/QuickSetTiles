@@ -15,6 +15,7 @@ import android.service.quicksettings.TileService
 import android.widget.Toast
 import com.wizzwuz.quicksettiles.R
 import com.wizzwuz.quicksettiles.data.TileRepository
+import com.wizzwuz.quicksettiles.model.IconConfig
 import com.wizzwuz.quicksettiles.model.TileItem
 import com.wizzwuz.quicksettiles.model.TileType
 import com.wizzwuz.quicksettiles.ui.MainActivity
@@ -128,11 +129,7 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 tile.subtitle = "${stepIndex + 1}/${item.multiShellSteps.size}"
             }
-            try {
-                tile.icon = IconProcessor.createTileIcon(this, step.iconConfig)
-            } catch (e: Throwable) {
-                tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_default)
-            }
+            bindTileIcon(tile, step.iconConfig)
         } else {
             tile.state = when (item.visualState) {
                 com.wizzwuz.quicksettiles.model.TileVisualState.ENABLED -> Tile.STATE_ACTIVE
@@ -159,13 +156,35 @@ abstract class BaseTileService(private val slotNumber: Int) : TileService() {
                 com.wizzwuz.quicksettiles.model.TileVisualState.ENABLED -> item.iconConfig
                 com.wizzwuz.quicksettiles.model.TileVisualState.DISABLED -> item.offIconConfig ?: item.iconConfig
             }
-            try {
-                tile.icon = IconProcessor.createTileIcon(this, effectiveIcon)
-            } catch (e: Throwable) {
-                tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_default)
-            }
+            bindTileIcon(tile, effectiveIcon)
         }
         tile.updateTile()
+    }
+
+    private fun bindTileIcon(tile: Tile, config: IconConfig) {
+        val cached = IconProcessor.getCachedTileIcon(this, config)
+        if (cached != null) {
+            tile.icon = cached
+        } else {
+            if (tile.icon == null) {
+                tile.icon = Icon.createWithResource(this, R.drawable.ic_tile_default)
+            }
+            // Offload icon processing to background coroutine so main thread Looper is never blocked
+            serviceScope.launch(Dispatchers.Default) {
+                val icon = try {
+                    IconProcessor.createTileIcon(this@BaseTileService, config)
+                } catch (e: Throwable) {
+                    Icon.createWithResource(this@BaseTileService, R.drawable.ic_tile_default)
+                }
+                mainHandler.post {
+                    val current = qsTile
+                    if (current != null) {
+                        current.icon = icon
+                        current.updateTile()
+                    }
+                }
+            }
+        }
     }
 
     override fun onClick() {

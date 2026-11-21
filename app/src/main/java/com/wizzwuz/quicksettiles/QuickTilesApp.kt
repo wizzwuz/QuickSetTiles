@@ -34,10 +34,6 @@ class QuickTilesApp : Application() {
         applicationScope.launch {
             com.wizzwuz.quicksettiles.util.QsTileManager.ensurePermission(this@QuickTilesApp)
         }
-        // Preload preset icons asynchronously so preset picker opens instantly
-        applicationScope.launch(Dispatchers.IO) {
-            IconProcessor.getPresetIcons(this@QuickTilesApp)
-        }
         // Listen for screen lock and unlock events to refresh tile lock screen visibility
         try {
             val lockFilter = android.content.IntentFilter().apply {
@@ -60,6 +56,7 @@ class QuickTilesApp : Application() {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         AppHelper.clearCaches()
-        IconProcessor.clearCache()
+        val critical = level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+        IconProcessor.clearCache(clearTileIcons = critical)
     }
 }

@@ -1252,11 +1252,13 @@ fun MultipleShellDialog(
                                         Image(bitmap = stepBmp.asImageBitmap(), contentDescription = "Icon", modifier = Modifier.size(32.dp))
                                         Column {
                                             Text(if (currentStep.visualState == TileVisualState.DISABLED) "Disabled Icon" else "Enabled Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                            Text(
-                                                if (currentStep.iconConfig.sourceType == IconSourceType.CUSTOM_FILE) "File: ${currentStep.iconConfig.sourceData.substringAfterLast('/')}" else "Preset: ${currentStep.iconConfig.sourceData}",
-                                                fontSize = 10.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                            if (currentStep.iconConfig.sourceType == IconSourceType.CUSTOM_FILE) {
+                                                Text(
+                                                    "File: ${currentStep.iconConfig.sourceData.substringAfterLast('/')}",
+                                                    fontSize = 10.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
                                         }
                                     }
                                     Row(
@@ -1785,11 +1787,13 @@ fun ShellDialog(
                                 Image(bitmap = onBmp.asImageBitmap(), contentDescription = "Enabled Icon", modifier = Modifier.size(32.dp))
                                 Column {
                                     Text("Enabled Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        if (onIconConfig.sourceType == IconSourceType.CUSTOM_FILE) "File: ${onIconConfig.sourceData.substringAfterLast('/')}" else "Preset: ${onIconConfig.sourceData}",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    if (onIconConfig.sourceType == IconSourceType.CUSTOM_FILE) {
+                                        Text(
+                                            "File: ${onIconConfig.sourceData.substringAfterLast('/')}",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                             Row(
@@ -1843,11 +1847,13 @@ fun ShellDialog(
                                 Image(bitmap = offBmp.asImageBitmap(), contentDescription = "Disabled Icon", modifier = Modifier.size(32.dp))
                                 Column {
                                     Text("Disabled Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        if (offIconConfig.sourceType == IconSourceType.CUSTOM_FILE) "File: ${offIconConfig.sourceData.substringAfterLast('/')}" else "Preset: ${offIconConfig.sourceData}",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    if (offIconConfig.sourceType == IconSourceType.CUSTOM_FILE) {
+                                        Text(
+                                            "File: ${offIconConfig.sourceData.substringAfterLast('/')}",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                             Row(
@@ -1904,11 +1910,13 @@ fun ShellDialog(
                                 Image(bitmap = bmp.asImageBitmap(), contentDescription = "Tile Icon", modifier = Modifier.size(32.dp))
                                 Column {
                                     Text(if (visualState == TileVisualState.DISABLED) "Disabled Icon" else "Enabled Icon", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        if (currentCfg.sourceType == IconSourceType.CUSTOM_FILE) "File: ${currentCfg.sourceData.substringAfterLast('/')}" else "Preset: ${currentCfg.sourceData}",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    if (currentCfg.sourceType == IconSourceType.CUSTOM_FILE) {
+                                        Text(
+                                            "File: ${currentCfg.sourceData.substringAfterLast('/')}",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                             Row(
@@ -2166,7 +2174,19 @@ fun IconPresetsDialog(
     var searchQuery by remember { mutableStateOf("") }
     var isSearchVisible by remember { mutableStateOf(true) }
 
-    val allPresets = remember { IconProcessor.getPresetIcons(context) }
+    var allPresets by remember { mutableStateOf(IconProcessor.getCachedPresetIcons() ?: emptyList()) }
+    var isLoadingPresets by remember { mutableStateOf(allPresets.isEmpty()) }
+
+    LaunchedEffect(Unit) {
+        if (allPresets.isEmpty()) {
+            val list = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                IconProcessor.getPresetIcons(context)
+            }
+            allPresets = list
+            isLoadingPresets = false
+        }
+    }
+
     val filteredPresets = remember(searchQuery, allPresets) {
         if (searchQuery.isBlank()) {
             allPresets
@@ -2242,7 +2262,7 @@ fun IconPresetsDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "${filteredPresets.size} icons available",
+                                text = if (isLoadingPresets) "Loading icons..." else "${filteredPresets.size} icons available",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -2305,54 +2325,69 @@ fun IconPresetsDialog(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // Icons Grid
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 68.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                    ) {
-                        items(filteredPresets, key = { it.first }) { (key, label) ->
-                            val isSelected = currentKey == key
-                            val bmp = remember(key, isDark) {
-                                IconProcessor.getPresetBitmap(context, key, isDark)
+                    if (isLoadingPresets) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text("Loading preset icons...", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            Card(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        onSelectPreset(key)
-                                        onDismiss()
-                                    },
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (isSelected)
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    else
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                                )
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
+                        }
+                    } else {
+                        // Icons Grid
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 68.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                        ) {
+                            items(filteredPresets, key = { it.first }) { (key, label) ->
+                                val isSelected = currentKey == key
+                                val bmp = remember(key, isDark) {
+                                    IconProcessor.getPresetBitmap(context, key, isDark)
+                                }
+                                Card(
                                     modifier = Modifier
-                                        .padding(6.dp)
-                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            onSelectPreset(key)
+                                            onDismiss()
+                                        },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isSelected)
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        else
+                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                    )
                                 ) {
-                                    Image(
-                                        bitmap = bmp.asImageBitmap(),
-                                        contentDescription = label,
-                                        modifier = Modifier.size(32.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = label,
-                                        fontSize = 9.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        textAlign = TextAlign.Center
-                                    )
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier
+                                            .padding(6.dp)
+                                            .fillMaxWidth()
+                                    ) {
+                                        Image(
+                                            bitmap = bmp.asImageBitmap(),
+                                            contentDescription = label,
+                                            modifier = Modifier.size(32.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = label,
+                                            fontSize = 9.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
                                 }
                             }
                         }
