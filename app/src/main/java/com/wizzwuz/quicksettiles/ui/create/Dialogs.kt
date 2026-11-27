@@ -1097,13 +1097,13 @@ fun MultipleShellDialog(
                         if (onBackToSingleShell != null) {
                             OutlinedButton(
                                 onClick = onBackToSingleShell,
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(28.dp),
-                                shape = RoundedCornerShape(6.dp)
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.heightIn(min = 40.dp),
+                                shape = RoundedCornerShape(8.dp)
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Single shell", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Single shell", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -1354,10 +1354,10 @@ fun MultipleShellDialog(
                                         if (isPermRequired) {
                                             Button(
                                                 onClick = { ShizukuHelper.requestShizukuPermission(context) },
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                                modifier = Modifier.height(28.dp)
+                                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                                                modifier = Modifier.heightIn(min = 48.dp)
                                             ) {
-                                                Text("Grant Shizuku Permission", fontSize = 10.sp)
+                                                Text("Grant Shizuku Permission", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                             }
                                         }
                                     }
@@ -1688,11 +1688,11 @@ fun ShellDialog(
                                     showMultipleShellDialog = true
                                 }
                             },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            modifier = Modifier.height(28.dp),
-                            shape = RoundedCornerShape(6.dp)
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.heightIn(min = 40.dp),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("Multiple shell", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Multiple shell", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
 
@@ -2010,10 +2010,10 @@ fun ShellDialog(
                             if (isPermRequired) {
                                 Button(
                                     onClick = { ShizukuHelper.requestShizukuPermission(context) },
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(28.dp)
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                                    modifier = Modifier.heightIn(min = 48.dp)
                                 ) {
-                                    Text("Grant Shizuku Permission", fontSize = 10.sp)
+                                    Text("Grant Shizuku Permission", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }

@@ -329,7 +329,7 @@ fun SettingsScreen(
                                 },
                                 leadingIcon = {
                                     Icon(
-                                        Icons.Default.AutoAwesome,
+                                        Icons.Default.Tune,
                                         contentDescription = null,
                                         modifier = Modifier.size(15.dp)
                                     )

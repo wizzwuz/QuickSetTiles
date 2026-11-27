@@ -755,7 +755,7 @@ fun TileContextMenuDialog(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            // Background Scrim with Gradient & Blur
+            // Background Scrim with Gradient
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -767,7 +767,6 @@ fun TileContextMenuDialog(
                             )
                         )
                     )
-                    .blur(20.dp)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,

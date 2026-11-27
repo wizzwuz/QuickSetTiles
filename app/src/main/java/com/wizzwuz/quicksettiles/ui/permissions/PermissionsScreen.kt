@@ -171,7 +171,7 @@ fun PermissionsScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Grant the permissions below to unlock the full potential of your Quick Settings tiles.",
+                text = "Grant the permissions below to enable shell execution, direct calls, and Quick Settings tile actions.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
